@@ -42,7 +42,7 @@ struct TeachView: View {
                     Text("Built for work that changes a little every time")
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
                 Text("Dates, amounts, clients, files, and thresholds become safe choices you can change on each run.")
-                        .font(.system(size: 14)).foregroundStyle(.secondary)
+                        .font(.system(size: 16)).foregroundStyle(.secondary)
                 }
                 Spacer()
             }

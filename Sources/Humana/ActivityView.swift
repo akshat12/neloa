@@ -15,11 +15,17 @@ struct ActivityView: View {
             }
 
             if store.activities.isEmpty {
-                ContentUnavailableView(
-                    "No runs yet",
-                    systemImage: "checkmark.seal",
-                    description: Text("Finished, stopped, and failed runs—and their one-time changes—will appear here.")
-                )
+                VStack(spacing: 14) {
+                    Image(systemName: "checkmark.seal")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.secondary)
+                    Text("No runs yet").font(.title2.bold())
+                    Text("Finished, stopped, and failed runs—and their one-time changes—will appear here.")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 480)
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
