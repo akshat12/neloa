@@ -43,6 +43,18 @@ enum HumanaMain {
                 fputs("Humana self-tests failed: \(error)\n", stderr)
                 Foundation.exit(1)
             }
+        } else if CommandLine.arguments.contains("--agent-smoke-test") {
+            Task { @MainActor in
+                do {
+                    try await SelfTests.agentSmokeTest()
+                    print("Humana on-device agent smoke test passed")
+                    Foundation.exit(0)
+                } catch {
+                    fputs("Humana on-device agent smoke test failed: \(error)\n", stderr)
+                    Foundation.exit(1)
+                }
+            }
+            dispatchMain()
         } else {
             HumanaApp.main()
         }

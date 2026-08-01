@@ -13,6 +13,17 @@ enum SelfTests {
         try serializationCheck()
     }
 
+    @MainActor
+    static func agentSmokeTest() async throws {
+        let input = WorkflowStep(kind: .typeText, title: "Type June", time: 0, text: "June")
+        let workflow = Workflow(name: "Monthly report", transcript: "", steps: [input])
+        let agent = LocalAgentService()
+        let plan = await agent.makePlan(workflow: workflow, instruction: "Replace June with August")
+        try expect(agent.status.contains("Apple Intelligence"), "Apple on-device agent should handle the test plan; status was: \(agent.status)")
+        try expect(plan.steps.first?.text == "August", "on-device agent should replace June with August; got text=\(plan.steps.first?.text ?? "nil"), summary=\(plan.summary), changes=\(plan.changes.map { "\($0.before)->\($0.after)" })")
+        try expect(plan.changes.count == 1, "on-device agent should report one reviewed change; got \(plan.changes.count)")
+    }
+
     private static func compilationCheck() throws {
         let events = [
             CaptureEvent(time: 0.5, kind: .click, x: 120, y: 240, application: "Safari", bundleIdentifier: "com.apple.Safari"),

@@ -33,6 +33,7 @@ enum RunPlanner {
                       let index = steps.firstIndex(where: { $0.id == id }),
                       let before = steps[index].text,
                       steps[index].kind == .typeText else { continue }
+                guard replacement.text != before else { continue }
                 steps[index].text = replacement.text
                 steps[index].title = "Type \(short(replacement.text))"
                 changes.append(PlannedChange(stepID: id, before: before, after: replacement.text, reason: replacement.reason))
@@ -94,7 +95,7 @@ enum RunPlanner {
         }
 
         let patterns = [
-            #"(?i)\b(?:for|using|amount|date|threshold)\s+(?:of\s+)?(\$?[0-9][0-9,]*(?:\.[0-9]+)?%?|(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+[0-9]{0,2}(?:,?\s+[0-9]{4})?)\b"#,
+            #"(?i)\b(?:for|using|use|amount|date|threshold)\s+(?:of\s+)?(\$?[0-9][0-9,]*(?:\.[0-9]+)?%?|(?:january|february|march|april|may|june|july|august|september|october|november|december)\s*[0-9]{0,2}(?:,?\s+[0-9]{4})?)\b"#,
             #"\b(\$[0-9][0-9,]*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?%)\b"#
         ]
         for pattern in patterns {

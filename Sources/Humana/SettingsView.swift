@@ -6,8 +6,9 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("Local intelligence") {
-                TextField("Model", text: $agent.modelName)
-                Text("Humana looks for this model through Ollama at 127.0.0.1. If it is unavailable, safe built-in planning still handles simple date, amount, and replace-value instructions.")
+                LabeledContent("Primary", value: "Apple on-device model")
+                TextField("Qwen fallback", text: $agent.modelName)
+                Text("On macOS 26, Humana first uses Apple's private on-device model. If it is unavailable, Humana looks for this Qwen model through Ollama at 127.0.0.1. A safe built-in planner remains available for simple replacements.")
                     .font(.caption).foregroundStyle(.secondary)
                 LabeledContent("Status", value: agent.status)
             }

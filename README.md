@@ -10,7 +10,7 @@ Humana is a local-first Mac app for teaching agentic automations by demonstratio
 - Turns the demonstration into an editable, locally saved workflow.
 - Replays the workflow under user supervision.
 - Accepts instructions such as “Replace June with July” or “use amount $750.”
-- Uses a local Qwen3-VL model through Ollama when available, with a narrow built-in fallback.
+- Uses Apple's on-device Foundation Model on macOS 26, with local Qwen3-VL through Ollama and a narrow built-in planner as fallbacks.
 - Pauses at spoken approval rules such as “always ask me before sending.”
 
 ## Build and run
@@ -19,13 +19,20 @@ Requirements: macOS 15 or newer and the Apple Command Line Tools (full Xcode als
 
 ```sh
 make test
+make agent-test
 make app
 open dist/Humana.app
 ```
 
+`make test` runs deterministic workflow checks. `make agent-test` makes a real request to Apple's on-device model and verifies the resulting executable change plan.
+
 The app asks for Screen Recording, Input Monitoring, Accessibility, Microphone, and Speech Recognition permissions. macOS may require reopening Humana after Input Monitoring or Accessibility is granted.
 
-## Optional local model
+## Local models
+
+On macOS 26 with Apple Intelligence enabled, Humana uses Apple's on-device Foundation Model automatically. No model installation is needed.
+
+For Macs where that model is unavailable, optionally install a Qwen fallback:
 
 Install [Ollama](https://ollama.com), then run:
 
