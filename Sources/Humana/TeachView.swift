@@ -53,7 +53,8 @@ struct TeachView: View {
                 Task { await teacher.start() }
             } label: {
                 Label(teacher.phase == .starting ? "Starting…" : "Start teaching", systemImage: "record.circle")
-                    .frame(maxWidth: .infinity).padding(.vertical, 8)
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(maxWidth: .infinity).padding(.vertical, 10)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)

@@ -19,6 +19,8 @@ enum NavigationItem: String, CaseIterable, Identifiable {
 
 struct RootView: View {
     @State private var selection: NavigationItem? = .teach
+    @StateObject private var permissions = PermissionCenter()
+    @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
 
     var body: some View {
         NavigationSplitView {
@@ -53,6 +55,17 @@ struct RootView: View {
             .background(Color(nsColor: .windowBackgroundColor))
         }
         .tint(Color(red: 0.20, green: 0.31, blue: 0.82))
+        .sheet(isPresented: $showOnboarding) {
+            OnboardingView(permissions: permissions) {
+                UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+                showOnboarding = false
+            }
+            .interactiveDismissDisabled()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showHumanaWelcome)) { _ in
+            permissions.refresh()
+            showOnboarding = true
+        }
     }
 }
 
@@ -64,11 +77,15 @@ struct BrandMark: View {
                 Circle().stroke(.white, lineWidth: 5).frame(width: 19, height: 19)
                 Circle().fill(.white).frame(width: 5, height: 5)
             }
-            Text("humana").font(.system(size: 22, weight: .bold, design: .rounded))
-            Spacer()
+            Text("humana").font(.system(size: 22, weight: .bold, design: .rounded)).fixedSize()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 18)
     }
+}
+
+extension Notification.Name {
+    static let showHumanaWelcome = Notification.Name("showHumanaWelcome")
 }
 
 struct CapabilityView: View {

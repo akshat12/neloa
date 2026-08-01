@@ -26,8 +26,8 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
 
         let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
         let configuration = SCStreamConfiguration()
-        configuration.width = display.width * 2
-        configuration.height = display.height * 2
+        configuration.width = display.width
+        configuration.height = display.height
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30)
         configuration.queueDepth = 6
         configuration.showsCursor = true

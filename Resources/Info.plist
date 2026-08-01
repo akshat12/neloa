@@ -10,6 +10,8 @@
     <string>Humana</string>
     <key>CFBundleIdentifier</key>
     <string>ai.humana.desktop</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>

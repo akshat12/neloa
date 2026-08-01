@@ -22,6 +22,13 @@ struct HumanaApp: App {
             SettingsView()
                 .environmentObject(agent)
         }
+        .commands {
+            CommandGroup(after: .help) {
+                Button("Show Welcome") {
+                    NotificationCenter.default.post(name: .showHumanaWelcome, object: nil)
+                }
+            }
+        }
     }
 }
 

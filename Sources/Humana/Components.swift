@@ -7,7 +7,7 @@ struct PageHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.system(size: 30, weight: .bold))
-            Text(subtitle).font(.system(size: 15)).foregroundStyle(.secondary)
+            Text(subtitle).font(.system(size: 17)).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -22,17 +22,18 @@ struct FeatureToggle: View {
     var body: some View {
         HStack(spacing: 14) {
             Image(systemName: icon)
-                .font(.title2)
+                .font(.system(size: 25, weight: .medium))
                 .foregroundStyle(isOn ? Color.accentColor : .secondary)
                 .frame(width: 34)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).fontWeight(.semibold)
-                Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                Text(title).font(.system(size: 17, weight: .semibold))
+                Text(subtitle).font(.system(size: 14)).foregroundStyle(.secondary)
             }
             Spacer()
             Toggle("", isOn: $isOn).labelsHidden()
         }
-        .padding(16)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 18)
         .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 14))
     }
 }
