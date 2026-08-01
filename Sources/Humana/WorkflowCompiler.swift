@@ -68,13 +68,19 @@ enum WorkflowCompiler {
         let decisions = decisionSentences(in: transcript)
         for sentence in decisions {
             let isApproval = sentence.lowercased().contains("ask") && sentence.lowercased().contains("before")
-            steps.append(WorkflowStep(
+            let rule = WorkflowStep(
                 kind: isApproval ? .approval : .decision,
                 title: sentence,
                 detail: isApproval ? "The run pauses here for you" : "Humana will interpret this rule at run time",
                 time: steps.last?.time ?? 0,
                 requiresApproval: isApproval
-            ))
+            )
+            if isApproval,
+               let finalAction = steps.lastIndex(where: { [.click, .typeText, .keyPress].contains($0.kind) }) {
+                steps.insert(rule, at: finalAction)
+            } else {
+                steps.append(rule)
+            }
         }
 
         if steps.isEmpty, !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

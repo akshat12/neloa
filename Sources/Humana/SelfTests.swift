@@ -21,9 +21,9 @@ enum SelfTests {
             CaptureEvent(time: 2.0, kind: .keyPress, keyCode: 36, application: "Safari")
         ]
         let workflow = WorkflowCompiler.compile(events: events, transcript: "Always ask me before sending.", name: "Weekly report")
-        try expect(workflow.steps.map(\.kind) == [.openApp, .click, .typeText, .keyPress, .approval], "recorded events should compile in order")
+        try expect(workflow.steps.map(\.kind) == [.openApp, .click, .typeText, .approval, .keyPress], "approval should be inserted before the final action")
         try expect(workflow.steps[2].text == "June report", "adjacent typing should merge")
-        try expect(workflow.steps.last?.requiresApproval == true, "spoken approval rule should become a gate")
+        try expect(workflow.steps[3].requiresApproval, "spoken approval rule should become a gate")
     }
 
     private static func spokenOnlyCheck() throws {

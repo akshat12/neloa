@@ -33,6 +33,15 @@ final class WorkflowStore: ObservableObject {
 
     func delete(_ workflow: Workflow) {
         workflows.removeAll { $0.id == workflow.id }
+        let recordings = fileURL.deletingLastPathComponent().appendingPathComponent("Recordings", isDirectory: true)
+            .appendingPathComponent(workflow.id.uuidString, isDirectory: true)
+        if FileManager.default.fileExists(atPath: recordings.path) {
+            do {
+                try FileManager.default.removeItem(at: recordings)
+            } catch {
+                lastError = "The automation was removed, but its recordings could not be deleted: \(error.localizedDescription)"
+            }
+        }
         persist()
     }
 
