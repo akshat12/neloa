@@ -15,6 +15,7 @@ final class VoiceService: ObservableObject {
     private var audioFile: AVAudioFile?
     private var outputURL: URL?
     private let speechSynthesizer = AVSpeechSynthesizer()
+    private var hasInputTap = false
 
     func start() async throws -> URL {
         let speechStatus = await withCheckedContinuation { continuation in
@@ -25,6 +26,7 @@ final class VoiceService: ObservableObject {
         let micAllowed = await AVCaptureDevice.requestAccess(for: .audio)
         guard micAllowed else { throw VoiceError.microphonePermission }
         guard let recognizer, recognizer.isAvailable else { throw VoiceError.unavailable }
+        guard recognizer.supportsOnDeviceRecognition else { throw VoiceError.onDeviceUnavailable }
 
         stop()
         transcript = ""
@@ -40,7 +42,7 @@ final class VoiceService: ObservableObject {
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
-        request.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
+        request.requiresOnDeviceRecognition = true
         self.request = request
         self.outputURL = url
 
@@ -55,6 +57,7 @@ final class VoiceService: ObservableObject {
             self?.request?.append(buffer)
             try? self?.audioFile?.write(from: buffer)
         }
+        hasInputTap = true
 
         audioEngine.prepare()
         try audioEngine.start()
@@ -66,7 +69,10 @@ final class VoiceService: ObservableObject {
     func stop() -> URL? {
         if audioEngine.isRunning {
             audioEngine.stop()
+        }
+        if hasInputTap {
             audioEngine.inputNode.removeTap(onBus: 0)
+            hasInputTap = false
         }
         request?.endAudio()
         task?.finish()
@@ -87,12 +93,14 @@ final class VoiceService: ObservableObject {
         case speechPermission
         case microphonePermission
         case unavailable
+        case onDeviceUnavailable
 
         var errorDescription: String? {
             switch self {
             case .speechPermission: "Speech recognition permission is needed for voice instructions."
             case .microphonePermission: "Microphone permission is needed to listen while you teach."
             case .unavailable: "Speech recognition is temporarily unavailable."
+            case .onDeviceUnavailable: "On-device speech recognition is unavailable for this language. Humana did not send your audio to a server."
             }
         }
     }

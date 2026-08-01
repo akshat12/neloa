@@ -23,7 +23,7 @@ make app
 open dist/Humana.app
 ```
 
-The app asks for Screen Recording, Input Monitoring, Microphone, and Speech Recognition permissions. macOS may require reopening Humana after Input Monitoring is granted.
+The app asks for Screen Recording, Input Monitoring, Accessibility, Microphone, and Speech Recognition permissions. macOS may require reopening Humana after Input Monitoring or Accessibility is granted.
 
 ## Optional local model
 

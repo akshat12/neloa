@@ -96,13 +96,16 @@ struct OnboardingView: View {
     }
 
     private var permissionSetup: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 14) {
             PageHeader(title: "Allow only what you want to teach", subtitle: "These permissions let Humana observe and replay your demonstration. Recordings stay on this Mac.")
             permissionRow(icon: "rectangle.on.rectangle", title: "Screen recording", detail: "Records the apps you demonstrate", status: permissions.screen) {
                 permissions.requestScreen()
             }
             permissionRow(icon: "cursorarrow.click", title: "Input monitoring", detail: "Learns clicks and keystrokes; macOS may require reopening Humana", status: permissions.inputMonitoring) {
                 permissions.requestInputMonitoring()
+            }
+            permissionRow(icon: "hand.tap", title: "Accessibility", detail: "Replays the actions in automations you approve", status: permissions.accessibility) {
+                permissions.requestAccessibility()
             }
             permissionRow(icon: "mic", title: "Microphone & speech", detail: "Understands explanations and spoken run instructions", status: combinedVoiceStatus) {
                 Task { await permissions.requestMicrophoneAndSpeech() }
@@ -159,6 +162,7 @@ struct OnboardingView: View {
                 }
             }
         }
-        .padding(16).background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 16).padding(.vertical, 13)
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 14))
     }
 }

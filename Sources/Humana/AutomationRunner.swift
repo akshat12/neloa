@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import CoreGraphics
 import Foundation
 
@@ -22,6 +23,10 @@ final class AutomationRunner: ObservableObject {
 
     func run(_ plan: RunPlan) {
         stop()
+        guard AXIsProcessTrusted() else {
+            state = .failed("Accessibility permission is required to replay this automation. Open System Settings → Privacy & Security → Accessibility and enable Humana.")
+            return
+        }
         runTask = Task { [weak self] in
             guard let self else { return }
             for value in stride(from: 3, through: 1, by: -1) {

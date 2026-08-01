@@ -1,4 +1,5 @@
 import AVFoundation
+import ApplicationServices
 import CoreGraphics
 import Foundation
 import Speech
@@ -23,12 +24,14 @@ final class PermissionCenter: ObservableObject {
     @Published private(set) var microphone: Status = .unknown
     @Published private(set) var speech: Status = .unknown
     @Published private(set) var inputMonitoring: Status = .unknown
+    @Published private(set) var accessibility: Status = .unknown
 
     init() { refresh() }
 
     func refresh() {
         screen = CGPreflightScreenCaptureAccess() ? .granted : .unknown
         inputMonitoring = CGPreflightListenEventAccess() ? .granted : .unknown
+        accessibility = AXIsProcessTrusted() ? .granted : .unknown
         microphone = status(for: AVCaptureDevice.authorizationStatus(for: .audio))
         speech = status(for: SFSpeechRecognizer.authorizationStatus())
     }
@@ -39,6 +42,12 @@ final class PermissionCenter: ObservableObject {
 
     func requestInputMonitoring() {
         inputMonitoring = CGRequestListenEventAccess() ? .granted : .denied
+    }
+
+    func requestAccessibility() {
+        let prompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        let options = [prompt: true] as CFDictionary
+        accessibility = AXIsProcessTrustedWithOptions(options) ? .granted : .denied
     }
 
     func requestMicrophoneAndSpeech() async {
