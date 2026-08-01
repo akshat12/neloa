@@ -1,0 +1,60 @@
+import Foundation
+
+enum SelfTests {
+    struct Failure: Error, CustomStringConvertible {
+        let description: String
+    }
+
+    static func run() throws {
+        try compilationCheck()
+        try spokenOnlyCheck()
+        try replacementCheck()
+        try amountCheck()
+        try serializationCheck()
+    }
+
+    private static func compilationCheck() throws {
+        let events = [
+            CaptureEvent(time: 0.5, kind: .click, x: 120, y: 240, application: "Safari", bundleIdentifier: "com.apple.Safari"),
+            CaptureEvent(time: 1.0, kind: .text, text: "June", application: "Safari"),
+            CaptureEvent(time: 1.2, kind: .text, text: " report", application: "Safari"),
+            CaptureEvent(time: 2.0, kind: .keyPress, keyCode: 36, application: "Safari")
+        ]
+        let workflow = WorkflowCompiler.compile(events: events, transcript: "Always ask me before sending.", name: "Weekly report")
+        try expect(workflow.steps.map(\.kind) == [.openApp, .click, .typeText, .keyPress, .approval], "recorded events should compile in order")
+        try expect(workflow.steps[2].text == "June report", "adjacent typing should merge")
+        try expect(workflow.steps.last?.requiresApproval == true, "spoken approval rule should become a gate")
+    }
+
+    private static func spokenOnlyCheck() throws {
+        let workflow = WorkflowCompiler.compile(events: [], transcript: "Download the latest report")
+        try expect(workflow.steps.count == 1 && workflow.steps[0].kind == .decision, "spoken-only teaching should create a step")
+    }
+
+    private static func replacementCheck() throws {
+        let first = WorkflowStep(kind: .typeText, title: "Type June", time: 0, text: "June")
+        let second = WorkflowStep(kind: .typeText, title: "Type report", time: 1, text: "report")
+        let workflow = Workflow(name: "Report", transcript: "", steps: [first, second])
+        let plan = RunPlanner.plan(workflow: workflow, instruction: "Replace June with July")
+        try expect(plan.changes.count == 1 && plan.steps[0].text == "July" && plan.steps[1].text == "report", "explicit replacement should be scoped")
+    }
+
+    private static func amountCheck() throws {
+        let amount = WorkflowStep(kind: .typeText, title: "Type amount", time: 0, text: "$500")
+        let note = WorkflowStep(kind: .typeText, title: "Type note", time: 1, text: "Supplies")
+        let workflow = Workflow(name: "Expense", transcript: "", steps: [amount, note])
+        let plan = RunPlanner.plan(workflow: workflow, instruction: "Run it using amount $750")
+        try expect(plan.steps[0].text == "$750" && plan.changes.first?.before == "$500", "amount variation should target numeric input")
+    }
+
+    private static func serializationCheck() throws {
+        let workflow = Workflow(name: "Serializable", transcript: "hello", steps: [])
+        let data = try JSONEncoder.humana.encode(workflow)
+        let decoded = try JSONDecoder.humana.decode(Workflow.self, from: data)
+        try expect(decoded.id == workflow.id && decoded.name == workflow.name && decoded.transcript == workflow.transcript && decoded.steps == workflow.steps, "saved workflows should round-trip")
+    }
+
+    private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
+        if !condition() { throw Failure(description: message) }
+    }
+}

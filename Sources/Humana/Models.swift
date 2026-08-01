@@ -1,0 +1,87 @@
+import Foundation
+import CoreGraphics
+
+enum CaptureEventKind: String, Codable, Sendable {
+    case click
+    case rightClick
+    case text
+    case keyPress
+    case appSwitch
+}
+
+struct CaptureEvent: Codable, Equatable, Sendable {
+    var time: TimeInterval
+    var kind: CaptureEventKind
+    var x: Double?
+    var y: Double?
+    var text: String?
+    var keyCode: Int?
+    var flags: UInt64?
+    var application: String?
+    var bundleIdentifier: String?
+}
+
+enum WorkflowStepKind: String, Codable, CaseIterable, Sendable {
+    case openApp
+    case click
+    case typeText
+    case keyPress
+    case decision
+    case approval
+    case wait
+
+    var label: String {
+        switch self {
+        case .openApp: "App"
+        case .click: "Click"
+        case .typeText: "Input"
+        case .keyPress: "Key"
+        case .decision: "Agent"
+        case .approval: "Approval"
+        case .wait: "Wait"
+        }
+    }
+}
+
+struct WorkflowStep: Identifiable, Codable, Equatable, Sendable {
+    var id = UUID()
+    var kind: WorkflowStepKind
+    var title: String
+    var detail: String = ""
+    var time: TimeInterval
+    var x: Double?
+    var y: Double?
+    var text: String?
+    var keyCode: Int?
+    var flags: UInt64?
+    var application: String?
+    var bundleIdentifier: String?
+    var requiresApproval = false
+}
+
+struct Workflow: Identifiable, Codable, Equatable, Sendable {
+    var id = UUID()
+    var name: String
+    var createdAt = Date()
+    var updatedAt = Date()
+    var transcript: String
+    var recordingPath: String?
+    var narrationPath: String?
+    var steps: [WorkflowStep]
+    var defaultInstruction = "Run it the same way"
+}
+
+struct PlannedChange: Identifiable, Codable, Equatable, Sendable {
+    var id = UUID()
+    var stepID: UUID
+    var before: String
+    var after: String
+    var reason: String
+}
+
+struct RunPlan: Codable, Equatable, Sendable {
+    var instruction: String
+    var steps: [WorkflowStep]
+    var changes: [PlannedChange]
+    var summary: String
+}
