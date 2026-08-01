@@ -11,6 +11,7 @@ enum SelfTests {
         try replacementCheck()
         try amountCheck()
         try serializationCheck()
+        try receiptSerializationCheck()
     }
 
     @MainActor
@@ -63,6 +64,22 @@ enum SelfTests {
         let data = try JSONEncoder.humana.encode(workflow)
         let decoded = try JSONDecoder.humana.decode(Workflow.self, from: data)
         try expect(decoded.id == workflow.id && decoded.name == workflow.name && decoded.transcript == workflow.transcript && decoded.steps == workflow.steps, "saved workflows should round-trip")
+    }
+
+    private static func receiptSerializationCheck() throws {
+        let receipt = AutomationRunReceipt(
+            workflowID: UUID(),
+            workflowName: "Monthly report",
+            startedAt: Date(),
+            instruction: "Use August",
+            summary: "One verified change",
+            changes: [],
+            stepCount: 4,
+            status: .completed
+        )
+        let data = try JSONEncoder.humana.encode(receipt)
+        let decoded = try JSONDecoder.humana.decode(AutomationRunReceipt.self, from: data)
+        try expect(decoded.id == receipt.id && decoded.workflowName == receipt.workflowName && decoded.status == .completed, "activity receipts should round-trip")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {

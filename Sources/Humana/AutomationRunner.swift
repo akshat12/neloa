@@ -82,6 +82,12 @@ final class AutomationRunner: ObservableObject {
         if state != .idle { state = .stopped }
     }
 
+    func reset() {
+        stop()
+        currentStepID = nil
+        state = .idle
+    }
+
     private func perform(_ step: WorkflowStep) async throws {
         switch step.kind {
         case .openApp:

@@ -22,3 +22,17 @@ struct SettingsView: View {
         .padding()
     }
 }
+
+struct SettingsPage: View {
+    @EnvironmentObject private var agent: LocalAgentService
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            PageHeader(title: "Settings", subtitle: "Control Humana’s private, on-device intelligence.")
+            SettingsView()
+                .environmentObject(agent)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .padding(32)
+    }
+}

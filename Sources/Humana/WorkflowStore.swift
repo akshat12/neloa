@@ -4,6 +4,7 @@ import Combine
 @MainActor
 final class WorkflowStore: ObservableObject {
     @Published private(set) var workflows: [Workflow] = []
+    @Published private(set) var activities: [AutomationRunReceipt] = []
     @Published var lastError: String?
 
     private let fileURL: URL
@@ -16,6 +17,7 @@ final class WorkflowStore: ObservableObject {
             self.fileURL = base.appendingPathComponent("Humana", isDirectory: true).appendingPathComponent("workflows.json")
         }
         load()
+        loadActivity()
     }
 
     func save(_ workflow: Workflow) {
@@ -45,6 +47,17 @@ final class WorkflowStore: ObservableObject {
         persist()
     }
 
+    func record(_ receipt: AutomationRunReceipt) {
+        activities.insert(receipt, at: 0)
+        if activities.count > 250 { activities = Array(activities.prefix(250)) }
+        persistActivity()
+    }
+
+    func clearActivity() {
+        activities = []
+        persistActivity()
+    }
+
     private func load() {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
         do {
@@ -60,6 +73,28 @@ final class WorkflowStore: ObservableObject {
             try JSONEncoder.humana.encode(workflows).write(to: fileURL, options: .atomic)
         } catch {
             lastError = "Your automations could not be saved: \(error.localizedDescription)"
+        }
+    }
+
+    private var activityURL: URL {
+        fileURL.deletingLastPathComponent().appendingPathComponent("activity.json")
+    }
+
+    private func loadActivity() {
+        guard FileManager.default.fileExists(atPath: activityURL.path) else { return }
+        do {
+            activities = try JSONDecoder.humana.decode([AutomationRunReceipt].self, from: Data(contentsOf: activityURL))
+        } catch {
+            lastError = "Your activity history could not be opened: \(error.localizedDescription)"
+        }
+    }
+
+    private func persistActivity() {
+        do {
+            try FileManager.default.createDirectory(at: activityURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder.humana.encode(activities).write(to: activityURL, options: .atomic)
+        } catch {
+            lastError = "Your activity history could not be saved: \(error.localizedDescription)"
         }
     }
 

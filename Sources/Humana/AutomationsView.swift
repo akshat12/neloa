@@ -6,7 +6,7 @@ struct AutomationsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            PageHeader(title: "Automations", subtitle: "Run a saved workflow as-is, or ask for a small one-time change.")
+            PageHeader(title: "My automations", subtitle: "Run one again—or tell Humana what should be different this time.")
             if store.workflows.isEmpty {
                 ContentUnavailableView("No automations yet", systemImage: "square.grid.2x2", description: Text("Teach your first workflow and it will appear here."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -52,7 +52,7 @@ private struct AutomationDetail: View {
                 Menu {
                     Button("Delete automation", role: .destructive) { confirmDelete = true }
                 } label: { Image(systemName: "ellipsis.circle") }
-                Button("Run automation") { showingRun = true }.buttonStyle(.borderedProminent)
+                Button("Again, but…") { showingRun = true }.buttonStyle(.borderedProminent)
             }
             Divider()
             ScrollView {

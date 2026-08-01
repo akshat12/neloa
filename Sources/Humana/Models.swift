@@ -85,3 +85,23 @@ struct RunPlan: Codable, Equatable, Sendable {
     var changes: [PlannedChange]
     var summary: String
 }
+
+enum AutomationRunStatus: String, Codable, Sendable {
+    case completed
+    case stopped
+    case failed
+}
+
+struct AutomationRunReceipt: Identifiable, Codable, Equatable, Sendable {
+    var id = UUID()
+    var workflowID: UUID
+    var workflowName: String
+    var startedAt: Date
+    var finishedAt = Date()
+    var instruction: String
+    var summary: String
+    var changes: [PlannedChange]
+    var stepCount: Int
+    var status: AutomationRunStatus
+    var message: String?
+}

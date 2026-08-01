@@ -33,8 +33,23 @@ struct TeachView: View {
 
     private var setupView: some View {
         VStack(alignment: .leading, spacing: 24) {
-            PageHeader(title: "Teach a workflow", subtitle: "Perform the task once. Explain decisions out loud as you go.")
+            PageHeader(title: "What should Humana learn?", subtitle: "Show it once. Next time, just say what’s different.")
             Spacer()
+            HStack(spacing: 15) {
+                Image(systemName: "quote.bubble.fill")
+                    .font(.system(size: 30)).foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Built for work that changes a little every time")
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    Text("Dates, amounts, clients, files, and thresholds become safe choices you can change on each run.")
+                        .font(.system(size: 14)).foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(18)
+            .background(Color.accentColor.opacity(0.075), in: RoundedRectangle(cornerRadius: 16))
+            .frame(maxWidth: 700)
+            .frame(maxWidth: .infinity)
             VStack(spacing: 12) {
                 FeatureToggle(icon: "rectangle.on.rectangle", title: "Record screen", subtitle: "See the apps and controls you use", isOn: $teacher.captureScreen)
                 FeatureToggle(icon: "mic", title: "Listen to your explanation", subtitle: "Turn your narration into rules and context", isOn: $teacher.captureMicrophone)
@@ -82,7 +97,11 @@ struct TeachView: View {
                             withAnimation { savedMessage = true }
                             Task {
                                 try? await Task.sleep(for: .seconds(1.6))
-                                await MainActor.run { withAnimation { savedMessage = false }; teacher.reset() }
+                                await MainActor.run {
+                                    withAnimation { savedMessage = false }
+                                    teacher.reset()
+                                    NotificationCenter.default.post(name: .showHumanaAutomations, object: nil)
+                                }
                             }
                         }
                     }

@@ -1,5 +1,21 @@
 import SwiftUI
 
+private enum RunDisposition: String, CaseIterable, Identifiable {
+    case useOnce = "Use once"
+    case saveVariant = "Save variant"
+    case updateDefault = "Update default"
+
+    var id: String { rawValue }
+
+    var help: String {
+        switch self {
+        case .useOnce: "Keep this change temporary."
+        case .saveVariant: "Save a separate version for later."
+        case .updateDefault: "Make this the new normal for this automation."
+        }
+    }
+}
+
 struct RunView: View {
     let workflow: Workflow
     @Environment(\.dismiss) private var dismiss
@@ -10,32 +26,43 @@ struct RunView: View {
     @State private var instruction = ""
     @State private var plan: RunPlan?
     @State private var voiceBusy = false
+    @State private var disposition: RunDisposition = .useOnce
+    @State private var runStartedAt: Date?
+    @State private var loggedTerminalState = false
+    @State private var appliedDisposition = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                PageHeader(title: "Run \(workflow.name)", subtitle: "Tell Humana what is different this time—or leave it unchanged.")
+                PageHeader(title: "Again, but…", subtitle: "\(workflow.name) · Say only what should be different this time.")
                 Button { runner.stop(); dismiss() } label: { Image(systemName: "xmark.circle.fill").font(.title2) }.buttonStyle(.plain).foregroundStyle(.secondary)
             }
 
-            HStack(spacing: 10) {
-                TextField("For example: Use July instead of June", text: $instruction)
-                    .textFieldStyle(.roundedBorder).font(.system(size: 16))
-                    .onSubmit { prepare() }
-                Button {
-                    Task { await toggleVoice() }
-                } label: {
-                    Image(systemName: voice.isListening ? "stop.circle.fill" : "mic.circle.fill")
-                        .font(.system(size: 28)).foregroundStyle(voice.isListening ? .red : Color.accentColor)
+            VStack(spacing: 9) {
+                HStack(spacing: 10) {
+                    TextField("Use July instead of June, change the amount to $750…", text: $instruction)
+                        .textFieldStyle(.plain).font(.system(size: 17))
+                        .onSubmit { prepare() }
+                    Button {
+                        Task { await toggleVoice() }
+                    } label: {
+                        Image(systemName: voice.isListening ? "stop.circle.fill" : "mic.circle.fill")
+                            .font(.system(size: 30)).foregroundStyle(voice.isListening ? .red : Color.accentColor)
+                    }
+                    .buttonStyle(.plain).disabled(voiceBusy)
+                    Button(agent.isPlanning ? "Planning…" : "Preview changes") { prepare() }
+                        .buttonStyle(.borderedProminent).disabled(agent.isPlanning)
                 }
-                .buttonStyle(.plain).disabled(voiceBusy)
-                Button(agent.isPlanning ? "Planning…" : "Preview run") { prepare() }
-                    .buttonStyle(.borderedProminent).disabled(agent.isPlanning)
-            }
+                .padding(.horizontal, 15).padding(.vertical, 12)
+                .background(.quaternary.opacity(0.38), in: RoundedRectangle(cornerRadius: 15))
 
-            HStack {
-                Circle().fill(agent.status.contains("unavailable") ? .orange : .green).frame(width: 8, height: 8)
-                Text(agent.status).font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Label(agent.status, systemImage: "lock.fill")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Text("Nothing in this plan leaves your Mac")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
 
             Divider()
@@ -52,13 +79,20 @@ struct RunView: View {
                         instruction = "Run it the same way"
                         prepare()
                     }
+                    HStack(spacing: 8) {
+                        suggestion("Use next month")
+                        suggestion("Change the amount")
+                        suggestion("Save as a draft")
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .padding(28)
         .interactiveDismissDisabled(isRunning)
-        .onDisappear { runner.stop() }
+        .onAppear { runner.reset() }
+        .onDisappear { runner.reset() }
+        .onChange(of: runner.state) { _, newState in handleStateChange(newState) }
     }
 
     @ViewBuilder
@@ -79,6 +113,17 @@ struct RunView: View {
                         .padding(13).frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
                     }
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("After this run").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Picker("After this run", selection: $disposition) {
+                            ForEach(RunDisposition.allCases) { option in
+                                Text(option.rawValue).tag(option)
+                            }
+                        }
+                        .labelsHidden().pickerStyle(.segmented)
+                        Text(disposition.help).font(.caption).foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
                 }
                 Spacer()
                 stateControls(plan)
@@ -100,11 +145,15 @@ struct RunView: View {
     private func stateControls(_ plan: RunPlan) -> some View {
         switch runner.state {
         case .idle, .stopped:
-            Button("Run supervised") { runner.run(plan) }
-                .buttonStyle(.borderedProminent).controlSize(.large).frame(maxWidth: .infinity)
-            if !plan.changes.isEmpty {
-                Button("Save as a new automation") { saveVariant(plan) }.frame(maxWidth: .infinity)
+            Button("Run this version") {
+                runStartedAt = Date()
+                loggedTerminalState = false
+                appliedDisposition = false
+                runner.run(plan)
             }
+                .buttonStyle(.borderedProminent).controlSize(.large).frame(maxWidth: .infinity)
+            Label("You can stop at any time. Approval steps always pause.", systemImage: "hand.raised")
+                .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
         case .countdown(let seconds):
             VStack(spacing: 8) {
                 Text("Starting in \(seconds)…").font(.title2.bold())
@@ -147,6 +196,8 @@ struct RunView: View {
     }
 
     private func prepare() {
+        runner.reset()
+        disposition = .useOnce
         Task { plan = await agent.makePlan(workflow: workflow, instruction: instruction) }
     }
 
@@ -172,5 +223,60 @@ struct RunView: View {
         variant.steps = plan.steps
         variant.defaultInstruction = instruction
         store.save(variant)
+    }
+
+    private func updateDefault(_ plan: RunPlan) {
+        var updated = workflow
+        updated.steps = plan.steps
+        updated.defaultInstruction = instruction
+        store.save(updated)
+    }
+
+    private func suggestion(_ value: String) -> some View {
+        Button(value) {
+            instruction = value
+            prepare()
+        }
+        .buttonStyle(.bordered).controlSize(.small)
+    }
+
+    private func handleStateChange(_ state: AutomationRunner.State) {
+        guard let plan, let startedAt = runStartedAt, !loggedTerminalState else { return }
+        switch state {
+        case .completed:
+            applyDispositionIfNeeded(plan)
+            record(plan: plan, startedAt: startedAt, status: .completed, message: nil)
+        case .stopped:
+            record(plan: plan, startedAt: startedAt, status: .stopped, message: "Stopped by the user")
+        case .failed(let message):
+            record(plan: plan, startedAt: startedAt, status: .failed, message: message)
+        default:
+            break
+        }
+    }
+
+    private func applyDispositionIfNeeded(_ plan: RunPlan) {
+        guard !appliedDisposition else { return }
+        appliedDisposition = true
+        switch disposition {
+        case .useOnce: break
+        case .saveVariant: saveVariant(plan)
+        case .updateDefault: updateDefault(plan)
+        }
+    }
+
+    private func record(plan: RunPlan, startedAt: Date, status: AutomationRunStatus, message: String?) {
+        loggedTerminalState = true
+        store.record(AutomationRunReceipt(
+            workflowID: workflow.id,
+            workflowName: workflow.name,
+            startedAt: startedAt,
+            instruction: instruction,
+            summary: plan.summary,
+            changes: plan.changes,
+            stepCount: plan.steps.count,
+            status: status,
+            message: message
+        ))
     }
 }

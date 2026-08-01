@@ -2,17 +2,17 @@ import SwiftUI
 
 enum NavigationItem: String, CaseIterable, Identifiable {
     case teach = "Teach"
-    case automations = "Automations"
-    case skills = "Skills"
-    case agents = "Agents"
+    case automations = "My automations"
+    case activity = "Activity"
+    case settings = "Settings"
 
     var id: String { rawValue }
     var icon: String {
         switch self {
-        case .teach: "record.circle"
-        case .automations: "square.grid.2x2"
-        case .skills: "sparkles"
-        case .agents: "person.2"
+        case .teach: "sparkles.rectangle.stack"
+        case .automations: "repeat"
+        case .activity: "clock.arrow.circlepath"
+        case .settings: "gearshape"
         }
     }
 }
@@ -36,8 +36,11 @@ struct RootView: View {
                 .listStyle(.sidebar)
 
                 HStack(spacing: 8) {
-                    Circle().fill(Color.green).frame(width: 9, height: 9)
-                    Text("Local processing").font(.caption).foregroundStyle(.secondary)
+                    Image(systemName: "lock.fill").foregroundStyle(.green)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Private by design").font(.caption.weight(.semibold))
+                        Text("Processing stays on this Mac").font(.caption2).foregroundStyle(.secondary)
+                    }
                     Spacer()
                 }
                 .padding(20)
@@ -48,8 +51,8 @@ struct RootView: View {
                 switch selection ?? .teach {
                 case .teach: TeachView()
                 case .automations: AutomationsView()
-                case .skills: CapabilityView(title: "Skills", subtitle: "Reusable knowledge Humana can apply inside an automation.", icon: "sparkles")
-                case .agents: CapabilityView(title: "Agents", subtitle: "Decision-makers that handle safe variations in your workflows.", icon: "person.2")
+                case .activity: ActivityView()
+                case .settings: SettingsPage()
                 }
             }
             .background(Color(nsColor: .windowBackgroundColor))
@@ -65,6 +68,9 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showHumanaWelcome)) { _ in
             permissions.refresh()
             showOnboarding = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showHumanaAutomations)) { _ in
+            selection = .automations
         }
     }
 }
@@ -86,14 +92,5 @@ struct BrandMark: View {
 
 extension Notification.Name {
     static let showHumanaWelcome = Notification.Name("showHumanaWelcome")
-}
-
-struct CapabilityView: View {
-    let title: String
-    let subtitle: String
-    let icon: String
-
-    var body: some View {
-        ContentUnavailableView(title, systemImage: icon, description: Text(subtitle))
-    }
+    static let showHumanaAutomations = Notification.Name("showHumanaAutomations")
 }

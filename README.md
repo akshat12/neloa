@@ -1,6 +1,6 @@
 # humana
 
-Humana is a local-first Mac app for teaching agentic automations by demonstration. Record a workflow, explain the decisions out loud, review what Humana learned, and run it later with a one-time spoken or typed variation.
+Humana is a private, voice-first Mac app for automating work that changes a little every time. Show a workflow once, explain the decisions out loud, then run it later by saying only what is different.
 
 ## What works
 
@@ -8,10 +8,12 @@ Humana is a local-first Mac app for teaching agentic automations by demonstratio
 - Records and transcribes microphone narration using Apple's on-device speech recognition when available.
 - Learns mouse clicks, typed text, key presses, and app changes.
 - Turns the demonstration into an editable, locally saved workflow.
-- Replays the workflow under user supervision.
+- Replays the workflow under user supervision with the signature “Again, but…” interaction.
 - Accepts instructions such as “Replace June with July” or “use amount $750.”
+- Lets each change be used once, saved as a variant, or made the new default.
 - Uses Apple's on-device Foundation Model on macOS 26, with local Qwen3-VL through Ollama and a narrow built-in planner as fallbacks.
 - Pauses at spoken approval rules such as “always ask me before sending.”
+- Keeps a local activity receipt showing what ran and what changed.
 
 ## Build and run
 
