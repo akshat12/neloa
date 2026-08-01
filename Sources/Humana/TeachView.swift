@@ -41,7 +41,7 @@ struct TeachView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Built for work that changes a little every time")
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
-                    Text("Dates, amounts, clients, files, and thresholds become safe choices you can change on each run.")
+                Text("Dates, amounts, clients, files, and thresholds become safe choices you can change on each run.")
                         .font(.system(size: 14)).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -50,11 +50,18 @@ struct TeachView: View {
             .background(Color.accentColor.opacity(0.075), in: RoundedRectangle(cornerRadius: 16))
             .frame(maxWidth: 700)
             .frame(maxWidth: .infinity)
-            VStack(spacing: 12) {
-                FeatureToggle(icon: "rectangle.on.rectangle", title: "Record screen", subtitle: "See the apps and controls you use", isOn: $teacher.captureScreen)
-                FeatureToggle(icon: "mic", title: "Listen to your explanation", subtitle: "Turn your narration into rules and context", isOn: $teacher.captureMicrophone)
-                FeatureToggle(icon: "speaker.wave.2", title: "Include computer audio", subtitle: "Capture useful sounds from the workflow", isOn: $teacher.captureSystemAudio)
-                    .disabled(!teacher.captureScreen)
+            Label("Common password managers and secure typing are automatically excluded.", systemImage: "eye.slash.fill")
+                .font(.system(size: 14)).foregroundStyle(.secondary)
+                .frame(maxWidth: 700, alignment: .leading)
+                .frame(maxWidth: .infinity)
+            DisclosureGroup("Recording options") {
+                VStack(spacing: 12) {
+                    FeatureToggle(icon: "rectangle.on.rectangle", title: "Record screen", subtitle: "See the apps and controls you use", isOn: $teacher.captureScreen)
+                    FeatureToggle(icon: "mic", title: "Listen to your explanation", subtitle: "Turn your narration into rules and context", isOn: $teacher.captureMicrophone)
+                    FeatureToggle(icon: "speaker.wave.2", title: "Include computer audio", subtitle: "Capture useful sounds from the workflow", isOn: $teacher.captureSystemAudio)
+                        .disabled(!teacher.captureScreen)
+                }
+                .padding(.top, 10)
             }
             .frame(maxWidth: 620)
             .frame(maxWidth: .infinity)
@@ -79,7 +86,7 @@ struct TeachView: View {
 
     private var reviewView: some View {
         VStack(alignment: .leading, spacing: 18) {
-            PageHeader(title: "Review what Humana learned", subtitle: "Fix anything that looks wrong before saving. There are no mystery confidence scores.")
+            PageHeader(title: "Review what Humana learned", subtitle: "Name the automation and remove any steps Humana should not repeat.")
             if let message = teacher.message {
                 Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
             }
@@ -176,7 +183,7 @@ private struct RecordingView: View {
             Button {
                 Task { await controller.stopAndBuild() }
             } label: {
-                Label("Stop & build automation", systemImage: "stop.fill")
+                Label("Finish teaching", systemImage: "stop.fill")
                     .frame(maxWidth: .infinity).padding(.vertical, 8)
             }
             .buttonStyle(.borderedProminent).tint(.red).controlSize(.large)
@@ -205,7 +212,7 @@ private struct WorkflowEditor: View {
                 HStack {
                     Text("\(workflow.steps.count) learned steps").font(.headline)
                     Spacer()
-                    Text("Reviewable, not scored").font(.caption).foregroundStyle(.secondary)
+                    Text("Right-click a step to remove it").font(.system(size: 14)).foregroundStyle(.secondary)
                 }
                 ScrollView {
                     LazyVStack(spacing: 9) {

@@ -58,6 +58,22 @@ final class WorkflowStore: ObservableObject {
         persistActivity()
     }
 
+    func deleteAllRecordings() {
+        let recordings = fileURL.deletingLastPathComponent().appendingPathComponent("Recordings", isDirectory: true)
+        do {
+            if FileManager.default.fileExists(atPath: recordings.path) {
+                try FileManager.default.removeItem(at: recordings)
+            }
+            for index in workflows.indices {
+                workflows[index].recordingPath = nil
+                workflows[index].narrationPath = nil
+            }
+            persist()
+        } catch {
+            lastError = "Your recordings could not be deleted: \(error.localizedDescription)"
+        }
+    }
+
     private func load() {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
         do {

@@ -18,9 +18,11 @@ enum NavigationItem: String, CaseIterable, Identifiable {
 }
 
 struct RootView: View {
+    @EnvironmentObject private var store: WorkflowStore
     @State private var selection: NavigationItem? = .teach
     @StateObject private var permissions = PermissionCenter()
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+    @State private var choseInitialDestination = false
 
     var body: some View {
         NavigationSplitView {
@@ -35,14 +37,20 @@ struct RootView: View {
                 }
                 .listStyle(.sidebar)
 
-                HStack(spacing: 8) {
-                    Image(systemName: "lock.fill").foregroundStyle(.green)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Private by design").font(.caption.weight(.semibold))
-                        Text("Processing stays on this Mac").font(.caption2).foregroundStyle(.secondary)
+                Button {
+                    selection = .settings
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "lock.fill").foregroundStyle(.green)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Private by design").font(.system(size: 13, weight: .semibold))
+                            Text("View privacy controls").font(.system(size: 12)).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
                     }
-                    Spacer()
                 }
+                .buttonStyle(.plain)
                 .padding(20)
             }
             .navigationSplitViewColumnWidth(min: 210, ideal: 230)
@@ -55,6 +63,7 @@ struct RootView: View {
                 case .settings: SettingsPage()
                 }
             }
+            .environmentObject(permissions)
             .background(Color(nsColor: .windowBackgroundColor))
         }
         .tint(Color(red: 0.20, green: 0.31, blue: 0.82))
@@ -71,6 +80,14 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .showHumanaAutomations)) { _ in
             selection = .automations
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showHumanaTeach)) { _ in
+            selection = .teach
+        }
+        .onAppear {
+            guard !choseInitialDestination else { return }
+            choseInitialDestination = true
+            selection = store.workflows.isEmpty ? .teach : .automations
         }
     }
 }
@@ -93,4 +110,5 @@ struct BrandMark: View {
 extension Notification.Name {
     static let showHumanaWelcome = Notification.Name("showHumanaWelcome")
     static let showHumanaAutomations = Notification.Name("showHumanaAutomations")
+    static let showHumanaTeach = Notification.Name("showHumanaTeach")
 }

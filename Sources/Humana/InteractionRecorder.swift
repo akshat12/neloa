@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import CoreGraphics
 import Foundation
 
@@ -65,7 +66,7 @@ final class InteractionRecorder: ObservableObject {
     private func capture(type: CGEventType, event: CGEvent) {
         guard isRecording else { return }
         let active = NSWorkspace.shared.frontmostApplication
-        guard active?.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
+        guard !PrivacyShield.excludes(active?.bundleIdentifier) else { return }
 
         let elapsed = Date().timeIntervalSince(startedAt)
         let app = active?.localizedName
@@ -82,6 +83,7 @@ final class InteractionRecorder: ObservableObject {
                 bundleIdentifier: active?.bundleIdentifier
             ))
         case .keyDown:
+            guard !IsSecureEventInputEnabled() else { return }
             let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
             let text = unicodeText(from: event)
             let isPrintable = !text.isEmpty && !event.flags.contains(.maskCommand) && keyCode != 36 && keyCode != 48 && keyCode != 51 && keyCode != 53

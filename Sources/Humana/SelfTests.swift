@@ -12,6 +12,7 @@ enum SelfTests {
         try amountCheck()
         try serializationCheck()
         try receiptSerializationCheck()
+        try skillExportCheck()
     }
 
     @MainActor
@@ -80,6 +81,16 @@ enum SelfTests {
         let data = try JSONEncoder.humana.encode(receipt)
         let decoded = try JSONDecoder.humana.decode(AutomationRunReceipt.self, from: data)
         try expect(decoded.id == receipt.id && decoded.workflowName == receipt.workflowName && decoded.status == .completed, "activity receipts should round-trip")
+    }
+
+    private static func skillExportCheck() throws {
+        let input = WorkflowStep(kind: .typeText, title: "Type report month", time: 0, text: "June")
+        let approval = WorkflowStep(kind: .approval, title: "Ask before sending", time: 1, requiresApproval: true)
+        let workflow = Workflow(name: "Monthly Report", transcript: "", steps: [input, approval])
+        let markdown = SkillExporter.markdown(for: workflow)
+        try expect(markdown.contains("name: monthly-report"), "skill export should include portable frontmatter")
+        try expect(markdown.contains("`June`"), "skill export should identify flexible inputs")
+        try expect(markdown.contains("Ask before sending"), "skill export should preserve approval rules")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {

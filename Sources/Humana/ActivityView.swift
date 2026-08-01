@@ -18,7 +18,7 @@ struct ActivityView: View {
                 ContentUnavailableView(
                     "No runs yet",
                     systemImage: "checkmark.seal",
-                    description: Text("Completed runs and their one-time changes will appear here.")
+                    description: Text("Finished, stopped, and failed runs—and their one-time changes—will appear here.")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -98,5 +98,7 @@ private struct ActivityCard: View {
         }
     }
 
-    private var statusLabel: String { receipt.status.rawValue.capitalized }
+    private var statusLabel: String {
+        receipt.status == .completed ? "Finished" : receipt.status.rawValue.capitalized
+    }
 }

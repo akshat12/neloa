@@ -24,7 +24,8 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent("teach-\(UUID().uuidString).mp4")
 
-        let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
+        let excludedApplications = content.applications.filter { PrivacyShield.excludes($0.bundleIdentifier) }
+        let filter = SCContentFilter(display: display, excludingApplications: excludedApplications, exceptingWindows: [])
         let configuration = SCStreamConfiguration()
         configuration.width = display.width
         configuration.height = display.height

@@ -1,9 +1,9 @@
 import SwiftUI
 
 private enum RunDisposition: String, CaseIterable, Identifiable {
-    case useOnce = "Use once"
-    case saveVariant = "Save variant"
-    case updateDefault = "Update default"
+    case useOnce = "Just this time"
+    case saveVariant = "Save another version"
+    case updateDefault = "Use from now on"
 
     var id: String { rawValue }
 
@@ -30,6 +30,8 @@ struct RunView: View {
     @State private var runStartedAt: Date?
     @State private var loggedTerminalState = false
     @State private var appliedDisposition = false
+    @State private var allowOriginalRun = false
+    @State private var clarificationQuestion: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -46,10 +48,15 @@ struct RunView: View {
                     Button {
                         Task { await toggleVoice() }
                     } label: {
-                        Image(systemName: voice.isListening ? "stop.circle.fill" : "mic.circle.fill")
-                            .font(.system(size: 30)).foregroundStyle(voice.isListening ? .red : Color.accentColor)
+                        Label(
+                            voice.isListening ? "Finish speaking" : "Tell Humana what changed",
+                            systemImage: voice.isListening ? "stop.circle.fill" : "mic.fill"
+                        )
+                        .font(.system(size: 15, weight: .semibold))
                     }
-                    .buttonStyle(.plain).disabled(voiceBusy)
+                    .buttonStyle(.bordered)
+                    .tint(voice.isListening ? .red : Color.accentColor)
+                    .disabled(voiceBusy)
                     Button(agent.isPlanning ? "Planning…" : "Preview changes") { prepare() }
                         .buttonStyle(.borderedProminent).disabled(agent.isPlanning)
                 }
@@ -79,11 +86,9 @@ struct RunView: View {
                         instruction = "Run it the same way"
                         prepare()
                     }
-                    HStack(spacing: 8) {
-                        suggestion("Use next month")
-                        suggestion("Change the amount")
-                        suggestion("Save as a draft")
-                    }
+                    Text("For example: “Replace June with July” or “Use an amount of $750.”")
+                        .font(.system(size: 15))
+                        .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -101,7 +106,32 @@ struct RunView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("This run").font(.headline)
                 Text(plan.summary).foregroundStyle(.secondary)
-                if plan.changes.isEmpty {
+                if cannotApplyRequestedChange(plan) {
+                    VStack(alignment: .leading, spacing: 9) {
+                        Label("I couldn’t safely make that change", systemImage: "questionmark.bubble.fill")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.orange)
+                        Text("Tell me which saved value should change and what it should become. Humana won’t quietly run the original.")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.secondary)
+                        if let clarificationQuestion {
+                            Text(clarificationQuestion)
+                                .font(.system(size: 15, weight: .medium))
+                        }
+                        HStack {
+                            Button("Edit my request") {
+                                self.plan = nil
+                                allowOriginalRun = false
+                            }
+                            Button("Answer by voice") {
+                                Task { await toggleVoice() }
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                    }
+                    .padding(14)
+                    .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 13))
+                } else if plan.changes.isEmpty {
                     Label("No workflow values changed", systemImage: "equal.circle").foregroundStyle(.secondary)
                 } else {
                     ForEach(plan.changes) { change in
@@ -145,15 +175,25 @@ struct RunView: View {
     private func stateControls(_ plan: RunPlan) -> some View {
         switch runner.state {
         case .idle, .stopped:
-            Button("Run this version") {
-                runStartedAt = Date()
-                loggedTerminalState = false
-                appliedDisposition = false
-                runner.run(plan)
+            if cannotApplyRequestedChange(plan) && !allowOriginalRun {
+                Button("Run the original instead") {
+                    allowOriginalRun = true
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
+                Text("This is a separate choice because your requested change was not applied.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Button(plan.changes.isEmpty ? "Run the original" : "Run this time") {
+                    startRun(plan)
+                }
+                    .buttonStyle(.borderedProminent).controlSize(.large).frame(maxWidth: .infinity)
             }
-                .buttonStyle(.borderedProminent).controlSize(.large).frame(maxWidth: .infinity)
             Label("You can stop at any time. Approval steps always pause.", systemImage: "hand.raised")
-                .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+                .font(.system(size: 14)).foregroundStyle(.secondary).frame(maxWidth: .infinity)
         case .countdown(let seconds):
             VStack(spacing: 8) {
                 Text("Starting in \(seconds)…").font(.title2.bold())
@@ -198,7 +238,17 @@ struct RunView: View {
     private func prepare() {
         runner.reset()
         disposition = .useOnce
-        Task { plan = await agent.makePlan(workflow: workflow, instruction: instruction) }
+        allowOriginalRun = false
+        clarificationQuestion = nil
+        Task {
+            let nextPlan = await agent.makePlan(workflow: workflow, instruction: instruction)
+            plan = nextPlan
+            if cannotApplyRequestedChange(nextPlan) {
+                let question = "Which saved value should I replace, and what should it become?"
+                clarificationQuestion = question
+                voice.speak(question)
+            }
+        }
     }
 
     private func toggleVoice() async {
@@ -208,7 +258,7 @@ struct RunView: View {
             prepare()
         } else {
             voiceBusy = true
-            voice.speak("What should I change this time?")
+            voice.speak(clarificationQuestion ?? "What should I change this time?")
             try? await Task.sleep(for: .seconds(1.6))
             do { _ = try await voice.start() } catch { agent.status = error.localizedDescription }
             voiceBusy = false
@@ -232,12 +282,16 @@ struct RunView: View {
         store.save(updated)
     }
 
-    private func suggestion(_ value: String) -> some View {
-        Button(value) {
-            instruction = value
-            prepare()
-        }
-        .buttonStyle(.bordered).controlSize(.small)
+    private func cannotApplyRequestedChange(_ plan: RunPlan) -> Bool {
+        let clean = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !clean.isEmpty && clean.lowercased() != "run it the same way" && plan.changes.isEmpty
+    }
+
+    private func startRun(_ plan: RunPlan) {
+        runStartedAt = Date()
+        loggedTerminalState = false
+        appliedDisposition = false
+        runner.run(plan)
     }
 
     private func handleStateChange(_ state: AutomationRunner.State) {

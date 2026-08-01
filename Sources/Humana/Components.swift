@@ -6,8 +6,8 @@ struct PageHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.system(size: 30, weight: .bold))
-            Text(subtitle).font(.system(size: 17)).foregroundStyle(.secondary)
+            Text(title).font(.system(size: 35, weight: .bold, design: .rounded))
+            Text(subtitle).font(.system(size: 18)).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -27,7 +27,7 @@ struct FeatureToggle: View {
                 .frame(width: 34)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.system(size: 17, weight: .semibold))
-                Text(subtitle).font(.system(size: 14)).foregroundStyle(.secondary)
+                Text(subtitle).font(.system(size: 15)).foregroundStyle(.secondary)
             }
             Spacer()
             Toggle("", isOn: $isOn).labelsHidden()
@@ -51,10 +51,10 @@ struct StepRow: View {
                 .background(isCurrent ? Color.accentColor : Color.secondary.opacity(0.13), in: RoundedRectangle(cornerRadius: 9))
                 .foregroundStyle(isCurrent ? .white : .primary)
             VStack(alignment: .leading, spacing: 5) {
-                Text(step.title).fontWeight(.semibold).lineLimit(2)
-                if !step.detail.isEmpty { Text(step.detail).font(.caption).foregroundStyle(.secondary) }
+                Text(step.title).font(.system(size: 16, weight: .semibold)).lineLimit(2)
+                if !step.detail.isEmpty { Text(step.detail).font(.system(size: 14)).foregroundStyle(.secondary) }
                 Text(step.kind.label)
-                    .font(.caption2.weight(.semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(step.kind == .approval ? .orange : Color.accentColor)
                     .padding(.horizontal, 8).padding(.vertical, 4)
                     .background((step.kind == .approval ? Color.orange : Color.accentColor).opacity(0.11), in: Capsule())
