@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreGraphics
 import Foundation
 import ScreenCaptureKit
 
@@ -15,6 +16,24 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
     private var outputURL: URL?
 
     func start(includeSystemAudio: Bool) async throws -> URL {
+        let preflightGranted = CGPreflightScreenCaptureAccess()
+        let requestGranted = preflightGranted ? false : CGRequestScreenCaptureAccess()
+        guard Self.hasScreenCaptureAccess(preflightGranted: preflightGranted, requestGranted: requestGranted) else {
+            throw RecordingError.screenPermissionRequired
+        }
+
+        do {
+            return try await startAuthorizedCapture(includeSystemAudio: includeSystemAudio)
+        } catch {
+            if Self.isScreenPermissionError(error) || !CGPreflightScreenCaptureAccess() {
+                throw RecordingError.screenPermissionRequired
+            }
+            throw error
+        }
+    }
+
+    private func startAuthorizedCapture(includeSystemAudio: Bool) async throws -> URL {
+
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         guard let display = content.displays.first else {
             throw RecordingError.noDisplay
@@ -59,6 +78,16 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
         return url
     }
 
+    nonisolated static func hasScreenCaptureAccess(preflightGranted: Bool, requestGranted: Bool) -> Bool {
+        preflightGranted || requestGranted
+    }
+
+    nonisolated static func isScreenPermissionError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == SCStreamErrorDomain
+            && nsError.code == SCStreamError.Code.userDeclined.rawValue
+    }
+
     func stop() async -> URL? {
         timer?.invalidate()
         timer = nil
@@ -88,9 +117,17 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
         }
     }
 
-    enum RecordingError: LocalizedError {
+    enum RecordingError: LocalizedError, Equatable {
+        case screenPermissionRequired
         case noDisplay
 
-        var errorDescription: String? { "Neloa could not find a display to record." }
+        var errorDescription: String? {
+            switch self {
+            case .screenPermissionRequired:
+                "Neloa needs Screen Recording permission to see this workflow."
+            case .noDisplay:
+                "Neloa could not find a display to record."
+            }
+        }
     }
 }

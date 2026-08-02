@@ -76,9 +76,9 @@ struct TeachView: View {
 
                 if showRecordingOptions {
                 VStack(spacing: 12) {
-                    FeatureToggle(icon: "rectangle.on.rectangle", title: "Record screen", subtitle: "See the apps and controls you use", isOn: $teacher.captureScreen)
-                    FeatureToggle(icon: "mic", title: "Listen to your explanation", subtitle: "Turn your narration into rules and context", isOn: $teacher.captureMicrophone)
-                    FeatureToggle(icon: "speaker.wave.2", title: "Include computer audio", subtitle: "Capture useful sounds from the workflow", isOn: $teacher.captureSystemAudio)
+                    FeatureToggle(icon: "rectangle.on.rectangle", title: "Record screen", subtitle: "See the apps and controls you use", isOn: captureScreenBinding)
+                    FeatureToggle(icon: "mic", title: "Listen to your explanation", subtitle: "Turn your narration into rules and context", isOn: captureMicrophoneBinding)
+                    FeatureToggle(icon: "speaker.wave.2", title: "Include computer audio", subtitle: "Capture useful sounds from the workflow", isOn: captureSystemAudioBinding)
                         .disabled(!teacher.captureScreen)
                 }
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -88,9 +88,26 @@ struct TeachView: View {
             .frame(maxWidth: .infinity)
             Spacer()
             if let message = teacher.message {
-                Label(message, systemImage: "exclamationmark.triangle")
-                    .font(.callout).foregroundStyle(.orange)
-                    .frame(maxWidth: .infinity)
+                VStack(spacing: 10) {
+                    Label(message, systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.orange)
+                    if teacher.requiredPermission == .screenRecording {
+                        HStack(spacing: 10) {
+                            Button("Open Screen Recording Settings") { openScreenRecordingSettings() }
+                                .buttonStyle(.borderedProminent)
+                            Button(teacher.captureMicrophone ? "Record without screen" : "Use microphone instead") {
+                                teacher.useMicrophoneOnly()
+                                Task { await teacher.start() }
+                            }
+                                .buttonStyle(.bordered)
+                        }
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: 700)
+                .frame(maxWidth: .infinity)
+                .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
             }
             Button {
                 Task { await teacher.start() }
@@ -103,6 +120,32 @@ struct TeachView: View {
             .controlSize(.large)
             .disabled(teacher.phase == .starting || (!teacher.captureScreen && !teacher.captureMicrophone))
         }
+    }
+
+    private var captureScreenBinding: Binding<Bool> {
+        Binding(
+            get: { teacher.captureScreen },
+            set: { teacher.setScreenCaptureEnabled($0) }
+        )
+    }
+
+    private var captureMicrophoneBinding: Binding<Bool> {
+        Binding(
+            get: { teacher.captureMicrophone },
+            set: { teacher.setMicrophoneCaptureEnabled($0) }
+        )
+    }
+
+    private var captureSystemAudioBinding: Binding<Bool> {
+        Binding(
+            get: { teacher.captureSystemAudio },
+            set: { teacher.setSystemAudioCaptureEnabled($0) }
+        )
+    }
+
+    private func openScreenRecordingSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private var reviewView: some View {

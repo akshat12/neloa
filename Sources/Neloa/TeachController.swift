@@ -3,13 +3,15 @@ import Foundation
 @MainActor
 final class TeachController: ObservableObject {
     enum Phase { case ready, starting, recording, building, review }
+    enum RequiredPermission { case screenRecording }
 
     @Published var phase: Phase = .ready
-    @Published var captureScreen = true
-    @Published var captureMicrophone = true
-    @Published var captureSystemAudio = true
+    @Published private(set) var captureScreen = true
+    @Published private(set) var captureMicrophone = true
+    @Published private(set) var captureSystemAudio = true
     @Published var draft: Workflow?
     @Published var message: String?
+    @Published private(set) var requiredPermission: RequiredPermission?
 
     let screen = ScreenRecorder()
     let voice = VoiceService()
@@ -20,6 +22,7 @@ final class TeachController: ObservableObject {
     func start() async {
         phase = .starting
         message = nil
+        requiredPermission = nil
         do {
             if captureScreen {
                 screenURL = try await screen.start(includeSystemAudio: captureSystemAudio)
@@ -36,6 +39,10 @@ final class TeachController: ObservableObject {
             if screen.isRecording { _ = await screen.stop() }
             if voice.isListening { voice.stop() }
             message = error.localizedDescription
+            if let recordingError = error as? ScreenRecorder.RecordingError,
+               recordingError == .screenPermissionRequired {
+                requiredPermission = .screenRecording
+            }
             phase = .ready
         }
     }
@@ -59,7 +66,32 @@ final class TeachController: ObservableObject {
         screenURL = nil
         narrationURL = nil
         message = nil
+        requiredPermission = nil
         phase = .ready
+    }
+
+    func useMicrophoneOnly() {
+        setScreenCaptureEnabled(false)
+        captureMicrophone = true
+        message = nil
+        requiredPermission = nil
+    }
+
+    func setScreenCaptureEnabled(_ isEnabled: Bool) {
+        captureScreen = isEnabled
+        captureSystemAudio = Self.resolvedSystemAudio(screenEnabled: isEnabled, requested: captureSystemAudio)
+    }
+
+    func setMicrophoneCaptureEnabled(_ isEnabled: Bool) {
+        captureMicrophone = isEnabled
+    }
+
+    func setSystemAudioCaptureEnabled(_ isEnabled: Bool) {
+        captureSystemAudio = Self.resolvedSystemAudio(screenEnabled: captureScreen, requested: isEnabled)
+    }
+
+    nonisolated static func resolvedSystemAudio(screenEnabled: Bool, requested: Bool) -> Bool {
+        screenEnabled && requested
     }
 
     private func suggestedName(from transcript: String) -> String {

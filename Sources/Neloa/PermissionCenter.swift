@@ -4,6 +4,8 @@ import CoreGraphics
 import Foundation
 import Speech
 
+private let accessibilityRequestedKey = "hasRequestedAccessibilityPermission"
+
 @MainActor
 final class PermissionCenter: ObservableObject {
     enum Status: Equatable {
@@ -29,7 +31,10 @@ final class PermissionCenter: ObservableObject {
 
     func refresh() {
         screen = CGPreflightScreenCaptureAccess() ? .granted : .unknown
-        accessibility = AXIsProcessTrusted() ? .granted : .unknown
+        accessibility = Self.accessibilityStatus(
+            isTrusted: AXIsProcessTrusted(),
+            hasRequested: Self.hasRequestedAccessibility(in: .standard)
+        )
         microphone = status(for: AVCaptureDevice.authorizationStatus(for: .audio))
         speech = status(for: SFSpeechRecognizer.authorizationStatus())
     }
@@ -39,6 +44,7 @@ final class PermissionCenter: ObservableObject {
     }
 
     func requestAccessibility() {
+        Self.markAccessibilityRequested(in: .standard)
         let prompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         let options = [prompt: true] as CFDictionary
         accessibility = AXIsProcessTrustedWithOptions(options) ? .granted : .denied
@@ -69,6 +75,19 @@ final class PermissionCenter: ObservableObject {
         case .notDetermined: .unknown
         @unknown default: .unknown
         }
+    }
+
+    nonisolated static func accessibilityStatus(isTrusted: Bool, hasRequested: Bool) -> Status {
+        if isTrusted { return .granted }
+        return hasRequested ? .denied : .unknown
+    }
+
+    nonisolated static func hasRequestedAccessibility(in defaults: UserDefaults) -> Bool {
+        defaults.bool(forKey: accessibilityRequestedKey)
+    }
+
+    nonisolated static func markAccessibilityRequested(in defaults: UserDefaults) {
+        defaults.set(true, forKey: accessibilityRequestedKey)
     }
 
 }

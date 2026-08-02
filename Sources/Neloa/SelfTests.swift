@@ -1,4 +1,5 @@
 import Foundation
+import ScreenCaptureKit
 
 enum SelfTests {
     struct Failure: Error, CustomStringConvertible {
@@ -15,6 +16,10 @@ enum SelfTests {
         try skillExportCheck()
         try brandMigrationCheck()
         try localModelDiscoveryCheck()
+        try permissionStateCheck()
+        try recordingErrorCopyCheck()
+        try captureOptionCheck()
+        try screenPermissionBranchCheck()
     }
 
     @MainActor
@@ -26,6 +31,10 @@ enum SelfTests {
         try expect(agent.status.contains("Apple Intelligence"), "Apple on-device agent should handle the test plan; status was: \(agent.status)")
         try expect(plan.steps.first?.text == "August", "on-device agent should replace June with August; got text=\(plan.steps.first?.text ?? "nil"), summary=\(plan.summary), changes=\(plan.changes.map { "\($0.before)->\($0.after)" })")
         try expect(plan.changes.count == 1, "on-device agent should report one reviewed change; got \(plan.changes.count)")
+
+        let teacher = TeachController()
+        teacher.setScreenCaptureEnabled(false)
+        try expect(!teacher.captureScreen && !teacher.captureSystemAudio, "turning off screen capture should also turn off computer audio")
     }
 
     private static func compilationCheck() throws {
@@ -110,6 +119,40 @@ enum SelfTests {
         try expect(LocalAgentService.containsModel("qwen3-vl:4b", in: installed), "exact Ollama model tags should be discovered")
         try expect(LocalAgentService.containsModel("llama3.2", in: installed), "Ollama's implicit latest tag should be discovered")
         try expect(!LocalAgentService.containsModel("missing:1b", in: installed), "unavailable Ollama models should be reported as missing")
+    }
+
+    private static func permissionStateCheck() throws {
+        try expect(PermissionCenter.accessibilityStatus(isTrusted: false, hasRequested: false) == .unknown, "unrequested Accessibility should show Allow")
+        try expect(PermissionCenter.accessibilityStatus(isTrusted: false, hasRequested: true) == .denied, "previously requested Accessibility should continue to show Open Settings")
+        try expect(PermissionCenter.accessibilityStatus(isTrusted: true, hasRequested: true) == .granted, "trusted Accessibility should show Ready")
+
+        let suiteName = "NeloaSelfTests.Permission.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else { throw Failure(description: "could not create isolated permission defaults") }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        try expect(!PermissionCenter.hasRequestedAccessibility(in: defaults), "isolated Accessibility request state should start clear")
+        PermissionCenter.markAccessibilityRequested(in: defaults)
+        try expect(PermissionCenter.hasRequestedAccessibility(in: defaults), "Accessibility request state should persist using the same key read by refresh")
+    }
+
+    private static func recordingErrorCopyCheck() throws {
+        let message = ScreenRecorder.RecordingError.screenPermissionRequired.localizedDescription
+        try expect(message == "Neloa needs Screen Recording permission to see this workflow.", "screen recording denial should use actionable product language")
+        try expect(!message.localizedCaseInsensitiveContains("TCC"), "screen recording denial should not expose macOS implementation jargon")
+    }
+
+    private static func captureOptionCheck() throws {
+        try expect(!TeachController.resolvedSystemAudio(screenEnabled: false, requested: true), "computer audio must be off without screen capture")
+        try expect(TeachController.resolvedSystemAudio(screenEnabled: true, requested: true), "computer audio may be enabled with screen capture")
+        try expect(!TeachController.resolvedSystemAudio(screenEnabled: true, requested: false), "computer audio should respect an explicit off choice")
+    }
+
+    private static func screenPermissionBranchCheck() throws {
+        try expect(ScreenRecorder.hasScreenCaptureAccess(preflightGranted: true, requestGranted: false), "existing screen permission should allow recording")
+        try expect(ScreenRecorder.hasScreenCaptureAccess(preflightGranted: false, requestGranted: true), "a newly granted screen request should continue recording")
+        try expect(!ScreenRecorder.hasScreenCaptureAccess(preflightGranted: false, requestGranted: false), "a denied screen request should show recovery")
+        let userDeclined = NSError(domain: SCStreamErrorDomain, code: SCStreamError.Code.userDeclined.rawValue)
+        try expect(ScreenRecorder.isScreenPermissionError(userDeclined), "ScreenCaptureKit user-declined errors should map to product recovery")
+        try expect(!ScreenRecorder.isScreenPermissionError(NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoSuchFileError)), "unrelated failures should keep their diagnostic meaning")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
