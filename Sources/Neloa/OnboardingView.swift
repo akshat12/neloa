@@ -6,7 +6,6 @@ struct OnboardingView: View {
     let finish: () -> Void
     @State private var page = 0
     @State private var appeared = false
-    @State private var orbiting = false
 
     var body: some View {
         ZStack {
@@ -21,7 +20,6 @@ struct OnboardingView: View {
         .animation(.spring(response: 0.52, dampingFraction: 0.86), value: page)
         .onAppear {
             withAnimation(.spring(response: 0.75, dampingFraction: 0.76).delay(0.08)) { appeared = true }
-            withAnimation(.linear(duration: 9).repeatForever(autoreverses: false)) { orbiting = true }
         }
     }
 
@@ -79,16 +77,8 @@ struct OnboardingView: View {
 
     private var animatedBrand: some View {
         HStack(spacing: 13) {
-            ZStack {
-                Circle().fill(Color(red: 0.12, green: 0.17, blue: 0.55)).frame(width: 58, height: 58)
-                Circle()
-                    .trim(from: 0.08, to: 0.91)
-                    .stroke(.white, style: StrokeStyle(lineWidth: 7, lineCap: .round))
-                    .frame(width: 34, height: 34)
-                    .rotationEffect(.degrees(orbiting ? 360 : 0))
-                Circle().fill(Color(red: 1.0, green: 0.32, blue: 0.28)).frame(width: 9, height: 9)
-            }
-            .shadow(color: Color.indigo.opacity(0.25), radius: 12, y: 5)
+            NeloaAppIcon(size: 62)
+                .shadow(color: Color.indigo.opacity(0.22), radius: 12, y: 5)
             Text("Neloa")
                 .font(.system(size: 31, weight: .bold, design: .rounded))
                 .fixedSize()

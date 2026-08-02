@@ -1,4 +1,52 @@
+import AppKit
 import SwiftUI
+
+struct NeloaAppIcon: View {
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let icon = Self.bundledIcon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .interpolation(.high)
+            } else {
+                fallbackIcon
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+
+    private static let bundledIcon: NSImage? = {
+        guard let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns") else { return nil }
+        return NSImage(contentsOf: url)
+    }()
+
+    private var fallbackIcon: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+                .fill(LinearGradient(
+                    colors: [Color(red: 0.08, green: 0.09, blue: 0.34), Color(red: 0.20, green: 0.29, blue: 0.86)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ))
+            Circle()
+                .trim(from: 0.11, to: 0.94)
+                .stroke(.white, style: StrokeStyle(lineWidth: size * 0.08, lineCap: .round))
+                .frame(width: size * 0.53, height: size * 0.53)
+                .rotationEffect(.degrees(-12))
+            Image(systemName: "arrowtriangle.down.fill")
+                .font(.system(size: size * 0.11, weight: .bold))
+                .foregroundStyle(.white)
+                .rotationEffect(.degrees(-8))
+                .offset(x: size * 0.27, y: -size * 0.04)
+            Circle()
+                .fill(LinearGradient(colors: [.orange, .red], startPoint: .top, endPoint: .bottom))
+                .frame(width: size * 0.13, height: size * 0.13)
+        }
+    }
+}
 
 struct PageHeader: View {
     let title: String

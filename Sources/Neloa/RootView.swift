@@ -95,11 +95,7 @@ struct RootView: View {
 struct BrandMark: View {
     var body: some View {
         HStack(spacing: 10) {
-            ZStack {
-                Circle().fill(Color(red: 0.12, green: 0.17, blue: 0.55)).frame(width: 34, height: 34)
-                Circle().stroke(.white, lineWidth: 5).frame(width: 19, height: 19)
-                Circle().fill(.white).frame(width: 5, height: 5)
-            }
+            NeloaAppIcon(size: 36)
             Text("Neloa").font(.system(size: 22, weight: .bold, design: .rounded)).fixedSize()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
