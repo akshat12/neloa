@@ -83,7 +83,8 @@ struct SettingsView: View {
             } label: {
                 Label("Open macOS Privacy Settings", systemImage: "arrow.up.forward.app")
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
         }
     }
 
@@ -118,7 +119,8 @@ struct SettingsView: View {
         } label: {
             Label("Show saved data", systemImage: "folder")
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
 
         Button(role: .destructive) {
             confirmDeleteRecordings = true
@@ -126,6 +128,8 @@ struct SettingsView: View {
             Label("Delete recordings…", systemImage: "trash")
         }
         .buttonStyle(.bordered)
+        .controlSize(.large)
+        .tint(.red)
     }
 
     private var advancedCard: some View {
@@ -174,6 +178,7 @@ struct SettingsView: View {
                             Task { await agent.refreshFallbackStatus() }
                         }
                         .buttonStyle(.bordered)
+                        .controlSize(.large)
                         .disabled(agent.fallbackStatus == .checking)
 
                         fallbackAction
@@ -213,9 +218,11 @@ struct SettingsView: View {
         case .ollamaUnavailable:
             Button("Get Ollama") { openOllamaDownload() }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
         case .modelMissing:
             Button(copiedPullCommand ? "Copied" : "Copy download command") { copyPullCommand() }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
         case .checking, .ready:
             EmptyView()
         }
