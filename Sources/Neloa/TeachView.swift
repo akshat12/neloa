@@ -168,18 +168,15 @@ struct TeachView: View {
 
     private var reviewView: some View {
         VStack(alignment: .leading, spacing: 18) {
-            PageHeader(title: "Review what Neloa learned", subtitle: "Name the automation and remove any steps Neloa should not repeat.")
+            PageHeader(title: "Review what Neloa learned", subtitle: "Play back the recording and confirm the actions Neloa should repeat.")
             if let message = teacher.message {
                 Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
             }
             if let draftBinding = Binding($teacher.draft) {
-                WorkflowEditor(workflow: draftBinding)
+                WorkflowReviewView(workflow: draftBinding)
                 HStack {
                     Button("Teach again") { teacher.reset() }
                     Spacer()
-                    if let path = teacher.draft?.recordingPath {
-                        Button("Open recording") { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
-                    }
                     Button("Save automation") {
                         if let workflow = teacher.draft {
                             store.save(workflow)
@@ -373,45 +370,6 @@ private struct RecordingView: View {
                     .frame(maxWidth: .infinity).padding(.vertical, 8)
             }
             .buttonStyle(.borderedProminent).tint(.red).controlSize(.large)
-        }
-    }
-}
-
-private struct WorkflowEditor: View {
-    @Binding var workflow: Workflow
-
-    var body: some View {
-        HSplitView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Automation name").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                TextField("Automation name", text: $workflow.name).textFieldStyle(.roundedBorder)
-                Text("What you said").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                ScrollView {
-                    Text(workflow.transcript.isEmpty ? "No narration was captured." : workflow.transcript)
-                        .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
-                }
-                .padding().background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
-            }
-            .padding(.trailing, 14).frame(minWidth: 320, idealWidth: 400)
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("\(workflow.steps.count) learned steps").font(.headline)
-                    Spacer()
-                    Text("Right-click a step to remove it").font(.system(size: 14)).foregroundStyle(.secondary)
-                }
-                ScrollView {
-                    LazyVStack(spacing: 9) {
-                        ForEach(Array(workflow.steps.enumerated()), id: \.element.id) { index, step in
-                            StepRow(number: index + 1, step: step)
-                                .contextMenu {
-                                    Button("Remove step", role: .destructive) { workflow.steps.removeAll { $0.id == step.id } }
-                                }
-                        }
-                    }
-                }
-            }
-            .padding(.leading, 14).frame(minWidth: 380)
         }
     }
 }

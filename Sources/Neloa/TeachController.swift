@@ -19,6 +19,27 @@ final class TeachController: ObservableObject {
     private var screenURL: URL?
     private var narrationURL: URL?
 
+    init() {
+        #if DEBUG
+        if UserDefaults.standard.bool(forKey: "NeloaUITestReview") {
+            draft = Workflow(
+                name: "Prepare weekly report",
+                transcript: "Open the report, enter this week’s amount, flag the large change, and ask before sharing it.",
+                recordingPath: "/System/Library/CoreServices/ControlCenter.app/Contents/Resources/BentoGalleryIntroduction.mov",
+                steps: [
+                    WorkflowStep(kind: .openApp, title: "Open the weekly report", time: 1.2, application: "Numbers"),
+                    WorkflowStep(kind: .click, title: "Select the revenue cell", time: 3.8, x: 640, y: 420, application: "Numbers"),
+                    WorkflowStep(kind: .typeText, title: "Enter the weekly amount", detail: "Type $12,400", time: 6.4, text: "$12,400", application: "Numbers"),
+                    WorkflowStep(kind: .decision, title: "Flag changes over 20%", detail: "Use judgment when the threshold is crossed", time: 9.1, application: "Numbers"),
+                    WorkflowStep(kind: .click, title: "Choose Share", time: 12.0, x: 900, y: 120, application: "Numbers"),
+                    WorkflowStep(kind: .approval, title: "Ask before sharing", time: 12.0, application: "Mail", requiresApproval: true)
+                ]
+            )
+            phase = .review
+        }
+        #endif
+    }
+
     func start() async {
         phase = .starting
         message = nil

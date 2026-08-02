@@ -21,6 +21,7 @@ enum SelfTests {
         try captureOptionCheck()
         try screenPermissionBranchCheck()
         try appTourStructureCheck()
+        try reviewTimelineSelectionCheck()
     }
 
     @MainActor
@@ -162,6 +163,22 @@ enum SelfTests {
         try expect(Set(steps.map(\.target)).count == steps.count, "each guided tour step should spotlight a unique control")
         try expect(steps.first?.target == .teachNavigation, "the guided tour should begin with Teach")
         try expect(steps.last?.target == .settingsNavigation, "the guided tour should finish with privacy and Settings")
+    }
+
+    private static func reviewTimelineSelectionCheck() throws {
+        let first = WorkflowStep(kind: .click, title: "Open report", time: 1)
+        let second = WorkflowStep(kind: .typeText, title: "Enter amount", time: 3, text: "$500")
+        let confirmation = WorkflowStep(kind: .approval, title: "Ask before sending", time: 3, requiresApproval: true)
+        let steps = [first, second, confirmation]
+
+        try expect(ReviewTimelineSelection.stepID(at: 0, in: steps) == first.id, "the review should begin with the first salient action selected")
+        try expect(ReviewTimelineSelection.stepID(at: 2, in: steps) == first.id, "the selected action should remain active until the next timestamp")
+        try expect(ReviewTimelineSelection.stepID(at: 3.1, in: steps) == confirmation.id, "equal timestamps should preserve the learned action order")
+        try expect(ReviewTimelineSelection.stepID(at: 3, in: steps, preserving: second.id, at: 3) == second.id, "explicitly selecting an earlier action at a shared timestamp should keep that card highlighted")
+        try expect(ReviewTimelineSelection.stepID(at: 2, in: steps, preserving: second.id, at: 2) == second.id, "a late action clamped to the end of a short video should remain explicitly selected")
+        try expect(ReviewTimelineSelection.duration(videoDuration: 0, steps: steps) == 3.5, "steps should provide a review duration before the video reports its length")
+        try expect(ReviewTimelineSelection.duration(videoDuration: 2, steps: steps) == 2, "the review timeline should clamp markers to the real video duration")
+        try expect(ReviewTimelineSelection.duration(videoDuration: 10, steps: steps) == 10, "the review timeline should use the full recording duration")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
