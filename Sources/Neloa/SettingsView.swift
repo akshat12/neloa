@@ -26,7 +26,11 @@ struct SettingsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { permissions.refresh() }
-        .task { await agent.refreshFallbackStatus() }
+        .task(id: agent.modelName) {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            await agent.refreshFallbackStatus()
+        }
         .alert("Delete all teaching recordings?", isPresented: $confirmDeleteRecordings) {
             Button("Delete recordings", role: .destructive) { store.deleteAllRecordings() }
             Button("Cancel", role: .cancel) {}
