@@ -71,11 +71,17 @@ struct SettingsView: View {
     private var permissionsCard: some View {
         SettingsCard(title: "Permissions", icon: "checkmark.shield") {
             VStack(spacing: 0) {
-                permissionRow("Screen recording", icon: "rectangle.on.rectangle", status: permissions.screen)
+                permissionRow("Screen recording", icon: "rectangle.on.rectangle", status: permissions.screen) {
+                    grantScreenRecording()
+                }
                 Divider()
-                permissionRow("Clicks, typing & replay", icon: "hand.tap", status: permissions.accessibility)
+                permissionRow("Clicks, typing & replay", icon: "hand.tap", status: permissions.accessibility) {
+                    grantAccessibility()
+                }
                 Divider()
-                settingsRow(title: "Voice", icon: "waveform", value: voicePermissionLabel, color: voicePermissionColor)
+                permissionRow("Voice", icon: "waveform", status: voicePermissionStatus) {
+                    grantVoice()
+                }
             }
 
             Button {
@@ -249,17 +255,30 @@ struct SettingsView: View {
         agent.status.contains("unavailable") ? "Limited" : "Ready"
     }
 
-    private var voicePermissionLabel: String {
-        permissions.microphone == .granted && permissions.speech == .granted ? "Ready" : "Not ready"
+    private var voicePermissionStatus: PermissionCenter.Status {
+        if permissions.microphone == .granted && permissions.speech == .granted { return .granted }
+        if permissions.microphone == .denied || permissions.speech == .denied { return .denied }
+        return .unknown
     }
 
-    private var voicePermissionColor: Color {
-        voicePermissionLabel == "Ready" ? .green : .secondary
-    }
-
-    private func permissionRow(_ title: String, icon: String, status: PermissionCenter.Status) -> some View {
+    private func permissionRow(_ title: String, icon: String, status: PermissionCenter.Status, grant: @escaping () -> Void) -> some View {
         let appearance = permissionAppearance(status)
-        return settingsRow(title: title, icon: icon, value: appearance.label, color: appearance.color)
+        return HStack(spacing: 11) {
+            Image(systemName: icon)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 22)
+            Text(title).font(.system(size: 15, weight: .medium))
+            Spacer(minLength: 10)
+            Text(appearance.label)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(appearance.color)
+            if status != .granted {
+                Button("Grant", action: grant)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 8)
     }
 
     private func permissionAppearance(_ status: PermissionCenter.Status) -> (label: String, color: Color) {
@@ -285,8 +304,50 @@ struct SettingsView: View {
     }
 
     private func openPrivacySettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") {
-            NSWorkspace.shared.open(url)
+        openPrivacyPane("Privacy")
+    }
+
+    private func grantScreenRecording() {
+        permissions.requestScreen()
+        if permissions.screen != .granted {
+            openPrivacyPane("Privacy_ScreenCapture", after: 0.45)
+        }
+    }
+
+    private func grantAccessibility() {
+        permissions.requestAccessibility()
+        if permissions.accessibility == .denied {
+            openPrivacyPane("Privacy_Accessibility", after: 0.35)
+        }
+    }
+
+    private func grantVoice() {
+        Task {
+            await permissions.requestMicrophoneAndSpeech()
+            if permissions.microphone == .denied {
+                openPrivacyPane("Privacy_Microphone")
+            } else if permissions.speech == .denied {
+                openPrivacyPane("Privacy_SpeechRecognition")
+            }
+        }
+    }
+
+    private func openPrivacyPane(_ anchor: String, after delay: TimeInterval = 0) {
+        let open = {
+            let modernRoute = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?\(anchor)")
+            let legacyRoute = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)")
+            if let modernRoute, NSWorkspace.shared.open(modernRoute) {
+                return
+            }
+            if let legacyRoute {
+                NSWorkspace.shared.open(legacyRoute)
+            }
+        }
+
+        if delay == 0 {
+            open()
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: open)
         }
     }
 
