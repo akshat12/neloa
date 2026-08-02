@@ -5,7 +5,6 @@ struct TeachView: View {
     @EnvironmentObject private var teacher: TeachController
     @EnvironmentObject private var store: WorkflowStore
     @State private var savedMessage = false
-    @State private var showRecordingOptions = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,102 +32,110 @@ struct TeachView: View {
     }
 
     private var setupView: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            PageHeader(title: "What should Neloa learn?", subtitle: "Show it once. Next time, just say what’s different.")
-            Spacer()
-            HStack(spacing: 15) {
-                Image(systemName: "quote.bubble.fill")
-                    .font(.system(size: 30)).foregroundStyle(Color.accentColor)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Built for work that changes a little every time")
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
-                Text("Dates, amounts, clients, files, and thresholds become safe choices you can change on each run.")
-                        .font(.system(size: 16)).foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .padding(18)
-            .background(Color.accentColor.opacity(0.075), in: RoundedRectangle(cornerRadius: 16))
-            .frame(maxWidth: 700)
-            .frame(maxWidth: .infinity)
-            Label("Common password managers and secure typing are automatically excluded.", systemImage: "eye.slash.fill")
-                .font(.system(size: 14)).foregroundStyle(.secondary)
-                .frame(maxWidth: 700, alignment: .leading)
-                .frame(maxWidth: .infinity)
-            VStack(spacing: 0) {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showRecordingOptions.toggle()
-                    }
-                } label: {
-                    HStack {
-                        Label("Recording options", systemImage: "slider.horizontal.3")
-                            .font(.system(size: 15, weight: .semibold))
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .rotationEffect(.degrees(showRecordingOptions ? 90 : 0))
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 16)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 26) {
+            PageHeader(
+                title: "Let’s get your teaching session ready.",
+                subtitle: "Three quick choices, then show Neloa the task."
+            )
 
-                if showRecordingOptions {
-                    Divider()
-                        .padding(.horizontal, 18)
-
-                    VStack(spacing: 10) {
-                        FeatureToggle(icon: "rectangle.on.rectangle", title: "Record screen", subtitle: "See the apps and controls you use", isOn: captureScreenBinding)
-                        FeatureToggle(icon: "mic", title: "Listen to your explanation", subtitle: "Turn your narration into rules and context", isOn: captureMicrophoneBinding)
-                        FeatureToggle(icon: "speaker.wave.2", title: "Include computer audio", subtitle: "Capture useful sounds from the workflow", isOn: captureSystemAudioBinding)
-                            .disabled(!teacher.captureScreen)
-                    }
-                    .padding(14)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                }
-            }
-            .frame(maxWidth: 700)
-            .background(.background, in: RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.secondary.opacity(0.15)))
-            .shadow(color: .black.opacity(0.035), radius: 8, y: 3)
-            .frame(maxWidth: .infinity)
-            Spacer()
-            if let message = teacher.message {
-                VStack(spacing: 10) {
-                    Label(message, systemImage: "exclamationmark.triangle")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.orange)
-                    if teacher.requiredPermission == .screenRecording {
-                        HStack(spacing: 10) {
-                            Button("Open Screen Recording Settings") { openScreenRecordingSettings() }
-                                .buttonStyle(.borderedProminent)
-                            Button(teacher.captureMicrophone ? "Record without screen" : "Use microphone instead") {
-                                teacher.useMicrophoneOnly()
-                                Task { await teacher.start() }
+            HStack(alignment: .top, spacing: 22) {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(spacing: 0) {
+                        TeachSetupStep(number: 1, title: "What should Neloa observe?") {
+                            HStack(spacing: 9) {
+                                TeachOptionToggle(
+                                    icon: "rectangle.on.rectangle",
+                                    title: "Screen",
+                                    isOn: captureScreenBinding
+                                )
+                                TeachIncludedOption(icon: "hand.tap", title: "Clicks & typing")
                             }
-                                .buttonStyle(.bordered)
+                        }
+
+                        Divider().padding(.leading, 50)
+
+                        TeachSetupStep(number: 2, title: "How will you explain choices?") {
+                            HStack(spacing: 9) {
+                                TeachOptionToggle(
+                                    icon: "mic",
+                                    title: "Use my voice",
+                                    isOn: captureMicrophoneBinding
+                                )
+                                TeachOptionToggle(
+                                    icon: "speaker.wave.2",
+                                    title: "Computer audio",
+                                    isOn: captureSystemAudioBinding
+                                )
+                                .disabled(!teacher.captureScreen)
+                            }
+                        }
+
+                        Divider().padding(.leading, 50)
+
+                        TeachSetupStep(number: 3, title: "You stay in control") {
+                            Label("Neloa asks before important actions.", systemImage: "checkmark.shield")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.secondary)
                         }
                     }
+                    .padding(.horizontal, 20)
+                    .background(.background, in: RoundedRectangle(cornerRadius: 18))
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.secondary.opacity(0.16)))
+
+                    if let message = teacher.message {
+                        permissionMessage(message)
+                    }
+
+                    HStack(spacing: 14) {
+                        Button {
+                            Task { await teacher.start() }
+                        } label: {
+                            Label(teacher.phase == .starting ? "Starting…" : "Start teaching", systemImage: "record.circle")
+                                .font(.system(size: 16, weight: .semibold))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .disabled(teacher.phase == .starting || (!teacher.captureScreen && !teacher.captureMicrophone))
+
+                        Label("Secure fields stay hidden.", systemImage: "eye.slash")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .padding(14)
-                .frame(maxWidth: 700)
-                .frame(maxWidth: .infinity)
-                .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                WhatNeloaLearnsCard()
+                    .frame(width: 280)
             }
-            Button {
-                Task { await teacher.start() }
-            } label: {
-                Label(teacher.phase == .starting ? "Starting…" : "Start teaching", systemImage: "record.circle")
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(maxWidth: .infinity).padding(.vertical, 10)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(teacher.phase == .starting || (!teacher.captureScreen && !teacher.captureMicrophone))
+            .frame(maxWidth: 920, alignment: .topLeading)
+
+            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private func permissionMessage(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(message, systemImage: "exclamationmark.triangle")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.orange)
+            if teacher.requiredPermission == .screenRecording {
+                HStack(spacing: 10) {
+                    Button("Open Screen Recording Settings") { openScreenRecordingSettings() }
+                        .buttonStyle(.borderedProminent)
+                    Button(teacher.captureMicrophone ? "Record without screen" : "Use microphone instead") {
+                        teacher.useMicrophoneOnly()
+                        Task { await teacher.start() }
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
     }
 
     private var captureScreenBinding: Binding<Bool> {
@@ -190,6 +197,110 @@ struct TeachView: View {
                 }
             }
         }
+    }
+}
+
+private struct TeachSetupStep<Content: View>: View {
+    let number: Int
+    let title: String
+    let content: Content
+
+    init(number: Int, title: String, @ViewBuilder content: () -> Content) {
+        self.number = number
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Text("\(number)")
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 30, height: 30)
+                .background(Color.accentColor.opacity(0.11), in: RoundedRectangle(cornerRadius: 9))
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                content
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 18)
+    }
+}
+
+private struct TeachOptionToggle: View {
+    let icon: String
+    let title: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            Label(title, systemImage: icon)
+                .font(.system(size: 13, weight: .medium))
+        }
+        .toggleStyle(.button)
+        .buttonStyle(.bordered)
+        .tint(isOn ? Color.accentColor : .secondary)
+        .accessibilityLabel(title)
+    }
+}
+
+private struct TeachIncludedOption: View {
+    let icon: String
+    let title: String
+
+    var body: some View {
+        Label(title, systemImage: icon)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(Color.accentColor)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(Color.accentColor.opacity(0.09), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor.opacity(0.28)))
+            .accessibilityLabel("\(title), included")
+    }
+}
+
+private struct WhatNeloaLearnsCard: View {
+    private let examples = [
+        ("calendar", "Dates", "Use next Friday instead."),
+        ("dollarsign.circle", "Amounts", "Make it $2,500 this time."),
+        ("person.2", "People", "Send this one to Maya."),
+        ("doc", "Files", "Use the July report.")
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 17) {
+            Text("What Neloa can learn")
+                .font(.system(size: 17, weight: .semibold, design: .rounded))
+
+            ForEach(Array(examples.enumerated()), id: \.offset) { _, example in
+                HStack(alignment: .top, spacing: 11) {
+                    Image(systemName: example.0)
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 20)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(example.1)
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("“\(example.2)”")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Divider()
+
+            Label("Built for work that changes a little every time.", systemImage: "sparkles")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.accentColor.opacity(0.065), in: RoundedRectangle(cornerRadius: 18))
     }
 }
 
