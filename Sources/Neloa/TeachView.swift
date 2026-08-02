@@ -55,7 +55,7 @@ struct TeachView: View {
                 .font(.system(size: 14)).foregroundStyle(.secondary)
                 .frame(maxWidth: 700, alignment: .leading)
                 .frame(maxWidth: .infinity)
-            VStack(spacing: 10) {
+            VStack(spacing: 0) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         showRecordingOptions.toggle()
@@ -70,21 +70,30 @@ struct TeachView: View {
                             .foregroundStyle(.secondary)
                             .rotationEffect(.degrees(showRecordingOptions ? 90 : 0))
                     }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 16)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
 
                 if showRecordingOptions {
-                VStack(spacing: 12) {
-                    FeatureToggle(icon: "rectangle.on.rectangle", title: "Record screen", subtitle: "See the apps and controls you use", isOn: captureScreenBinding)
-                    FeatureToggle(icon: "mic", title: "Listen to your explanation", subtitle: "Turn your narration into rules and context", isOn: captureMicrophoneBinding)
-                    FeatureToggle(icon: "speaker.wave.2", title: "Include computer audio", subtitle: "Capture useful sounds from the workflow", isOn: captureSystemAudioBinding)
-                        .disabled(!teacher.captureScreen)
-                }
+                    Divider()
+                        .padding(.horizontal, 18)
+
+                    VStack(spacing: 10) {
+                        FeatureToggle(icon: "rectangle.on.rectangle", title: "Record screen", subtitle: "See the apps and controls you use", isOn: captureScreenBinding)
+                        FeatureToggle(icon: "mic", title: "Listen to your explanation", subtitle: "Turn your narration into rules and context", isOn: captureMicrophoneBinding)
+                        FeatureToggle(icon: "speaker.wave.2", title: "Include computer audio", subtitle: "Capture useful sounds from the workflow", isOn: captureSystemAudioBinding)
+                            .disabled(!teacher.captureScreen)
+                    }
+                    .padding(14)
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
-            .frame(maxWidth: 620)
+            .frame(maxWidth: 700)
+            .background(.background, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.secondary.opacity(0.15)))
+            .shadow(color: .black.opacity(0.035), radius: 8, y: 3)
             .frame(maxWidth: .infinity)
             Spacer()
             if let message = teacher.message {
