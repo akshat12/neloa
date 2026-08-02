@@ -89,7 +89,7 @@ struct OnboardingView: View {
                 Circle().fill(Color(red: 1.0, green: 0.32, blue: 0.28)).frame(width: 9, height: 9)
             }
             .shadow(color: Color.indigo.opacity(0.25), radius: 12, y: 5)
-            Text("neloa")
+            Text("Neloa")
                 .font(.system(size: 31, weight: .bold, design: .rounded))
                 .fixedSize()
         }

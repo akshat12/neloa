@@ -100,7 +100,7 @@ struct BrandMark: View {
                 Circle().stroke(.white, lineWidth: 5).frame(width: 19, height: 19)
                 Circle().fill(.white).frame(width: 5, height: 5)
             }
-            Text("neloa").font(.system(size: 22, weight: .bold, design: .rounded)).fixedSize()
+            Text("Neloa").font(.system(size: 22, weight: .bold, design: .rounded)).fixedSize()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 18)

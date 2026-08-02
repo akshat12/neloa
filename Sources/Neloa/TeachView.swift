@@ -5,6 +5,7 @@ struct TeachView: View {
     @EnvironmentObject private var teacher: TeachController
     @EnvironmentObject private var store: WorkflowStore
     @State private var savedMessage = false
+    @State private var showRecordingOptions = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -54,14 +55,34 @@ struct TeachView: View {
                 .font(.system(size: 14)).foregroundStyle(.secondary)
                 .frame(maxWidth: 700, alignment: .leading)
                 .frame(maxWidth: .infinity)
-            DisclosureGroup("Recording options") {
+            VStack(spacing: 10) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showRecordingOptions.toggle()
+                    }
+                } label: {
+                    HStack {
+                        Label("Recording options", systemImage: "slider.horizontal.3")
+                            .font(.system(size: 15, weight: .semibold))
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(showRecordingOptions ? 90 : 0))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if showRecordingOptions {
                 VStack(spacing: 12) {
                     FeatureToggle(icon: "rectangle.on.rectangle", title: "Record screen", subtitle: "See the apps and controls you use", isOn: $teacher.captureScreen)
                     FeatureToggle(icon: "mic", title: "Listen to your explanation", subtitle: "Turn your narration into rules and context", isOn: $teacher.captureMicrophone)
                     FeatureToggle(icon: "speaker.wave.2", title: "Include computer audio", subtitle: "Capture useful sounds from the workflow", isOn: $teacher.captureSystemAudio)
                         .disabled(!teacher.captureScreen)
                 }
-                .padding(.top, 10)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
             .frame(maxWidth: 620)
             .frame(maxWidth: .infinity)
