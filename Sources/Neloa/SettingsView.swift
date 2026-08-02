@@ -73,9 +73,7 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 permissionRow("Screen recording", icon: "rectangle.on.rectangle", status: permissions.screen)
                 Divider()
-                permissionRow("Clicks and typing", icon: "cursorarrow.click", status: permissions.inputMonitoring)
-                Divider()
-                permissionRow("Replay actions", icon: "hand.tap", status: permissions.accessibility)
+                permissionRow("Clicks, typing & replay", icon: "hand.tap", status: permissions.accessibility)
                 Divider()
                 settingsRow(title: "Voice", icon: "waveform", value: voicePermissionLabel, color: voicePermissionColor)
             }

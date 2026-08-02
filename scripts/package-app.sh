@@ -16,7 +16,15 @@ cp "$PROJECT_DIR/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.ic
 cp "$BIN_DIR/Neloa" "$APP_DIR/Contents/MacOS/Neloa"
 chmod 755 "$APP_DIR/Contents/MacOS/Neloa"
 touch "$APP_DIR"
-codesign --force --deep --sign - "$APP_DIR"
+SIGN_IDENTITY=${NELOA_CODE_SIGN_IDENTITY:--}
+if [ "$SIGN_IDENTITY" = "-" ]; then
+    codesign --force --deep --sign - \
+        --identifier ai.neloa.desktop \
+        --requirements '=designated => identifier "ai.neloa.desktop"' \
+        "$APP_DIR"
+else
+    codesign --force --deep --options runtime --sign "$SIGN_IDENTITY" "$APP_DIR"
+fi
 rm -rf "$LEGACY_APP_DIR"
 
 echo "$APP_DIR"

@@ -91,10 +91,7 @@ struct OnboardingView: View {
             permissionRow(icon: "rectangle.on.rectangle", title: "Screen recording", detail: "Records the apps you demonstrate", status: permissions.screen) {
                 permissions.requestScreen()
             }
-            permissionRow(icon: "cursorarrow.click", title: "Input monitoring", detail: "Learns clicks and keystrokes; macOS may require reopening Neloa", status: permissions.inputMonitoring) {
-                permissions.requestInputMonitoring()
-            }
-            permissionRow(icon: "hand.tap", title: "Accessibility", detail: "Replays the actions in automations you approve", status: permissions.accessibility) {
+            permissionRow(icon: "hand.tap", title: "Clicks, typing & replay", detail: "Learns your demonstration and replays only the actions you approve", status: permissions.accessibility) {
                 permissions.requestAccessibility()
             }
             permissionRow(icon: "mic", title: "Microphone & speech", detail: "Understands explanations and spoken run instructions", status: combinedVoiceStatus) {
@@ -145,10 +142,13 @@ struct OnboardingView: View {
                 Label(status.label, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
             } else {
                 Button(status == .denied ? "Open Settings" : "Allow") {
-                    if status == .denied,
-                       let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") {
-                        NSWorkspace.shared.open(url)
-                    } else { action() }
+                    if status == .denied {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } else {
+                        action()
+                    }
                 }
             }
         }

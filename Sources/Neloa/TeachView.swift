@@ -194,7 +194,7 @@ private struct RecordingView: View {
                     Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
                     Spacer()
                     Button("Open Privacy Settings") {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
                             NSWorkspace.shared.open(url)
                         }
                     }

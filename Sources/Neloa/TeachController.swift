@@ -29,7 +29,7 @@ final class TeachController: ObservableObject {
             }
             interactions.start()
             if interactions.permissionMissing {
-                message = "Screen and voice are recording, but Input Monitoring is needed to learn clicks and typing."
+                message = "Screen and voice are recording, but Accessibility is needed to learn clicks, typing, and replay actions."
             }
             phase = .recording
         } catch {

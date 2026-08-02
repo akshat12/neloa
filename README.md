@@ -28,7 +28,7 @@ open dist/Neloa.app
 
 `make test` runs deterministic workflow checks. `make agent-test` makes a real request to Apple's on-device model and verifies the resulting executable change plan.
 
-The app asks for Screen Recording, Input Monitoring, Accessibility, Microphone, and Speech Recognition permissions. macOS may require reopening Neloa after Input Monitoring or Accessibility is granted.
+The app asks for Screen Recording, Accessibility, Microphone, and Speech Recognition permissions. Accessibility lets Neloa learn clicks and typing during a demonstration and replay only the actions you approve. macOS may require reopening Neloa after it is granted.
 
 ## Local models
 

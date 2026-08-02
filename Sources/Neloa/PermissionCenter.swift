@@ -6,7 +6,7 @@ import Speech
 
 @MainActor
 final class PermissionCenter: ObservableObject {
-    enum Status {
+    enum Status: Equatable {
         case unknown
         case granted
         case denied
@@ -23,14 +23,12 @@ final class PermissionCenter: ObservableObject {
     @Published private(set) var screen: Status = .unknown
     @Published private(set) var microphone: Status = .unknown
     @Published private(set) var speech: Status = .unknown
-    @Published private(set) var inputMonitoring: Status = .unknown
     @Published private(set) var accessibility: Status = .unknown
 
     init() { refresh() }
 
     func refresh() {
         screen = CGPreflightScreenCaptureAccess() ? .granted : .unknown
-        inputMonitoring = CGPreflightListenEventAccess() ? .granted : .unknown
         accessibility = AXIsProcessTrusted() ? .granted : .unknown
         microphone = status(for: AVCaptureDevice.authorizationStatus(for: .audio))
         speech = status(for: SFSpeechRecognizer.authorizationStatus())
@@ -38,10 +36,6 @@ final class PermissionCenter: ObservableObject {
 
     func requestScreen() {
         screen = CGRequestScreenCaptureAccess() ? .granted : .denied
-    }
-
-    func requestInputMonitoring() {
-        inputMonitoring = CGRequestListenEventAccess() ? .granted : .denied
     }
 
     func requestAccessibility() {
@@ -76,4 +70,5 @@ final class PermissionCenter: ObservableObject {
         @unknown default: .unknown
         }
     }
+
 }

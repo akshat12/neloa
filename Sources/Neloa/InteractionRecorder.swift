@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Carbon
 import CoreGraphics
 import Foundation
@@ -17,7 +18,9 @@ final class InteractionRecorder: ObservableObject {
         events = []
         startedAt = Date()
 
-        guard CGPreflightListenEventAccess() || CGRequestListenEventAccess() else {
+        let prompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        let options = [prompt: true] as CFDictionary
+        guard AXIsProcessTrustedWithOptions(options) else {
             permissionMissing = true
             return
         }
