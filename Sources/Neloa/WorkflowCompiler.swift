@@ -71,7 +71,7 @@ enum WorkflowCompiler {
             let rule = WorkflowStep(
                 kind: isApproval ? .approval : .decision,
                 title: sentence,
-                detail: isApproval ? "The run pauses here for you" : "Humana will interpret this rule at run time",
+                detail: isApproval ? "The run pauses here for you" : "Neloa will interpret this rule at run time",
                 time: steps.last?.time ?? 0,
                 requiresApproval: isApproval
             )

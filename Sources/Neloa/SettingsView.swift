@@ -12,7 +12,7 @@ struct SettingsView: View {
             Section("On-device intelligence") {
                 LabeledContent("Processing", value: "On this Mac")
                 LabeledContent("Status", value: consumerStatus)
-                Text("Humana plans changes without sending your workflow or recordings to a cloud model.")
+                Text("Neloa plans changes without sending your workflow or recordings to a cloud model.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             Section("Permissions") {
@@ -29,7 +29,7 @@ struct SettingsView: View {
             Section("Privacy") {
                 LabeledContent("Storage", value: "Only on this Mac")
                 LabeledContent("Protected apps", value: "Password managers hidden")
-                Text("Humana automatically excludes common password managers and Keychain Access from recordings and learned keystrokes. Avoid showing other secrets while teaching.")
+                Text("Neloa automatically excludes common password managers and Keychain Access from recordings and learned keystrokes. Avoid showing other secrets while teaching.")
                     .font(.callout)
                 Button("Show saved data in Finder") { showSavedData() }
                 Button("Delete all teaching recordings…", role: .destructive) {
@@ -62,8 +62,7 @@ struct SettingsView: View {
     }
 
     private func showSavedData() {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("Humana", isDirectory: true)
+        let base = BrandMigration.applicationSupportDirectory
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         NSWorkspace.shared.open(base)
     }
@@ -74,7 +73,7 @@ struct SettingsPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            PageHeader(title: "Settings", subtitle: "Control Humana’s private, on-device intelligence.")
+            PageHeader(title: "Settings", subtitle: "Control Neloa’s private, on-device intelligence.")
             SettingsView()
                 .environmentObject(agent)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

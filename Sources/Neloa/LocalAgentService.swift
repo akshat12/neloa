@@ -52,7 +52,7 @@ final class LocalAgentService: ObservableObject {
     #if canImport(FoundationModels)
     @available(macOS 26.0, *)
     private func queryApple(prompt: String) async throws -> AgentPlanResponse {
-        let session = LanguageModelSession(instructions: "You are Humana's private on-device run planner. Follow the requested JSON schema exactly and do not include markdown fences.")
+        let session = LanguageModelSession(instructions: "You are Neloa's private on-device run planner. Follow the requested JSON schema exactly and do not include markdown fences.")
         let response = try await session.respond(to: prompt, options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 700))
         guard let data = extractJSONObject(from: response.content).data(using: .utf8) else { throw AgentError.badResponse }
         return try JSONDecoder().decode(AgentPlanResponse.self, from: data)

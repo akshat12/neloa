@@ -3,7 +3,7 @@ set -eu
 
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 MASTER="$PROJECT_DIR/Resources/AppIcon-1024.png"
-ICONSET="$PROJECT_DIR/.build/Humana.iconset"
+ICONSET="$PROJECT_DIR/.build/Neloa.iconset"
 
 swift "$PROJECT_DIR/scripts/generate-icon.swift" "$MASTER"
 rm -rf "$ICONSET"

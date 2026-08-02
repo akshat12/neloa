@@ -49,7 +49,7 @@ struct RunView: View {
                         Task { await toggleVoice() }
                     } label: {
                         Label(
-                            voice.isListening ? "Finish speaking" : "Tell Humana what changed",
+                            voice.isListening ? "Finish speaking" : "Tell Neloa what changed",
                             systemImage: voice.isListening ? "stop.circle.fill" : "mic.fill"
                         )
                         .font(.system(size: 15, weight: .semibold))
@@ -80,7 +80,7 @@ struct RunView: View {
                 VStack(spacing: 16) {
                     Image(systemName: "quote.bubble").font(.system(size: 44)).foregroundStyle(Color.accentColor)
                     Text("“What should I change this time?”").font(.title3.bold())
-                    Text("You can type or answer by voice. Humana will show the exact changes before touching anything.")
+                    Text("You can type or answer by voice. Neloa will show the exact changes before touching anything.")
                         .foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 460)
                     Button("Run it the same way") {
                         instruction = "Run it the same way"
@@ -111,7 +111,7 @@ struct RunView: View {
                         Label("I couldn’t safely make that change", systemImage: "questionmark.bubble.fill")
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(.orange)
-                        Text("Tell me which saved value should change and what it should become. Humana won’t quietly run the original.")
+                        Text("Tell me which saved value should change and what it should become. Neloa won’t quietly run the original.")
                             .font(.system(size: 15))
                             .foregroundStyle(.secondary)
                         if let clarificationQuestion {

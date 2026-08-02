@@ -19,8 +19,8 @@ enum NavigationItem: String, CaseIterable, Identifiable {
 
 struct RootView: View {
     @EnvironmentObject private var store: WorkflowStore
+    @EnvironmentObject private var permissions: PermissionCenter
     @State private var selection: NavigationItem? = .teach
-    @StateObject private var permissions = PermissionCenter()
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     @State private var choseInitialDestination = false
 
@@ -74,14 +74,14 @@ struct RootView: View {
             }
             .interactiveDismissDisabled()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .showHumanaWelcome)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .showNeloaWelcome)) { _ in
             permissions.refresh()
             showOnboarding = true
         }
-        .onReceive(NotificationCenter.default.publisher(for: .showHumanaAutomations)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .showNeloaAutomations)) { _ in
             selection = .automations
         }
-        .onReceive(NotificationCenter.default.publisher(for: .showHumanaTeach)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .showNeloaTeach)) { _ in
             selection = .teach
         }
         .onAppear {
@@ -100,7 +100,7 @@ struct BrandMark: View {
                 Circle().stroke(.white, lineWidth: 5).frame(width: 19, height: 19)
                 Circle().fill(.white).frame(width: 5, height: 5)
             }
-            Text("humana").font(.system(size: 22, weight: .bold, design: .rounded)).fixedSize()
+            Text("neloa").font(.system(size: 22, weight: .bold, design: .rounded)).fixedSize()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 18)
@@ -108,7 +108,7 @@ struct BrandMark: View {
 }
 
 extension Notification.Name {
-    static let showHumanaWelcome = Notification.Name("showHumanaWelcome")
-    static let showHumanaAutomations = Notification.Name("showHumanaAutomations")
-    static let showHumanaTeach = Notification.Name("showHumanaTeach")
+    static let showNeloaWelcome = Notification.Name("showNeloaWelcome")
+    static let showNeloaAutomations = Notification.Name("showNeloaAutomations")
+    static let showNeloaTeach = Notification.Name("showNeloaTeach")
 }

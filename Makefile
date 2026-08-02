@@ -4,16 +4,16 @@ build:
 	swift build
 
 test:
-	swift run Humana --self-test
+	swift run Neloa --self-test
 
 agent-test:
-	swift run Humana --agent-smoke-test
+	swift run Neloa --agent-smoke-test
 
 app:
 	sh scripts/package-app.sh
 
 run: app
-	open dist/Humana.app
+	open dist/Neloa.app
 
 clean:
 	swift package clean

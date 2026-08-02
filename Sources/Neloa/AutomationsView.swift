@@ -7,16 +7,16 @@ struct AutomationsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            PageHeader(title: "My automations", subtitle: "Run one again—or tell Humana what should be different this time.")
+            PageHeader(title: "My automations", subtitle: "Run one again—or tell Neloa what should be different this time.")
             if store.workflows.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "repeat.circle.fill").font(.system(size: 50)).foregroundStyle(Color.accentColor)
                     Text("Your repeatable work lives here").font(.title2.bold())
-                    Text("Teach Humana one real task. The next time, you’ll only need to say what changed.")
+                    Text("Teach Neloa one real task. The next time, you’ll only need to say what changed.")
                         .font(.system(size: 16))
                         .foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 470)
                     Button("Teach my first automation") {
-                        NotificationCenter.default.post(name: .showHumanaTeach, object: nil)
+                        NotificationCenter.default.post(name: .showNeloaTeach, object: nil)
                     }
                     .buttonStyle(.borderedProminent).controlSize(.large)
                     VStack(spacing: 4) {
@@ -108,7 +108,7 @@ private struct AutomationDetail: View {
             }
 
             if !approvalRules.isEmpty {
-                detailCard(title: "When Humana asks", icon: "hand.raised.fill") {
+                detailCard(title: "When Neloa asks", icon: "hand.raised.fill") {
                     ForEach(approvalRules) { step in
                         Text(step.title).font(.system(size: 15))
                     }

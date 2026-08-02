@@ -8,7 +8,8 @@ enum PrivacyShield {
         "com.agilebits.onepassword",
         "com.bitwarden.desktop",
         "com.dashlane.Dashlane",
-        "com.lastpass.LastPass"
+        "com.lastpass.LastPass",
+        "ai.humana.desktop"
     ]
 
     static func excludes(_ bundleIdentifier: String?) -> Bool {

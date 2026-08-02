@@ -2,13 +2,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "Humana",
+    name: "Neloa",
     platforms: [.macOS(.v15)],
     products: [
-        .executable(name: "Humana", targets: ["Humana"])
+        .executable(name: "Neloa", targets: ["Neloa"])
     ],
     targets: [
-        .executableTarget(name: "Humana", path: "Sources/Humana")
+        .executableTarget(name: "Neloa", path: "Sources/Neloa")
     ],
     swiftLanguageModes: [.v5]
 )

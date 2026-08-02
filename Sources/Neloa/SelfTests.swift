@@ -13,6 +13,7 @@ enum SelfTests {
         try serializationCheck()
         try receiptSerializationCheck()
         try skillExportCheck()
+        try brandMigrationCheck()
     }
 
     @MainActor
@@ -62,8 +63,8 @@ enum SelfTests {
 
     private static func serializationCheck() throws {
         let workflow = Workflow(name: "Serializable", transcript: "hello", steps: [])
-        let data = try JSONEncoder.humana.encode(workflow)
-        let decoded = try JSONDecoder.humana.decode(Workflow.self, from: data)
+        let data = try JSONEncoder.neloa.encode(workflow)
+        let decoded = try JSONDecoder.neloa.decode(Workflow.self, from: data)
         try expect(decoded.id == workflow.id && decoded.name == workflow.name && decoded.transcript == workflow.transcript && decoded.steps == workflow.steps, "saved workflows should round-trip")
     }
 
@@ -78,8 +79,8 @@ enum SelfTests {
             stepCount: 4,
             status: .completed
         )
-        let data = try JSONEncoder.humana.encode(receipt)
-        let decoded = try JSONDecoder.humana.decode(AutomationRunReceipt.self, from: data)
+        let data = try JSONEncoder.neloa.encode(receipt)
+        let decoded = try JSONDecoder.neloa.decode(AutomationRunReceipt.self, from: data)
         try expect(decoded.id == receipt.id && decoded.workflowName == receipt.workflowName && decoded.status == .completed, "activity receipts should round-trip")
     }
 
@@ -91,6 +92,15 @@ enum SelfTests {
         try expect(markdown.contains("name: monthly-report"), "skill export should include portable frontmatter")
         try expect(markdown.contains("`June`"), "skill export should identify flexible inputs")
         try expect(markdown.contains("Ask before sending"), "skill export should preserve approval rules")
+    }
+
+    private static func brandMigrationCheck() throws {
+        let legacy = BrandMigration.legacyApplicationSupportDirectory
+            .appendingPathComponent("Recordings/example/teach.mp4").path
+        let repaired = BrandMigration.repairedAssetPath(legacy)
+        let expected = BrandMigration.applicationSupportDirectory
+            .appendingPathComponent("Recordings/example/teach.mp4").path
+        try expect(repaired == expected, "legacy Humana recording paths should migrate to Neloa")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {

@@ -33,7 +33,7 @@ struct TeachView: View {
 
     private var setupView: some View {
         VStack(alignment: .leading, spacing: 24) {
-            PageHeader(title: "What should Humana learn?", subtitle: "Show it once. Next time, just say what’s different.")
+            PageHeader(title: "What should Neloa learn?", subtitle: "Show it once. Next time, just say what’s different.")
             Spacer()
             HStack(spacing: 15) {
                 Image(systemName: "quote.bubble.fill")
@@ -86,7 +86,7 @@ struct TeachView: View {
 
     private var reviewView: some View {
         VStack(alignment: .leading, spacing: 18) {
-            PageHeader(title: "Review what Humana learned", subtitle: "Name the automation and remove any steps Humana should not repeat.")
+            PageHeader(title: "Review what Neloa learned", subtitle: "Name the automation and remove any steps Neloa should not repeat.")
             if let message = teacher.message {
                 Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
             }
@@ -107,7 +107,7 @@ struct TeachView: View {
                                 await MainActor.run {
                                     withAnimation { savedMessage = false }
                                     teacher.reset()
-                                    NotificationCenter.default.post(name: .showHumanaAutomations, object: nil)
+                                    NotificationCenter.default.post(name: .showNeloaAutomations, object: nil)
                                 }
                             }
                         }
@@ -150,7 +150,7 @@ private struct RecordingView: View {
                     VStack(spacing: 14) {
                         Image(systemName: "rectangle.inset.filled.and.person.filled")
                             .font(.system(size: 54)).foregroundStyle(.white)
-                        Text("Humana is watching the workflow")
+                        Text("Neloa is watching the workflow")
                             .font(.title2.bold()).foregroundStyle(.white)
                         Text("Switch to the app you want to teach. Return here when you are finished.")
                             .foregroundStyle(.white.opacity(0.8))

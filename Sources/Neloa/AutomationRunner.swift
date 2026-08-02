@@ -24,7 +24,7 @@ final class AutomationRunner: ObservableObject {
     func run(_ plan: RunPlan) {
         stop()
         guard AXIsProcessTrusted() else {
-            state = .failed("Accessibility permission is required to replay this automation. Open System Settings → Privacy & Security → Accessibility and enable Humana.")
+            state = .failed("Accessibility permission is required to replay this automation. Open System Settings → Privacy & Security → Accessibility and enable Neloa.")
             return
         }
         runTask = Task { [weak self] in

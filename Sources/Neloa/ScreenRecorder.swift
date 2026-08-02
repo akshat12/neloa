@@ -20,7 +20,7 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
             throw RecordingError.noDisplay
         }
 
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Humana-Captures", isDirectory: true)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Neloa-Captures", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent("teach-\(UUID().uuidString).mp4")
 
@@ -91,6 +91,6 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
     enum RecordingError: LocalizedError {
         case noDisplay
 
-        var errorDescription: String? { "Humana could not find a display to record." }
+        var errorDescription: String? { "Neloa could not find a display to record." }
     }
 }

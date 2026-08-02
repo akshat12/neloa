@@ -51,7 +51,7 @@ struct OnboardingView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .offset(y: appeared ? 0 : 18)
                     .opacity(appeared ? 1 : 0)
-                Text("Show Humana once. Next time, say only what’s different—a date, amount, client, file, or instruction—and stay in control of every important action.")
+                Text("Show Neloa once. Next time, say only what’s different—a date, amount, client, file, or instruction—and stay in control of every important action.")
                     .font(.system(size: 18, weight: .regular, design: .rounded))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -89,7 +89,7 @@ struct OnboardingView: View {
                 Circle().fill(Color(red: 1.0, green: 0.32, blue: 0.28)).frame(width: 9, height: 9)
             }
             .shadow(color: Color.indigo.opacity(0.25), radius: 12, y: 5)
-            Text("humana")
+            Text("neloa")
                 .font(.system(size: 31, weight: .bold, design: .rounded))
                 .fixedSize()
         }
@@ -97,11 +97,11 @@ struct OnboardingView: View {
 
     private var permissionSetup: some View {
         VStack(alignment: .leading, spacing: 14) {
-            PageHeader(title: "Allow only what you want to teach", subtitle: "These permissions let Humana observe and replay your demonstration. Recordings stay on this Mac.")
+            PageHeader(title: "Allow only what you want to teach", subtitle: "These permissions let Neloa observe and replay your demonstration. Recordings stay on this Mac.")
             permissionRow(icon: "rectangle.on.rectangle", title: "Screen recording", detail: "Records the apps you demonstrate", status: permissions.screen) {
                 permissions.requestScreen()
             }
-            permissionRow(icon: "cursorarrow.click", title: "Input monitoring", detail: "Learns clicks and keystrokes; macOS may require reopening Humana", status: permissions.inputMonitoring) {
+            permissionRow(icon: "cursorarrow.click", title: "Input monitoring", detail: "Learns clicks and keystrokes; macOS may require reopening Neloa", status: permissions.inputMonitoring) {
                 permissions.requestInputMonitoring()
             }
             permissionRow(icon: "hand.tap", title: "Accessibility", detail: "Replays the actions in automations you approve", status: permissions.accessibility) {
@@ -116,7 +116,7 @@ struct OnboardingView: View {
                 }
                 Spacer()
                 Button("Back") { withAnimation { page = 0 } }
-                Button("Start using Humana") { finish() }
+                Button("Start using Neloa") { finish() }
                     .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
             }
             .padding(.top, 8)

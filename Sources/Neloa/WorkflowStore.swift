@@ -13,8 +13,12 @@ final class WorkflowStore: ObservableObject {
         if let fileURL {
             self.fileURL = fileURL
         } else {
-            let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            self.fileURL = base.appendingPathComponent("Humana", isDirectory: true).appendingPathComponent("workflows.json")
+            do {
+                try BrandMigration.migrateApplicationSupportIfNeeded()
+            } catch {
+                lastError = "Your saved Humana data could not be moved to Neloa: \(error.localizedDescription)"
+            }
+            self.fileURL = BrandMigration.applicationSupportDirectory.appendingPathComponent("workflows.json")
         }
         load()
         loadActivity()
@@ -77,7 +81,8 @@ final class WorkflowStore: ObservableObject {
     private func load() {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
         do {
-            workflows = try JSONDecoder.humana.decode([Workflow].self, from: Data(contentsOf: fileURL))
+            workflows = try JSONDecoder.neloa.decode([Workflow].self, from: Data(contentsOf: fileURL))
+            repairLegacyAssetPaths()
         } catch {
             lastError = "Your saved automations could not be opened: \(error.localizedDescription)"
         }
@@ -86,7 +91,7 @@ final class WorkflowStore: ObservableObject {
     private func persist() {
         do {
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try JSONEncoder.humana.encode(workflows).write(to: fileURL, options: .atomic)
+            try JSONEncoder.neloa.encode(workflows).write(to: fileURL, options: .atomic)
         } catch {
             lastError = "Your automations could not be saved: \(error.localizedDescription)"
         }
@@ -99,7 +104,7 @@ final class WorkflowStore: ObservableObject {
     private func loadActivity() {
         guard FileManager.default.fileExists(atPath: activityURL.path) else { return }
         do {
-            activities = try JSONDecoder.humana.decode([AutomationRunReceipt].self, from: Data(contentsOf: activityURL))
+            activities = try JSONDecoder.neloa.decode([AutomationRunReceipt].self, from: Data(contentsOf: activityURL))
         } catch {
             lastError = "Your activity history could not be opened: \(error.localizedDescription)"
         }
@@ -108,7 +113,7 @@ final class WorkflowStore: ObservableObject {
     private func persistActivity() {
         do {
             try FileManager.default.createDirectory(at: activityURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try JSONEncoder.humana.encode(activities).write(to: activityURL, options: .atomic)
+            try JSONEncoder.neloa.encode(activities).write(to: activityURL, options: .atomic)
         } catch {
             lastError = "Your activity history could not be saved: \(error.localizedDescription)"
         }
@@ -134,10 +139,24 @@ final class WorkflowStore: ObservableObject {
             return path
         }
     }
+
+    private func repairLegacyAssetPaths() {
+        var changed = false
+        for index in workflows.indices {
+            let recording = BrandMigration.repairedAssetPath(workflows[index].recordingPath)
+            let narration = BrandMigration.repairedAssetPath(workflows[index].narrationPath)
+            if recording != workflows[index].recordingPath || narration != workflows[index].narrationPath {
+                workflows[index].recordingPath = recording
+                workflows[index].narrationPath = narration
+                changed = true
+            }
+        }
+        if changed { persist() }
+    }
 }
 
 extension JSONEncoder {
-    static var humana: JSONEncoder {
+    static var neloa: JSONEncoder {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
@@ -146,7 +165,7 @@ extension JSONEncoder {
 }
 
 extension JSONDecoder {
-    static var humana: JSONDecoder {
+    static var neloa: JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder

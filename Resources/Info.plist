@@ -5,34 +5,34 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>humana</string>
+    <string>neloa</string>
     <key>CFBundleExecutable</key>
-    <string>Humana</string>
+    <string>Neloa</string>
     <key>CFBundleIdentifier</key>
-    <string>ai.humana.desktop</string>
+    <string>ai.neloa.desktop</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon.icns</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>humana</string>
+    <string>neloa</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.1</string>
+	<string>0.2.0</string>
 	<key>CFBundleVersion</key>
-	<string>2</string>
+	<string>3</string>
     <key>LSMinimumSystemVersion</key>
     <string>15.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Humana listens while you teach a workflow and lets you answer automation questions by voice.</string>
+    <string>Neloa listens while you teach a workflow and lets you answer automation questions by voice.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Humana turns your spoken explanation into workflow instructions.</string>
+    <string>Neloa turns your spoken explanation into workflow instructions.</string>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>Humana records the workflow you choose to teach.</string>
+    <string>Neloa records the workflow you choose to teach.</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Humana can reopen apps used by your saved automations.</string>
+    <string>Neloa can reopen apps used by your saved automations.</string>
 </dict>
 </plist>

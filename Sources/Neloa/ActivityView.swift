@@ -7,7 +7,7 @@ struct ActivityView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .top) {
-                PageHeader(title: "Activity", subtitle: "A private receipt for every automation Humana runs.")
+                PageHeader(title: "Activity", subtitle: "A private receipt for every automation Neloa runs.")
                 Spacer()
                 if !store.activities.isEmpty {
                     Button("Clear history") { showingClearConfirmation = true }

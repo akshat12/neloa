@@ -4,7 +4,7 @@ enum SkillExporter {
     static func slug(_ value: String) -> String {
         let pieces = value.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
         let result = pieces.joined(separator: "-").prefix(64).description
-        return result.isEmpty ? "humana-automation" : result
+        return result.isEmpty ? "neloa-automation" : result
     }
 
     static func markdown(for workflow: Workflow) -> String {
@@ -23,12 +23,12 @@ enum SkillExporter {
         return """
         ---
         name: \(slug(workflow.name))
-        description: Follow the \(sanitized(workflow.name)) process taught in Humana, adapting only user-specified inputs and preserving its approval rules.
+        description: Follow the \(sanitized(workflow.name)) process taught in Neloa, adapting only user-specified inputs and preserving its approval rules.
         ---
 
         # \(workflow.name)
 
-        This portable skill was taught by demonstration in Humana. Prefer stable APIs, connectors, browser semantics, or accessibility elements over recorded screen coordinates.
+        This portable skill was taught by demonstration in Neloa. Prefer stable APIs, connectors, browser semantics, or accessibility elements over recorded screen coordinates.
 
         ## Flexible inputs
 

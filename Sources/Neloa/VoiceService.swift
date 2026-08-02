@@ -32,7 +32,7 @@ final class VoiceService: ObservableObject {
         transcript = ""
         errorMessage = nil
 
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Humana-Captures", isDirectory: true)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Neloa-Captures", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent("narration-\(UUID().uuidString).caf")
 
@@ -100,7 +100,7 @@ final class VoiceService: ObservableObject {
             case .speechPermission: "Speech recognition permission is needed for voice instructions."
             case .microphonePermission: "Microphone permission is needed to listen while you teach."
             case .unavailable: "Speech recognition is temporarily unavailable."
-            case .onDeviceUnavailable: "On-device speech recognition is unavailable for this language. Humana did not send your audio to a server."
+            case .onDeviceUnavailable: "On-device speech recognition is unavailable for this language. Neloa did not send your audio to a server."
             }
         }
     }

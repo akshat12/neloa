@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class HumanaAppDelegate: NSObject, NSApplicationDelegate {
+final class NeloaAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
               let icon = NSImage(contentsOf: iconURL) else { return }
@@ -10,12 +10,13 @@ final class HumanaAppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-struct HumanaApp: App {
-    @NSApplicationDelegateAdaptor(HumanaAppDelegate.self) private var appDelegate
+struct NeloaApp: App {
+    @NSApplicationDelegateAdaptor(NeloaAppDelegate.self) private var appDelegate
     @StateObject private var store = WorkflowStore()
     @StateObject private var teacher = TeachController()
     @StateObject private var agent = LocalAgentService()
     @StateObject private var runner = AutomationRunner()
+    @StateObject private var permissions = PermissionCenter()
 
     var body: some Scene {
         WindowGroup {
@@ -24,6 +25,7 @@ struct HumanaApp: App {
                 .environmentObject(teacher)
                 .environmentObject(agent)
                 .environmentObject(runner)
+                .environmentObject(permissions)
                 .frame(minWidth: 1_080, minHeight: 720)
         }
         .windowStyle(.hiddenTitleBar)
@@ -32,11 +34,13 @@ struct HumanaApp: App {
         Settings {
             SettingsView()
                 .environmentObject(agent)
+                .environmentObject(store)
+                .environmentObject(permissions)
         }
         .commands {
             CommandGroup(after: .help) {
                 Button("Show Welcome") {
-                    NotificationCenter.default.post(name: .showHumanaWelcome, object: nil)
+                    NotificationCenter.default.post(name: .showNeloaWelcome, object: nil)
                 }
             }
         }
@@ -44,30 +48,31 @@ struct HumanaApp: App {
 }
 
 @main
-enum HumanaMain {
+enum NeloaMain {
     static func main() {
         if CommandLine.arguments.contains("--self-test") {
             do {
                 try SelfTests.run()
-                print("Humana self-tests passed")
+                print("Neloa self-tests passed")
             } catch {
-                fputs("Humana self-tests failed: \(error)\n", stderr)
+                fputs("Neloa self-tests failed: \(error)\n", stderr)
                 Foundation.exit(1)
             }
         } else if CommandLine.arguments.contains("--agent-smoke-test") {
             Task { @MainActor in
                 do {
                     try await SelfTests.agentSmokeTest()
-                    print("Humana on-device agent smoke test passed")
+                    print("Neloa on-device agent smoke test passed")
                     Foundation.exit(0)
                 } catch {
-                    fputs("Humana on-device agent smoke test failed: \(error)\n", stderr)
+                    fputs("Neloa on-device agent smoke test failed: \(error)\n", stderr)
                     Foundation.exit(1)
                 }
             }
             dispatchMain()
         } else {
-            HumanaApp.main()
+            BrandMigration.migrateUserDefaults()
+            NeloaApp.main()
         }
     }
 }
