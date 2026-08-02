@@ -26,11 +26,16 @@ final class PermissionCenter: ObservableObject {
     @Published private(set) var microphone: Status = .unknown
     @Published private(set) var speech: Status = .unknown
     @Published private(set) var accessibility: Status = .unknown
+    @Published private(set) var screenRestartNeeded = false
 
     init() { refresh() }
 
     func refresh() {
-        screen = CGPreflightScreenCaptureAccess() ? .granted : .unknown
+        let hasScreenAccess = CGPreflightScreenCaptureAccess()
+        screen = hasScreenAccess ? .granted : (screenRestartNeeded ? .denied : .unknown)
+        if hasScreenAccess {
+            screenRestartNeeded = false
+        }
         accessibility = Self.accessibilityStatus(
             isTrusted: AXIsProcessTrusted(),
             hasRequested: Self.hasRequestedAccessibility(in: .standard)
@@ -40,7 +45,9 @@ final class PermissionCenter: ObservableObject {
     }
 
     func requestScreen() {
-        screen = CGRequestScreenCaptureAccess() ? .granted : .denied
+        let granted = CGRequestScreenCaptureAccess()
+        screen = granted ? .granted : .denied
+        screenRestartNeeded = !granted
     }
 
     func requestAccessibility() {

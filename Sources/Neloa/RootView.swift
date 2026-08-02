@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum NavigationItem: String, CaseIterable, Identifiable {
@@ -84,7 +85,11 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showNeloaTeach)) { _ in
             selection = .teach
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            permissions.refresh()
+        }
         .onAppear {
+            permissions.refresh()
             guard !choseInitialDestination else { return }
             choseInitialDestination = true
             selection = store.workflows.isEmpty ? .teach : .automations

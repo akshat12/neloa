@@ -71,8 +71,18 @@ struct SettingsView: View {
     private var permissionsCard: some View {
         SettingsCard(title: "Permissions", icon: "checkmark.shield") {
             VStack(spacing: 0) {
-                permissionRow("Screen recording", icon: "rectangle.on.rectangle", status: permissions.screen) {
-                    grantScreenRecording()
+                permissionRow(
+                    "Screen recording",
+                    icon: "rectangle.on.rectangle",
+                    status: permissions.screen,
+                    statusLabel: permissions.screenRestartNeeded ? "Restart to finish" : nil,
+                    actionTitle: permissions.screenRestartNeeded ? "Restart Neloa" : "Grant"
+                ) {
+                    if permissions.screenRestartNeeded {
+                        restartNeloa()
+                    } else {
+                        grantScreenRecording()
+                    }
                 }
                 Divider()
                 permissionRow("Clicks, typing & replay", icon: "hand.tap", status: permissions.accessibility) {
@@ -261,7 +271,14 @@ struct SettingsView: View {
         return .unknown
     }
 
-    private func permissionRow(_ title: String, icon: String, status: PermissionCenter.Status, grant: @escaping () -> Void) -> some View {
+    private func permissionRow(
+        _ title: String,
+        icon: String,
+        status: PermissionCenter.Status,
+        statusLabel: String? = nil,
+        actionTitle: String = "Grant",
+        grant: @escaping () -> Void
+    ) -> some View {
         let appearance = permissionAppearance(status)
         return HStack(spacing: 11) {
             Image(systemName: icon)
@@ -269,11 +286,11 @@ struct SettingsView: View {
                 .frame(width: 22)
             Text(title).font(.system(size: 15, weight: .medium))
             Spacer(minLength: 10)
-            Text(appearance.label)
+            Text(statusLabel ?? appearance.label)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(appearance.color)
             if status != .granted {
-                Button("Grant", action: grant)
+                Button(actionTitle, action: grant)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
             }
@@ -311,6 +328,15 @@ struct SettingsView: View {
         permissions.requestScreen()
         if permissions.screen != .granted {
             openPrivacyPane("Privacy_ScreenCapture", after: 0.45)
+        }
+    }
+
+    private func restartNeloa() {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
+            guard error == nil else { return }
+            NSApplication.shared.terminate(nil)
         }
     }
 
