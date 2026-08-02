@@ -1,13 +1,26 @@
 import AppKit
 import Foundation
 
-let size = NSSize(width: 1024, height: 1024)
-let image = NSImage(size: size)
-image.lockFocus()
-
-guard let context = NSGraphicsContext.current?.cgContext else {
+guard let bitmap = NSBitmapImageRep(
+    bitmapDataPlanes: nil,
+    pixelsWide: 1024,
+    pixelsHigh: 1024,
+    bitsPerSample: 8,
+    samplesPerPixel: 4,
+    hasAlpha: true,
+    isPlanar: false,
+    colorSpaceName: .deviceRGB,
+    bytesPerRow: 0,
+    bitsPerPixel: 0
+), let graphicsContext = NSGraphicsContext(bitmapImageRep: bitmap) else {
     fatalError("Unable to create drawing context")
 }
+
+NSGraphicsContext.saveGraphicsState()
+NSGraphicsContext.current = graphicsContext
+defer { NSGraphicsContext.restoreGraphicsState() }
+
+let context = graphicsContext.cgContext
 context.setAllowsAntialiasing(true)
 context.setShouldAntialias(true)
 
@@ -68,11 +81,7 @@ let highlight = NSBezierPath(ovalIn: NSRect(x: 474, y: 525, width: 58, height: 2
 NSColor.white.withAlphaComponent(0.30).setFill()
 highlight.fill()
 
-image.unlockFocus()
-
-guard let tiff = image.tiffRepresentation,
-      let bitmap = NSBitmapImageRep(data: tiff),
-      let png = bitmap.representation(using: .png, properties: [:]) else {
+guard let png = bitmap.representation(using: .png, properties: [:]) else {
     fatalError("Unable to encode icon")
 }
 

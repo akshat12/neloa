@@ -1,6 +1,17 @@
+import AppKit
 import SwiftUI
 
+@MainActor
+final class HumanaAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        guard let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+              let icon = NSImage(contentsOf: iconURL) else { return }
+        NSApplication.shared.applicationIconImage = icon
+    }
+}
+
 struct HumanaApp: App {
+    @NSApplicationDelegateAdaptor(HumanaAppDelegate.self) private var appDelegate
     @StateObject private var store = WorkflowStore()
     @StateObject private var teacher = TeachController()
     @StateObject private var agent = LocalAgentService()

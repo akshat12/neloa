@@ -14,6 +14,7 @@ cp "$PROJECT_DIR/Resources/Info.plist" "$APP_DIR/Contents/Info.plist"
 cp "$PROJECT_DIR/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 cp "$BIN_DIR/Humana" "$APP_DIR/Contents/MacOS/Humana"
 chmod 755 "$APP_DIR/Contents/MacOS/Humana"
+touch "$APP_DIR"
 codesign --force --deep --sign - "$APP_DIR"
 
 echo "$APP_DIR"
