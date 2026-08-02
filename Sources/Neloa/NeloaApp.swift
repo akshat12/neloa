@@ -36,6 +36,8 @@ struct NeloaApp: App {
                 .environmentObject(agent)
                 .environmentObject(store)
                 .environmentObject(permissions)
+                .padding(24)
+                .frame(minWidth: 760, minHeight: 620)
         }
         .commands {
             CommandGroup(after: .help) {
