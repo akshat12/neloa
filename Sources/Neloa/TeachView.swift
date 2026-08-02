@@ -81,6 +81,7 @@ struct TeachView: View {
                     .padding(.horizontal, 20)
                     .background(.background, in: RoundedRectangle(cornerRadius: 18))
                     .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.secondary.opacity(0.16)))
+                    .appTourTarget(.teachingSetup)
 
                     if let message = teacher.message {
                         permissionMessage(message)
@@ -98,6 +99,7 @@ struct TeachView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
                         .disabled(teacher.phase == .starting || (!teacher.captureScreen && !teacher.captureMicrophone))
+                        .appTourTarget(.startTeaching)
 
                         Label("Secure fields stay hidden.", systemImage: "eye.slash")
                             .font(.system(size: 13))

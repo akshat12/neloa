@@ -3,7 +3,7 @@ import SwiftUI
 
 struct OnboardingView: View {
     @ObservedObject var permissions: PermissionCenter
-    let finish: () -> Void
+    let finish: (Bool) -> Void
     @State private var page = 0
     @State private var appeared = false
 
@@ -103,7 +103,8 @@ struct OnboardingView: View {
                 }
                 Spacer()
                 Button("Back") { withAnimation { page = 0 } }
-                Button("Start using Neloa") { finish() }
+                Button("Skip tour") { finish(false) }
+                Button("Start guided tour") { finish(true) }
                     .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
             }
             .padding(.top, 8)

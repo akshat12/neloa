@@ -16,6 +16,15 @@ enum NavigationItem: String, CaseIterable, Identifiable {
         case .settings: "gearshape"
         }
     }
+
+    var tourTarget: AppTourTarget {
+        switch self {
+        case .teach: .teachNavigation
+        case .automations: .automationsNavigation
+        case .activity: .activityNavigation
+        case .settings: .settingsNavigation
+        }
+    }
 }
 
 struct RootView: View {
@@ -24,6 +33,9 @@ struct RootView: View {
     @State private var selection: NavigationItem? = .teach
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     @State private var choseInitialDestination = false
+    @State private var showTour = false
+    @State private var tourStepIndex = 0
+    @State private var scheduledInitialTour = false
 
     var body: some View {
         NavigationSplitView {
@@ -34,6 +46,8 @@ struct RootView: View {
                     Label(item.rawValue, systemImage: item.icon)
                         .font(.system(size: 15, weight: .medium))
                         .padding(.vertical, 7)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .appTourTarget(item.tourTarget)
                         .tag(item)
                 }
                 .listStyle(.sidebar)
@@ -68,16 +82,45 @@ struct RootView: View {
             .background(Color(nsColor: .windowBackgroundColor))
         }
         .tint(Color(red: 0.20, green: 0.31, blue: 0.82))
+        .overlayPreferenceValue(AppTourAnchorKey.self) { anchors in
+            GeometryReader { proxy in
+                if showTour,
+                   AppTourStep.all.indices.contains(tourStepIndex),
+                   let anchor = anchors[AppTourStep.all[tourStepIndex].target] {
+                    AppTourOverlay(
+                        step: AppTourStep.all[tourStepIndex],
+                        stepIndex: tourStepIndex,
+                        totalSteps: AppTourStep.all.count,
+                        spotlight: proxy[anchor],
+                        back: previousTourStep,
+                        next: nextTourStep,
+                        skip: finishTour
+                    )
+                    .zIndex(100)
+                }
+            }
+        }
         .sheet(isPresented: $showOnboarding) {
-            OnboardingView(permissions: permissions) {
+            OnboardingView(permissions: permissions) { shouldStartTour in
                 UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
                 showOnboarding = false
+                if shouldStartTour {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        startTour()
+                    }
+                } else {
+                    markTourComplete()
+                }
             }
             .interactiveDismissDisabled()
         }
         .onReceive(NotificationCenter.default.publisher(for: .showNeloaWelcome)) { _ in
             permissions.refresh()
+            showTour = false
             showOnboarding = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showNeloaTour)) { _ in
+            startTour()
         }
         .onReceive(NotificationCenter.default.publisher(for: .showNeloaAutomations)) { _ in
             selection = .automations
@@ -93,7 +136,54 @@ struct RootView: View {
             guard !choseInitialDestination else { return }
             choseInitialDestination = true
             selection = store.workflows.isEmpty ? .teach : .automations
+            scheduleInitialTourIfNeeded()
         }
+    }
+
+    private func scheduleInitialTourIfNeeded() {
+        guard !showOnboarding,
+              !UserDefaults.standard.bool(forKey: "hasCompletedAppTour"),
+              !scheduledInitialTour else { return }
+        scheduledInitialTour = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            startTour()
+        }
+    }
+
+    private func startTour() {
+        selection = .teach
+        tourStepIndex = 0
+        withAnimation(.easeInOut(duration: 0.22)) {
+            showTour = true
+        }
+    }
+
+    private func previousTourStep() {
+        guard tourStepIndex > 0 else { return }
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.88)) {
+            tourStepIndex -= 1
+        }
+    }
+
+    private func nextTourStep() {
+        if tourStepIndex == AppTourStep.all.count - 1 {
+            finishTour()
+        } else {
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.88)) {
+                tourStepIndex += 1
+            }
+        }
+    }
+
+    private func finishTour() {
+        withAnimation(.easeOut(duration: 0.18)) {
+            showTour = false
+        }
+        markTourComplete()
+    }
+
+    private func markTourComplete() {
+        UserDefaults.standard.set(true, forKey: "hasCompletedAppTour")
     }
 }
 
@@ -110,6 +200,7 @@ struct BrandMark: View {
 
 extension Notification.Name {
     static let showNeloaWelcome = Notification.Name("showNeloaWelcome")
+    static let showNeloaTour = Notification.Name("showNeloaTour")
     static let showNeloaAutomations = Notification.Name("showNeloaAutomations")
     static let showNeloaTeach = Notification.Name("showNeloaTeach")
 }

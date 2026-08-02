@@ -44,6 +44,9 @@ struct NeloaApp: App {
                 Button("Show Welcome") {
                     NotificationCenter.default.post(name: .showNeloaWelcome, object: nil)
                 }
+                Button("Show Guided Tour") {
+                    NotificationCenter.default.post(name: .showNeloaTour, object: nil)
+                }
             }
         }
     }

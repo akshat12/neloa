@@ -20,6 +20,7 @@ enum SelfTests {
         try recordingErrorCopyCheck()
         try captureOptionCheck()
         try screenPermissionBranchCheck()
+        try appTourStructureCheck()
     }
 
     @MainActor
@@ -153,6 +154,14 @@ enum SelfTests {
         let userDeclined = NSError(domain: SCStreamErrorDomain, code: SCStreamError.Code.userDeclined.rawValue)
         try expect(ScreenRecorder.isScreenPermissionError(userDeclined), "ScreenCaptureKit user-declined errors should map to product recovery")
         try expect(!ScreenRecorder.isScreenPermissionError(NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoSuchFileError)), "unrelated failures should keep their diagnostic meaning")
+    }
+
+    private static func appTourStructureCheck() throws {
+        let steps = AppTourStep.all
+        try expect(steps.count == 6, "the guided tour should cover all six core app areas")
+        try expect(Set(steps.map(\.target)).count == steps.count, "each guided tour step should spotlight a unique control")
+        try expect(steps.first?.target == .teachNavigation, "the guided tour should begin with Teach")
+        try expect(steps.last?.target == .settingsNavigation, "the guided tour should finish with privacy and Settings")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
