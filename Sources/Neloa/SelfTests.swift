@@ -14,6 +14,7 @@ enum SelfTests {
         try receiptSerializationCheck()
         try skillExportCheck()
         try brandMigrationCheck()
+        try localModelDiscoveryCheck()
     }
 
     @MainActor
@@ -101,6 +102,14 @@ enum SelfTests {
         let expected = BrandMigration.applicationSupportDirectory
             .appendingPathComponent("Recordings/example/teach.mp4").path
         try expect(repaired == expected, "legacy Humana recording paths should migrate to Neloa")
+    }
+
+    private static func localModelDiscoveryCheck() throws {
+        let response = #"{"models":[{"name":"qwen3-vl:4b"},{"model":"llama3.2:latest"}]}"#
+        let installed = try LocalAgentService.installedModelNames(from: Data(response.utf8))
+        try expect(LocalAgentService.containsModel("qwen3-vl:4b", in: installed), "exact Ollama model tags should be discovered")
+        try expect(LocalAgentService.containsModel("llama3.2", in: installed), "Ollama's implicit latest tag should be discovered")
+        try expect(!LocalAgentService.containsModel("missing:1b", in: installed), "unavailable Ollama models should be reported as missing")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {

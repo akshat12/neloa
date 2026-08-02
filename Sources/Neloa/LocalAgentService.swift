@@ -6,10 +6,21 @@ import FoundationModels
 @MainActor
 final class LocalAgentService: ObservableObject {
     @Published var modelName: String {
-        didSet { UserDefaults.standard.set(modelName, forKey: "localModelName") }
+        didSet {
+            UserDefaults.standard.set(modelName, forKey: "localModelName")
+            fallbackStatus = .checking
+        }
     }
     @Published private(set) var isPlanning = false
     @Published var status = "Local agent ready"
+    @Published private(set) var fallbackStatus: FallbackStatus = .checking
+
+    enum FallbackStatus: Equatable {
+        case checking
+        case ollamaUnavailable
+        case modelMissing
+        case ready
+    }
 
     init() {
         self.modelName = UserDefaults.standard.string(forKey: "localModelName") ?? "qwen3-vl:4b"
@@ -46,6 +57,50 @@ final class LocalAgentService: ObservableObject {
         } catch {
             status = "Local model unavailable—used safe built-in planning"
             return RunPlanner.plan(workflow: workflow, instruction: instruction)
+        }
+    }
+
+    func refreshFallbackStatus() async {
+        fallbackStatus = .checking
+        guard let url = URL(string: "http://127.0.0.1:11434/api/tags") else {
+            fallbackStatus = .ollamaUnavailable
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 2
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                fallbackStatus = .ollamaUnavailable
+                return
+            }
+
+            let installedModels = try Self.installedModelNames(from: data)
+            fallbackStatus = Self.containsModel(modelName, in: installedModels) ? .ready : .modelMissing
+        } catch {
+            fallbackStatus = .ollamaUnavailable
+        }
+    }
+
+    nonisolated static func installedModelNames(from data: Data) throws -> Set<String> {
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let models = root["models"] as? [[String: Any]] else {
+            throw AgentError.badResponse
+        }
+
+        return Set(models.compactMap { model in
+            (model["name"] as? String) ?? (model["model"] as? String)
+        })
+    }
+
+    nonisolated static func containsModel(_ requestedModel: String, in installedModels: Set<String>) -> Bool {
+        let requested = requestedModel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !requested.isEmpty else { return false }
+        return installedModels.contains { installed in
+            let candidate = installed.lowercased()
+            return candidate == requested || (!requested.contains(":") && candidate == "\(requested):latest")
         }
     }
 

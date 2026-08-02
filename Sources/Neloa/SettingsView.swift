@@ -7,6 +7,7 @@ struct SettingsView: View {
     @EnvironmentObject private var store: WorkflowStore
     @State private var confirmDeleteRecordings = false
     @State private var showAdvanced = false
+    @State private var copiedPullCommand = false
 
     var body: some View {
         ScrollView {
@@ -25,6 +26,7 @@ struct SettingsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { permissions.refresh() }
+        .task { await agent.refreshFallbackStatus() }
         .alert("Delete all teaching recordings?", isPresented: $confirmDeleteRecordings) {
             Button("Delete recordings", role: .destructive) { store.deleteAllRecordings() }
             Button("Cancel", role: .cancel) {}
@@ -140,6 +142,7 @@ struct SettingsView: View {
                             .font(.system(size: 13)).foregroundStyle(.secondary)
                     }
                     Spacer()
+                    StatusBadge(label: fallbackStatusLabel, color: fallbackStatusColor)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
@@ -151,16 +154,85 @@ struct SettingsView: View {
 
             if showAdvanced {
                 Divider()
-                HStack(spacing: 14) {
-                    TextField("Local Qwen model", text: $agent.modelName)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 360)
-                    Text("Used through Ollama only if Apple’s on-device intelligence is unavailable.")
-                        .font(.system(size: 14))
+                VStack(alignment: .leading, spacing: 16) {
+                    fallbackStatusMessage
+
+                    HStack(alignment: .bottom, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Ollama model")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                            TextField("Local model name", text: $agent.modelName)
+                                .textFieldStyle(.roundedBorder)
+                                .onSubmit { Task { await agent.refreshFallbackStatus() } }
+                        }
+                        .frame(maxWidth: 380)
+
+                        Button("Check again") {
+                            Task { await agent.refreshFallbackStatus() }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(agent.fallbackStatus == .checking)
+
+                        fallbackAction
+                    }
+
+                    Text("Apple’s on-device intelligence remains the first choice. Neloa uses this model only when Apple Intelligence is unavailable or cannot complete a plan.")
+                        .font(.system(size: 13))
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
+        }
+    }
+
+    @ViewBuilder
+    private var fallbackStatusMessage: some View {
+        switch agent.fallbackStatus {
+        case .checking:
+            Label("Checking the local model…", systemImage: "arrow.triangle.2.circlepath")
+                .foregroundStyle(.secondary)
+        case .ollamaUnavailable:
+            Label("Ollama is not installed or is not running on this Mac.", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+        case .modelMissing:
+            Label("Ollama is running, but \(agent.modelName) has not been downloaded.", systemImage: "arrow.down.circle.fill")
+                .foregroundStyle(.orange)
+        case .ready:
+            Label("\(agent.modelName) is installed and ready for private, local use.", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        }
+    }
+
+    @ViewBuilder
+    private var fallbackAction: some View {
+        switch agent.fallbackStatus {
+        case .ollamaUnavailable:
+            Button("Get Ollama") { openOllamaDownload() }
+                .buttonStyle(.borderedProminent)
+        case .modelMissing:
+            Button(copiedPullCommand ? "Copied" : "Copy download command") { copyPullCommand() }
+                .buttonStyle(.borderedProminent)
+        case .checking, .ready:
+            EmptyView()
+        }
+    }
+
+    private var fallbackStatusLabel: String {
+        switch agent.fallbackStatus {
+        case .checking: "Checking"
+        case .ollamaUnavailable: "Needs Ollama"
+        case .modelMissing: "Needs model"
+        case .ready: "Ready"
+        }
+    }
+
+    private var fallbackStatusColor: Color {
+        switch agent.fallbackStatus {
+        case .checking: .secondary
+        case .ollamaUnavailable, .modelMissing: .orange
+        case .ready: .green
         }
     }
 
@@ -213,6 +285,21 @@ struct SettingsView: View {
         let base = BrandMigration.applicationSupportDirectory
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         NSWorkspace.shared.open(base)
+    }
+
+    private func openOllamaDownload() {
+        guard let url = URL(string: "https://ollama.com/download/mac") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func copyPullCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("ollama pull \(agent.modelName)", forType: .string)
+        copiedPullCommand = true
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            copiedPullCommand = false
+        }
     }
 }
 
