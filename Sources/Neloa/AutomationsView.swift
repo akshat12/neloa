@@ -7,7 +7,7 @@ struct AutomationsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            PageHeader(title: "My automations", subtitle: "Run one again—or tell Neloa what should be different this time.")
+            PageHeader(title: "My automations", subtitle: "Run one again — or tell Neloa what should be different this time.")
             if store.workflows.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "repeat.circle.fill").font(.system(size: 50)).foregroundStyle(Color.accentColor)
