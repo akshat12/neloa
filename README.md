@@ -49,3 +49,13 @@ Neloa connects only to `http://127.0.0.1:11434`. The model name can be changed i
 Workflow recordings and definitions are saved in the current user's Application Support directory. Neloa does not upload them. Run plans are previewed before execution, there is a three-second cancellation window, and approval steps pause execution.
 
 This repository currently uses ad-hoc signing for local development. Distribution will require an Apple Developer identity, hardened runtime, notarization, and a privacy review.
+
+## Building on Neloa
+
+Forks and derivative work are welcome under the Apache License 2.0. If you build something based on Neloa, please message the maintainer and tell us what you are making—we would genuinely like to hear about it and explore ways to work together. This is a friendly request, not a condition of the open-source license.
+
+The Neloa name, logo, app icon, and visual identity are reserved for the official project. Derivative products should use their own name and branding unless written permission has been granted. See [TRADEMARKS.md](TRADEMARKS.md) for details.
+
+## License
+
+Neloa is licensed under the [Apache License 2.0](LICENSE). Distributed copies and derivative works must preserve the applicable license, copyright, and attribution notices described in [NOTICE](NOTICE).
