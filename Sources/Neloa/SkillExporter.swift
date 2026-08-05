@@ -10,6 +10,7 @@ enum SkillExporter {
     static func markdown(for workflow: Workflow) -> String {
         let inputs = workflow.steps.filter { $0.kind == .typeText }
         let approvals = workflow.steps.filter { $0.kind == .approval || $0.requiresApproval }
+        let userInstructions = workflow.steps.filter(\.isUserInstruction)
         let steps = workflow.steps.enumerated().map { index, step in
             "\(index + 1). **\(step.title)**\(step.detail.isEmpty ? "" : " — \(sanitized(step.detail))")"
         }.joined(separator: "\n")
@@ -19,6 +20,12 @@ enum SkillExporter {
         let approvalList = approvals.isEmpty
             ? "- Ask before any irreversible or external action."
             : approvals.map { "- \(sanitized($0.title))" }.joined(separator: "\n")
+        let instructionList = userInstructions.isEmpty
+            ? "- No additional user-authored instructions."
+            : userInstructions.map { step in
+                let scope = step.instructionScope ?? .thisAction
+                return "- **\(scope.label)** at \(step.time.clockString): \(sanitized(step.text ?? step.title))"
+            }.joined(separator: "\n")
 
         return """
         ---
@@ -41,6 +48,12 @@ enum SkillExporter {
         ## Approval rules
 
         \(approvalList)
+
+        ## Explicit user instructions
+
+        These instructions were added directly by the user and take priority over inferred details.
+
+        \(instructionList)
 
         ## Runtime behavior
 

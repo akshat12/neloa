@@ -23,6 +23,7 @@ enum SelfTests {
         try screenPermissionBranchCheck()
         try appTourStructureCheck()
         try reviewTimelineSelectionCheck()
+        try workflowInstructionCheck()
     }
 
     private static func appearanceCheck() throws {
@@ -189,6 +190,67 @@ enum SelfTests {
         try expect(ReviewTimelineSelection.duration(videoDuration: 0, steps: steps) == 3.5, "steps should provide a review duration before the video reports its length")
         try expect(ReviewTimelineSelection.duration(videoDuration: 2, steps: steps) == 2, "the review timeline should clamp markers to the real video duration")
         try expect(ReviewTimelineSelection.duration(videoDuration: 10, steps: steps) == 10, "the review timeline should use the full recording duration")
+    }
+
+    private static func workflowInstructionCheck() throws {
+        let click = WorkflowStep(kind: .click, title: "Choose Share", time: 4)
+        let input = WorkflowStep(kind: .typeText, title: "Enter amount", time: 8, text: "$500")
+        let originalSteps = [click, input]
+
+        guard let instruction = WorkflowInstructionSupport.makeStep(
+            text: "  Always ask me before sharing.  ",
+            time: 3.5,
+            scope: .thisAction,
+            existingSteps: originalSteps
+        ) else {
+            throw Failure(description: "a non-empty timeline instruction should be created")
+        }
+
+        try expect(instruction.isUserInstruction, "timeline instructions should remain visually and semantically distinct from inferred actions")
+        try expect(instruction.text == "Always ask me before sharing.", "timeline instructions should trim accidental whitespace")
+        try expect(instruction.linkedStepID == click.id, "this-action instructions should link to the nearest captured action")
+        try expect(instruction.requiresApproval && instruction.kind == .approval, "explicit ask-before instructions should become approval gates")
+
+        let inserted = WorkflowInstructionSupport.inserting(instruction, into: originalSteps)
+        try expect(inserted.map(\.id) == [instruction.id, click.id, input.id], "a timeline instruction should be inserted chronologically before an action at or after its timestamp")
+        try expect(ReviewTimelineSelection.stepID(at: 3.6, in: inserted) == instruction.id, "seeking to a user marker should select its sidebar card")
+
+        guard let lateApproval = WorkflowInstructionSupport.makeStep(
+            text: "Get my confirmation before sharing",
+            time: 4.2,
+            scope: .thisAction,
+            existingSteps: originalSteps
+        ) else {
+            throw Failure(description: "common confirmation wording should create an instruction")
+        }
+        let safelyOrdered = WorkflowInstructionSupport.inserting(lateApproval, into: originalSteps)
+        try expect(lateApproval.requiresApproval, "confirmation wording should conservatively become an approval gate")
+        try expect(safelyOrdered.first?.id == lateApproval.id && safelyOrdered.dropFirst().first?.id == click.id, "a this-action approval added just after an action should still execute before that linked action")
+
+        guard let globalInstruction = WorkflowInstructionSupport.makeStep(
+            text: "Use only approved client values",
+            time: 7,
+            scope: .entireWorkflow,
+            existingSteps: originalSteps
+        ) else {
+            throw Failure(description: "a workflow-wide instruction should be created")
+        }
+        let globallyOrdered = WorkflowInstructionSupport.inserting(globalInstruction, into: originalSteps)
+        try expect(globallyOrdered.first?.id == globalInstruction.id, "an entire-workflow instruction should be reviewed before any captured action")
+        try expect(AutomationRunner.requiresInstructionReview(globalInstruction), "general user instructions should become explicit review checkpoints instead of being silently skipped")
+        try expect(AutomationRunner.approvalPrompt(for: globalInstruction) == nil, "general guidance should not be misrepresented as an enforced approval rule")
+
+        let unlinked = WorkflowInstructionSupport.removing(stepID: click.id, from: inserted)
+        let remainingInstruction = unlinked.first(where: { $0.id == instruction.id })
+        try expect(remainingInstruction?.linkedStepID == nil && remainingInstruction?.detail.contains("Linked action removed") == true, "removing an action should visibly invalidate instructions linked to it")
+
+        let workflow = Workflow(name: "Review", transcript: "", steps: inserted)
+        let data = try JSONEncoder.neloa.encode(workflow)
+        let decoded = try JSONDecoder.neloa.decode(Workflow.self, from: data)
+        try expect(decoded.steps.first?.instructionScope == .thisAction, "instruction scope should survive workflow persistence")
+        try expect(RunPlanner.prompt(workflow: workflow, instruction: "Use $750").contains("Always ask me before sharing."), "the local planner should receive explicit saved instructions")
+        try expect(SkillExporter.markdown(for: workflow).contains("Explicit user instructions"), "portable skills should preserve user-authored timeline instructions")
+        try expect(WorkflowInstructionSupport.makeStep(text: "   ", time: 1, scope: .fromHere, existingSteps: originalSteps) == nil, "blank timeline instructions should not be saved")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {

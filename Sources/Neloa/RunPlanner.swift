@@ -67,11 +67,16 @@ enum RunPlanner {
         let inputs = workflow.steps.filter { $0.kind == .typeText }.map {
             "{\"step_id\":\"\($0.id.uuidString)\",\"current_text\":\"\(jsonEscape($0.text ?? ""))\"}"
         }.joined(separator: ",")
+        let savedInstructions = workflow.steps.filter(\.isUserInstruction).map {
+            "- \(WorkflowInstructionSupport.promptDescription(for: $0, in: workflow))"
+        }.joined(separator: "\n")
         return """
-        You customize a saved desktop automation for one run. Change only typed input values explicitly requested by the user. Never add clicks, sending, purchasing, deletion, or other side effects. Return only JSON matching {"summary":"...","replacements":[{"step_id":"...","text":"...","reason":"..."}]}. If the request cannot be satisfied only by replacing typed values, return an empty replacements array and explain why in summary.
+        You customize a saved desktop automation for one run. Change only typed input values explicitly requested by the user. Never add clicks, sending, purchasing, deletion, or other side effects. Explicit saved user instructions take priority over inferred workflow details and must not be silently discarded. Return only JSON matching {"summary":"...","replacements":[{"step_id":"...","text":"...","reason":"..."}]}. If the request cannot be satisfied only by replacing typed values, return an empty replacements array and explain why in summary.
 
         Workflow: \(workflow.name)
         Typed inputs: [\(inputs)]
+        Explicit saved user instructions:
+        \(savedInstructions.isEmpty ? "- None" : savedInstructions)
         User instruction: \(instruction)
         """
     }

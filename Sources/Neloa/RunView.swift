@@ -214,6 +214,23 @@ struct RunView: View {
                 }
             }
             .padding().background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 13))
+        case .waitingForInstruction(let instruction):
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Review your instruction", systemImage: "text.bubble.fill")
+                    .font(.headline)
+                    .foregroundStyle(.orange)
+                Text(instruction)
+                    .font(.system(size: 15, weight: .medium))
+                Text("Neloa has not changed the captured actions automatically. Stop if this instruction is not satisfied; continuing runs the recorded actions from this point.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Button("Stop", role: .destructive) { runner.deny() }
+                    Button("Continue with recorded workflow") { runner.approve() }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding().background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 13))
         case .completed:
             VStack(spacing: 10) {
                 Label("Run complete", systemImage: "checkmark.circle.fill").font(.headline).foregroundStyle(.green)
@@ -230,7 +247,7 @@ struct RunView: View {
 
     private var isRunning: Bool {
         switch runner.state {
-        case .countdown, .running, .waitingForApproval: true
+        case .countdown, .running, .waitingForApproval, .waitingForInstruction: true
         default: false
         }
     }

@@ -8,6 +8,7 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 - Records and transcribes microphone narration using Apple's on-device speech recognition when available.
 - Learns mouse clicks, typed text, key presses, and app changes.
 - Turns the demonstration into an editable, locally saved workflow.
+- Lets users add typed or spoken instructions at any recording timestamp: approval wording creates a hard gate, while other free-form guidance becomes an explicit review checkpoint.
 - Replays the workflow under user supervision with the signature “Again, but…” interaction.
 - Accepts instructions such as “Replace June with July” or “use amount $750.”
 - Lets each change be used once, saved as a variant, or made the new default.

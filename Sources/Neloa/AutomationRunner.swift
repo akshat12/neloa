@@ -10,6 +10,7 @@ final class AutomationRunner: ObservableObject {
         case countdown(Int)
         case running(Int)
         case waitingForApproval(String)
+        case waitingForInstruction(String)
         case completed
         case stopped
         case failed(String)
@@ -40,8 +41,17 @@ final class AutomationRunner: ObservableObject {
                 self.state = .running(index)
                 self.currentStepID = step.id
 
-                if step.requiresApproval || step.kind == .approval {
-                    self.state = .waitingForApproval(step.title)
+                if Self.requiresInstructionReview(step) {
+                    self.state = .waitingForInstruction(step.text ?? step.title)
+                    let approved = await withCheckedContinuation { continuation in
+                        self.approvalContinuation = continuation
+                    }
+                    guard approved else {
+                        self.state = .stopped
+                        return
+                    }
+                } else if let approvalPrompt = Self.approvalPrompt(for: step) {
+                    self.state = .waitingForApproval(approvalPrompt)
                     let approved = await withCheckedContinuation { continuation in
                         self.approvalContinuation = continuation
                     }
@@ -86,6 +96,15 @@ final class AutomationRunner: ObservableObject {
         stop()
         currentStepID = nil
         state = .idle
+    }
+
+    nonisolated static func approvalPrompt(for step: WorkflowStep) -> String? {
+        if step.isUserInstruction, step.requiresApproval || step.kind == .approval { return step.text ?? step.title }
+        return step.requiresApproval || step.kind == .approval ? step.title : nil
+    }
+
+    nonisolated static func requiresInstructionReview(_ step: WorkflowStep) -> Bool {
+        step.isUserInstruction && !step.requiresApproval && step.kind != .approval
     }
 
     private func perform(_ step: WorkflowStep) async throws {

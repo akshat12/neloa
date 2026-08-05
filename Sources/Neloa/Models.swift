@@ -43,6 +43,35 @@ enum WorkflowStepKind: String, Codable, CaseIterable, Sendable {
     }
 }
 
+enum WorkflowStepOrigin: String, Codable, Sendable {
+    case inferred
+    case user
+}
+
+enum WorkflowInstructionScope: String, Codable, CaseIterable, Identifiable, Sendable {
+    case thisAction
+    case fromHere
+    case entireWorkflow
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .thisAction: "This action"
+        case .fromHere: "From here onward"
+        case .entireWorkflow: "Entire workflow"
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .thisAction: "Attach it to the nearest captured action and pause before that action."
+        case .fromHere: "Add a review checkpoint here before the remaining actions."
+        case .entireWorkflow: "Review this instruction before the automation starts."
+        }
+    }
+}
+
 struct WorkflowStep: Identifiable, Codable, Equatable, Sendable {
     var id = UUID()
     var kind: WorkflowStepKind
@@ -57,6 +86,15 @@ struct WorkflowStep: Identifiable, Codable, Equatable, Sendable {
     var application: String?
     var bundleIdentifier: String?
     var requiresApproval = false
+    var origin: WorkflowStepOrigin?
+    var instructionScope: WorkflowInstructionScope?
+    var linkedStepID: UUID?
+
+    var isUserInstruction: Bool { origin == .user }
+
+    var displayKindLabel: String {
+        isUserInstruction ? "Your instruction" : kind.label
+    }
 }
 
 struct Workflow: Identifiable, Codable, Equatable, Sendable {

@@ -93,25 +93,36 @@ struct StepRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Text("\(number)")
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .frame(width: 30, height: 30)
-                .background(isCurrent ? Color.accentColor : Color.secondary.opacity(0.13), in: RoundedRectangle(cornerRadius: 9))
-                .foregroundStyle(isCurrent ? .white : .primary)
+            Group {
+                if step.isUserInstruction {
+                    Image(systemName: "text.bubble.fill")
+                        .font(.system(size: 14, weight: .bold))
+                } else {
+                    Text("\(number)")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                }
+            }
+            .frame(width: 30, height: 30)
+            .background(isCurrent ? stepColor : stepColor.opacity(0.13), in: RoundedRectangle(cornerRadius: 9))
+            .foregroundStyle(isCurrent ? .white : stepColor)
             VStack(alignment: .leading, spacing: 5) {
                 Text(step.title).font(.system(size: 16, weight: .semibold)).lineLimit(2)
                 if !step.detail.isEmpty { Text(step.detail).font(.system(size: 14)).foregroundStyle(.secondary) }
-                Text(step.kind.label)
+                Text(step.displayKindLabel)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(step.kind == .approval ? .orange : Color.accentColor)
+                    .foregroundStyle(stepColor)
                     .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background((step.kind == .approval ? Color.orange : Color.accentColor).opacity(0.11), in: Capsule())
+                    .background(stepColor.opacity(0.11), in: Capsule())
             }
             Spacer()
         }
         .padding(14)
         .background(.background, in: RoundedRectangle(cornerRadius: 13))
-        .overlay(RoundedRectangle(cornerRadius: 13).stroke(isCurrent ? Color.accentColor : Color.secondary.opacity(0.16)))
+        .overlay(RoundedRectangle(cornerRadius: 13).stroke(isCurrent ? stepColor : Color.secondary.opacity(0.16)))
+    }
+
+    private var stepColor: Color {
+        step.isUserInstruction || step.kind == .approval ? .orange : Color.accentColor
     }
 }
 

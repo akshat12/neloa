@@ -115,6 +115,19 @@ private struct AutomationDetail: View {
                 }
             }
 
+            if !userInstructions.isEmpty {
+                detailCard(title: "Instructions you added", icon: "text.bubble.fill") {
+                    ForEach(userInstructions) { step in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(step.text ?? step.title).font(.system(size: 15, weight: .medium))
+                            Text("\((step.instructionScope ?? .thisAction).label) · \(step.time.clockString)")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
             if !appsUsed.isEmpty {
                 detailCard(title: "Apps used", icon: "square.grid.2x2") {
                     Text(appsUsed.joined(separator: " · "))
@@ -150,6 +163,7 @@ private struct AutomationDetail: View {
 
     private var flexibleInputs: [WorkflowStep] { workflow.steps.filter { $0.kind == .typeText } }
     private var approvalRules: [WorkflowStep] { workflow.steps.filter { $0.kind == .approval || $0.requiresApproval } }
+    private var userInstructions: [WorkflowStep] { workflow.steps.filter(\.isUserInstruction) }
     private var appsUsed: [String] {
         Array(Set(workflow.steps.compactMap(\.application).filter { !$0.isEmpty })).sorted()
     }

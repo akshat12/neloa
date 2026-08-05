@@ -95,6 +95,11 @@ final class ReviewPlaybackModel: ObservableObject {
         }
     }
 
+    func pause() {
+        player?.pause()
+        isPlaying = false
+    }
+
     func seek(to time: TimeInterval) {
         let clampedTime = clampedTime(time)
         guard let player else {
@@ -139,6 +144,7 @@ struct WorkflowReviewView: View {
     @State private var selectedStepID: UUID?
     @State private var pinnedStepID: UUID?
     @State private var pinnedTime: TimeInterval?
+    @State private var instructionDraft: ReviewInstructionDraft?
 
     init(workflow: Binding<Workflow>) {
         _workflow = workflow
@@ -155,7 +161,7 @@ struct WorkflowReviewView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 420)
                 Spacer()
-                Label("\(workflow.steps.count) salient actions", systemImage: "sparkles.rectangle.stack")
+                Label(reviewCountLabel, systemImage: "sparkles.rectangle.stack")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
             }
@@ -173,7 +179,8 @@ struct WorkflowReviewView: View {
                         hasVideo: playback.player != nil,
                         togglePlayback: playback.togglePlayback,
                         seek: seek,
-                        selectStep: selectStep
+                        selectStep: selectStep,
+                        addInstruction: beginAddingInstruction
                     )
 
                     VStack(alignment: .leading, spacing: 7) {
@@ -197,7 +204,8 @@ struct WorkflowReviewView: View {
                 ReviewActionsSidebar(
                     steps: $workflow.steps,
                     selectedStepID: $selectedStepID,
-                    select: selectStep
+                    select: selectStep,
+                    editInstruction: beginEditingInstruction
                 )
                 .padding(.leading, 14)
                 .frame(minWidth: 300, idealWidth: 340, maxWidth: 390)
@@ -227,6 +235,20 @@ struct WorkflowReviewView: View {
                 pinnedTime = nil
             }
         }
+        .sheet(item: $instructionDraft) { draft in
+            ReviewInstructionEditor(
+                draft: draft,
+                save: saveInstruction,
+                cancel: { instructionDraft = nil }
+            )
+        }
+    }
+
+    private var reviewCountLabel: String {
+        let instructionCount = workflow.steps.filter(\.isUserInstruction).count
+        let actionCount = workflow.steps.count - instructionCount
+        guard instructionCount > 0 else { return "\(actionCount) salient actions" }
+        return "\(actionCount) actions · \(instructionCount) instruction\(instructionCount == 1 ? "" : "s")"
     }
 
     @ViewBuilder
@@ -261,6 +283,40 @@ struct WorkflowReviewView: View {
         pinnedTime = nil
         selectedStepID = ReviewTimelineSelection.stepID(at: time, in: workflow.steps)
         playback.seek(to: time)
+    }
+
+    private func beginAddingInstruction(at time: TimeInterval) {
+        playback.pause()
+        let clampedTime = playback.clampedTime(time)
+        instructionDraft = ReviewInstructionDraft(time: clampedTime)
+    }
+
+    private func beginEditingInstruction(_ step: WorkflowStep) {
+        guard step.isUserInstruction else { return }
+        playback.pause()
+        instructionDraft = ReviewInstructionDraft(
+            stepID: step.id,
+            time: playback.clampedTime(step.time),
+            text: step.text ?? step.title,
+            scope: step.instructionScope ?? .thisAction
+        )
+    }
+
+    private func saveInstruction(_ draft: ReviewInstructionDraft, text: String, scope: WorkflowInstructionScope) {
+        let otherSteps = workflow.steps.filter { $0.id != draft.stepID }
+        guard let instruction = WorkflowInstructionSupport.makeStep(
+            text: text,
+            time: draft.time,
+            scope: scope,
+            existingSteps: otherSteps,
+            id: draft.stepID ?? draft.id
+        ) else { return }
+        workflow.steps = WorkflowInstructionSupport.inserting(instruction, into: workflow.steps)
+        selectedStepID = instruction.id
+        pinnedStepID = instruction.id
+        pinnedTime = instruction.time
+        playback.seek(to: instruction.time)
+        instructionDraft = nil
     }
 
     private func selectStep(_ step: WorkflowStep) {
@@ -298,6 +354,7 @@ private struct ReviewTimeline: View {
     let togglePlayback: () -> Void
     let seek: (TimeInterval) -> Void
     let selectStep: (WorkflowStep) -> Void
+    let addInstruction: (TimeInterval) -> Void
 
     private var effectiveDuration: TimeInterval {
         ReviewTimelineSelection.duration(videoDuration: videoDuration, steps: steps)
@@ -334,10 +391,7 @@ private struct ReviewTimeline: View {
                         Button {
                             selectStep(step)
                         } label: {
-                            Circle()
-                                .fill(step.id == selectedStepID ? Color.accentColor : Color(nsColor: .windowBackgroundColor))
-                                .overlay(Circle().stroke(Color.accentColor, lineWidth: 2))
-                                .frame(width: step.id == selectedStepID ? 14 : 11, height: step.id == selectedStepID ? 14 : 11)
+                            TimelineMarker(step: step, isSelected: step.id == selectedStepID)
                         }
                         .buttonStyle(.plain)
                         .help("\(step.time.compactClockString) · \(step.title)")
@@ -386,7 +440,7 @@ private struct ReviewTimeline: View {
                 .disabled(!hasVideo)
 
                 if let selected = steps.first(where: { $0.id == selectedStepID }) {
-                    Text("Selected: \(selected.title)")
+                    Text(selected.isUserInstruction ? "Your instruction: \(selected.title)" : "Selected: \(selected.title)")
                         .font(.system(size: 13, weight: .medium))
                         .lineLimit(1)
                 } else {
@@ -395,6 +449,13 @@ private struct ReviewTimeline: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                Button {
+                    addInstruction(currentTime)
+                } label: {
+                    Label("Add instruction at \(currentTime.compactClockString)", systemImage: "text.bubble.fill")
+                }
+                .buttonStyle(.bordered)
+                .help("Add something Neloa should understand at this point in the recording")
             }
         }
         .padding(12)
@@ -402,15 +463,37 @@ private struct ReviewTimeline: View {
     }
 }
 
+private struct TimelineMarker: View {
+    let step: WorkflowStep
+    let isSelected: Bool
+
+    var body: some View {
+        if step.isUserInstruction {
+            Image(systemName: "text.bubble.fill")
+                .font(.system(size: isSelected ? 14 : 11, weight: .bold))
+                .foregroundStyle(isSelected ? .white : Color.orange)
+                .frame(width: isSelected ? 22 : 18, height: isSelected ? 22 : 18)
+                .background(isSelected ? Color.orange : Color(nsColor: .windowBackgroundColor), in: Circle())
+                .overlay(Circle().stroke(Color.orange, lineWidth: 2))
+        } else {
+            Circle()
+                .fill(isSelected ? Color.accentColor : Color(nsColor: .windowBackgroundColor))
+                .overlay(Circle().stroke(Color.accentColor, lineWidth: 2))
+                .frame(width: isSelected ? 14 : 11, height: isSelected ? 14 : 11)
+        }
+    }
+}
+
 private struct ReviewActionsSidebar: View {
     @Binding var steps: [WorkflowStep]
     @Binding var selectedStepID: UUID?
     let select: (WorkflowStep) -> Void
+    let editInstruction: (WorkflowStep) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Salient actions")
+                Text("Workflow moments")
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
                 Spacer()
                 Text("\(steps.count)")
@@ -429,7 +512,7 @@ private struct ReviewActionsSidebar: View {
                                 select(step)
                             } label: {
                                 ReviewActionCard(
-                                    number: index + 1,
+                                    number: inferredActionNumber(at: index),
                                     step: step,
                                     isSelected: step.id == selectedStepID
                                 )
@@ -437,8 +520,13 @@ private struct ReviewActionsSidebar: View {
                             .buttonStyle(.plain)
                             .id(step.id)
                             .contextMenu {
-                                Button("Remove action", role: .destructive) {
-                                    steps.removeAll { $0.id == step.id }
+                                if step.isUserInstruction {
+                                    Button("Edit instruction") {
+                                        editInstruction(step)
+                                    }
+                                }
+                                Button(step.isUserInstruction ? "Remove instruction" : "Remove action", role: .destructive) {
+                                    steps = WorkflowInstructionSupport.removing(stepID: step.id, from: steps)
                                 }
                             }
                         }
@@ -452,11 +540,15 @@ private struct ReviewActionsSidebar: View {
                 }
             }
 
-            Label("Select an action to jump to it. Right-click to remove it.", systemImage: "cursorarrow.click")
+            Label("Select a moment to jump to it. Right-click your instructions to edit or remove them.", systemImage: "cursorarrow.click")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private func inferredActionNumber(at index: Int) -> Int {
+        steps.prefix(index + 1).filter { !$0.isUserInstruction }.count
     }
 }
 
@@ -467,11 +559,18 @@ private struct ReviewActionCard: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 11) {
-            Text("\(number)")
-                .font(.system(size: 13, weight: .bold, design: .rounded))
-                .frame(width: 28, height: 28)
-                .background(isSelected ? Color.accentColor : Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-                .foregroundStyle(isSelected ? .white : .primary)
+            Group {
+                if step.isUserInstruction {
+                    Image(systemName: "text.bubble.fill")
+                        .font(.system(size: 13, weight: .bold))
+                } else {
+                    Text("\(number)")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                }
+            }
+            .frame(width: 28, height: 28)
+            .background(markerColor.opacity(isSelected ? 1 : 0.12), in: RoundedRectangle(cornerRadius: 8))
+            .foregroundStyle(isSelected ? .white : markerColor)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline) {
@@ -489,18 +588,206 @@ private struct ReviewActionCard: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
-                Text(step.kind.label)
+                Text(step.displayKindLabel)
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(step.kind == .approval ? .orange : Color.accentColor)
+                    .foregroundStyle(markerColor)
             }
         }
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isSelected ? Color.accentColor.opacity(0.09) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 11))
+        .background(isSelected ? markerColor.opacity(0.09) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 11))
         .overlay(
             RoundedRectangle(cornerRadius: 11)
-                .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.14), lineWidth: isSelected ? 2 : 1)
+                .stroke(isSelected ? markerColor : Color.secondary.opacity(0.14), lineWidth: isSelected ? 2 : 1)
         )
+    }
+
+    private var markerColor: Color {
+        step.isUserInstruction || step.kind == .approval ? .orange : Color.accentColor
+    }
+}
+
+private struct ReviewInstructionDraft: Identifiable {
+    let id: UUID
+    let stepID: UUID?
+    let time: TimeInterval
+    let text: String
+    let scope: WorkflowInstructionScope
+
+    init(
+        id: UUID = UUID(),
+        stepID: UUID? = nil,
+        time: TimeInterval,
+        text: String = "",
+        scope: WorkflowInstructionScope = .thisAction
+    ) {
+        self.id = id
+        self.stepID = stepID
+        self.time = time
+        self.text = text
+        self.scope = scope
+    }
+}
+
+private struct ReviewInstructionEditor: View {
+    let draft: ReviewInstructionDraft
+    let save: (ReviewInstructionDraft, String, WorkflowInstructionScope) -> Void
+    let cancel: () -> Void
+
+    @StateObject private var voice = VoiceService()
+    @State private var text: String
+    @State private var scope: WorkflowInstructionScope
+    @State private var voiceBusy = false
+    @State private var voiceTask: Task<Void, Never>?
+    @FocusState private var textIsFocused: Bool
+
+    init(
+        draft: ReviewInstructionDraft,
+        save: @escaping (ReviewInstructionDraft, String, WorkflowInstructionScope) -> Void,
+        cancel: @escaping () -> Void
+    ) {
+        self.draft = draft
+        self.save = save
+        self.cancel = cancel
+        _text = State(initialValue: draft.text)
+        _scope = State(initialValue: draft.scope)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: "text.bubble.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .frame(width: 44, height: 44)
+                    .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(draft.stepID == nil ? "Add your instruction" : "Edit your instruction")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                    Text("At \(draft.time.compactClockString) in the recording · Kept separate from inferred actions.")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("What should Neloa understand here?")
+                    .font(.system(size: 14, weight: .semibold))
+
+                TextEditor(text: $text)
+                    .font(.system(size: 16))
+                    .scrollContentBackground(.hidden)
+                    .padding(10)
+                    .frame(minHeight: 112)
+                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 11))
+                    .overlay(RoundedRectangle(cornerRadius: 11).stroke(Color.secondary.opacity(0.22)))
+                    .focused($textIsFocused)
+                    .accessibilityLabel("Instruction")
+
+                HStack(spacing: 10) {
+                    Button {
+                        toggleVoice()
+                    } label: {
+                        Label(
+                            voice.isListening ? "Finish speaking" : "Say it instead",
+                            systemImage: voice.isListening ? "stop.circle.fill" : "mic.fill"
+                        )
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(voice.isListening ? .red : Color.accentColor)
+                    .disabled(voiceBusy)
+
+                    if voice.isListening {
+                        Label("Listening on this Mac", systemImage: "waveform")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.red)
+                    } else {
+                        Text("Type or speak in your own words.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let error = voice.errorMessage {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.red)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 9) {
+                Text("Where should it apply?")
+                    .font(.system(size: 14, weight: .semibold))
+                Picker("Instruction scope", selection: $scope) {
+                    ForEach(WorkflowInstructionScope.allCases) { option in
+                        Text(option.label).tag(option)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                Text(scope.explanation)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            HStack {
+                Text("Approval wording creates a hard gate; other instructions create a review checkpoint.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Cancel", role: .cancel) {
+                    stopVoice()
+                    cancel()
+                }
+                    .keyboardShortcut(.cancelAction)
+                Button(draft.stepID == nil ? "Add to workflow" : "Save changes") {
+                    stopVoice()
+                    save(draft, text, scope)
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(width: 560)
+        .onAppear { textIsFocused = true }
+        .onChange(of: voice.transcript) { _, transcript in
+            guard !transcript.isEmpty else { return }
+            text = transcript
+        }
+        .onDisappear {
+            stopVoice()
+        }
+    }
+
+    private func toggleVoice() {
+        if voice.isListening {
+            _ = voice.stop()
+            return
+        }
+        voiceTask = Task {
+            voiceBusy = true
+            defer {
+                voiceBusy = false
+                voiceTask = nil
+            }
+            do {
+                _ = try await voice.start()
+                if Task.isCancelled { _ = voice.stop() }
+            } catch {
+                if !Task.isCancelled { voice.errorMessage = error.localizedDescription }
+            }
+        }
+    }
+
+    private func stopVoice() {
+        voiceTask?.cancel()
+        voiceTask = nil
+        if voice.isListening { _ = voice.stop() }
     }
 }
 

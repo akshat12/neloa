@@ -21,9 +21,11 @@ final class VoiceService: ObservableObject {
         let speechStatus = await withCheckedContinuation { continuation in
             SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
         }
+        try Task.checkCancellation()
         guard speechStatus == .authorized else { throw VoiceError.speechPermission }
 
         let micAllowed = await AVCaptureDevice.requestAccess(for: .audio)
+        try Task.checkCancellation()
         guard micAllowed else { throw VoiceError.microphonePermission }
         guard let recognizer, recognizer.isAvailable else { throw VoiceError.unavailable }
         guard recognizer.supportsOnDeviceRecognition else { throw VoiceError.onDeviceUnavailable }
