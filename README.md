@@ -14,21 +14,25 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 - Uses Apple's on-device Foundation Model on macOS 26, with local Qwen3-VL through Ollama and a narrow built-in planner as fallbacks.
 - Pauses at spoken approval rules such as “always ask me before sending.”
 - Keeps a local activity receipt showing what ran and what changed.
+- Uses the Lagoon visual identity with persistent System, Light, and Dark appearance choices.
 
 ## Build and run
 
 Requirements: macOS 15 or newer and the Apple Command Line Tools (full Xcode also works).
 
 ```sh
+make setup-signing
 make test
 make agent-test
 make app
 open dist/Neloa.app
 ```
 
-`make test` runs deterministic workflow checks. `make agent-test` makes a real request to Apple's on-device model and verifies the resulting executable change plan.
+`make setup-signing` is a one-time development setup that creates a local signing identity in your login Keychain. The first signed build may ask for your Mac login password; choose **Always Allow** so later builds can sign without prompting. Keeping the same identity across builds lets macOS retain Neloa’s privacy permissions. `make test` runs deterministic workflow checks. `make agent-test` makes a real request to Apple's on-device model and verifies the resulting executable change plan.
 
 The app asks for Screen Recording, Accessibility, Microphone, and Speech Recognition permissions. Accessibility lets Neloa learn clicks and typing during a demonstration and replay only the actions you approve. macOS may require reopening Neloa after it is granted.
+
+Public releases will be Developer ID signed, notarized by Apple, and published as GitHub Release downloads. See the [distribution plan](docs/DISTRIBUTION.md) for the signing, GitHub Actions, and release checklist.
 
 ## Local models
 
@@ -48,7 +52,7 @@ Neloa connects only to `http://127.0.0.1:11434`. The model name can be changed i
 
 Workflow recordings and definitions are saved in the current user's Application Support directory. Neloa does not upload them. Run plans are previewed before execution, there is a three-second cancellation window, and approval steps pause execution.
 
-This repository currently uses ad-hoc signing for local development. Distribution will require an Apple Developer identity, hardened runtime, notarization, and a privacy review.
+Local builds use a dedicated development identity when one is installed. That identity is only for development; never distribute a build signed with it.
 
 ## Building on Neloa
 

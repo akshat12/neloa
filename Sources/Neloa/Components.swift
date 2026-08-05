@@ -27,7 +27,7 @@ struct NeloaAppIcon: View {
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
                 .fill(LinearGradient(
-                    colors: [Color(red: 0.08, green: 0.09, blue: 0.34), Color(red: 0.20, green: 0.29, blue: 0.86)],
+                    colors: [NeloaPalette.lagoonDeep, NeloaPalette.lagoon],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 ))
@@ -42,7 +42,7 @@ struct NeloaAppIcon: View {
                 .rotationEffect(.degrees(-8))
                 .offset(x: size * 0.27, y: -size * 0.04)
             Circle()
-                .fill(LinearGradient(colors: [.orange, .red], startPoint: .top, endPoint: .bottom))
+                .fill(LinearGradient(colors: [.orange, NeloaPalette.coral], startPoint: .top, endPoint: .bottom))
                 .frame(width: size * 0.13, height: size * 0.13)
         }
     }

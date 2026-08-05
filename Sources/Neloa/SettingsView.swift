@@ -5,6 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject private var agent: LocalAgentService
     @EnvironmentObject private var permissions: PermissionCenter
     @EnvironmentObject private var store: WorkflowStore
+    @AppStorage(AppAppearance.storageKey) private var appearanceRawValue = AppAppearance.system.rawValue
     @State private var confirmDeleteRecordings = false
     @State private var showAdvanced = false
     @State private var copiedPullCommand = false
@@ -13,6 +14,7 @@ struct SettingsView: View {
         ScrollView {
             VStack(spacing: 18) {
                 intelligenceCard
+                appearanceCard
 
                 HStack(alignment: .top, spacing: 18) {
                     permissionsCard.frame(maxWidth: .infinity)
@@ -37,6 +39,65 @@ struct SettingsView: View {
         } message: {
             Text("Your saved automations will remain, but their screen and narration recordings cannot be recovered.")
         }
+    }
+
+    private var appearanceCard: some View {
+        SettingsCard {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 18) {
+                    appearanceSummary
+                    Spacer(minLength: 20)
+                    appearancePicker
+                }
+
+                VStack(alignment: .leading, spacing: 16) {
+                    appearanceSummary
+                    appearancePicker
+                }
+            }
+        }
+    }
+
+    private var appearanceSummary: some View {
+        HStack(spacing: 18) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 15)
+                    .fill(LinearGradient(
+                        colors: [NeloaPalette.lagoonDeep, NeloaPalette.lagoon],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                Circle()
+                    .fill(NeloaPalette.lagoonBright)
+                    .frame(width: 17, height: 17)
+                    .offset(x: -10, y: 9)
+                Circle()
+                    .fill(NeloaPalette.coral)
+                    .frame(width: 14, height: 14)
+                    .offset(x: 11, y: -10)
+            }
+            .frame(width: 52, height: 52)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Appearance")
+                    .font(.system(size: 19, weight: .semibold, design: .rounded))
+                Text("Lagoon palette · Choose how Neloa looks on this Mac.")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var appearancePicker: some View {
+        Picker("Theme", selection: $appearanceRawValue) {
+            ForEach(AppAppearance.allCases) { appearance in
+                Text(appearance.label).tag(appearance.rawValue)
+            }
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.large)
+        .frame(width: 270)
+        .accessibilityLabel("Appearance theme")
     }
 
     private var intelligenceCard: some View {

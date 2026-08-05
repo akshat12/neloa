@@ -42,13 +42,13 @@ struct RootView: View {
             VStack(spacing: 0) {
                 BrandMark()
                     .padding(.vertical, 24)
-                List(NavigationItem.allCases, selection: $selection) { item in
-                    Label(item.rawValue, systemImage: item.icon)
-                        .font(.system(size: 15, weight: .medium))
-                        .padding(.vertical, 7)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                List {
+                    ForEach(NavigationItem.allCases) { item in
+                        SidebarNavigationRow(item: item, isSelected: selection == item) {
+                            selection = item
+                        }
                         .appTourTarget(item.tourTarget)
-                        .tag(item)
+                    }
                 }
                 .listStyle(.sidebar)
 
@@ -81,7 +81,6 @@ struct RootView: View {
             .environmentObject(permissions)
             .background(Color(nsColor: .windowBackgroundColor))
         }
-        .tint(Color(red: 0.20, green: 0.31, blue: 0.82))
         .overlayPreferenceValue(AppTourAnchorKey.self) { anchors in
             GeometryReader { proxy in
                 if showTour,
@@ -184,6 +183,42 @@ struct RootView: View {
 
     private func markTourComplete() {
         UserDefaults.standard.set(true, forKey: "hasCompletedAppTour")
+    }
+}
+
+private struct SidebarNavigationRow: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let item: NavigationItem
+    let isSelected: Bool
+    let select: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: select) {
+            Label(item.rawValue, systemImage: item.icon)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(isSelected ? selectedForeground : Color.primary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(rowBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+        .listRowBackground(Color.clear)
+        .onHover { isHovering = $0 }
+        .accessibilityValue(isSelected ? "Selected" : "")
+    }
+
+    private var rowBackground: Color {
+        if isSelected { return NeloaPalette.accent }
+        if isHovering { return Color.secondary.opacity(0.10) }
+        return .clear
+    }
+
+    private var selectedForeground: Color {
+        colorScheme == .dark ? NeloaPalette.lagoonDeep : .white
     }
 }
 

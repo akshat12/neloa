@@ -17,11 +17,19 @@ enum SelfTests {
         try brandMigrationCheck()
         try localModelDiscoveryCheck()
         try permissionStateCheck()
+        try appearanceCheck()
         try recordingErrorCopyCheck()
         try captureOptionCheck()
         try screenPermissionBranchCheck()
         try appTourStructureCheck()
         try reviewTimelineSelectionCheck()
+    }
+
+    private static func appearanceCheck() throws {
+        try expect(AppAppearance.resolve("system") == .system, "system appearance should round-trip")
+        try expect(AppAppearance.resolve("light") == .light, "light appearance should round-trip")
+        try expect(AppAppearance.resolve("dark") == .dark, "dark appearance should round-trip")
+        try expect(AppAppearance.resolve("unexpected") == .system, "unknown appearance should safely follow the system")
     }
 
     @MainActor

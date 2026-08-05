@@ -328,7 +328,7 @@ private struct RecordingView: View {
             }
 
             RoundedRectangle(cornerRadius: 20)
-                .fill(LinearGradient(colors: [Color.indigo.opacity(0.88), Color.blue.opacity(0.62)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .fill(LinearGradient(colors: [NeloaPalette.lagoonDeep.opacity(0.94), NeloaPalette.lagoon.opacity(0.76)], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .overlay {
                     VStack(spacing: 14) {
                         Image(systemName: "rectangle.inset.filled.and.person.filled")

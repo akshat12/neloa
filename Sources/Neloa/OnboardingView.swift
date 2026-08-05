@@ -26,12 +26,12 @@ struct OnboardingView: View {
     private var welcome: some View {
         ZStack {
             Circle()
-                .fill(Color.indigo.opacity(0.07))
+                .fill(NeloaPalette.lagoon.opacity(0.08))
                 .frame(width: 460, height: 460)
                 .blur(radius: 22)
                 .offset(x: -310, y: -260)
             Circle()
-                .fill(Color.blue.opacity(0.055))
+                .fill(NeloaPalette.lagoonBright.opacity(0.07))
                 .frame(width: 390, height: 390)
                 .blur(radius: 28)
                 .offset(x: 340, y: 290)
@@ -78,7 +78,7 @@ struct OnboardingView: View {
     private var animatedBrand: some View {
         HStack(spacing: 13) {
             NeloaAppIcon(size: 62)
-                .shadow(color: Color.indigo.opacity(0.22), radius: 12, y: 5)
+                .shadow(color: NeloaPalette.lagoon.opacity(0.24), radius: 12, y: 5)
             Text("Neloa")
                 .font(.system(size: 31, weight: .bold, design: .rounded))
                 .fixedSize()

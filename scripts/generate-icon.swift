@@ -26,8 +26,8 @@ context.setShouldAntialias(true)
 
 let tile = NSBezierPath(roundedRect: NSRect(x: 52, y: 52, width: 920, height: 920), xRadius: 210, yRadius: 210)
 let background = NSGradient(colors: [
-    NSColor(calibratedRed: 0.08, green: 0.09, blue: 0.34, alpha: 1),
-    NSColor(calibratedRed: 0.20, green: 0.29, blue: 0.86, alpha: 1)
+    NSColor(calibratedRed: 0.02, green: 0.19, blue: 0.25, alpha: 1),
+    NSColor(calibratedRed: 0.00, green: 0.50, blue: 0.52, alpha: 1)
 ])!
 
 NSGraphicsContext.saveGraphicsState()
@@ -72,8 +72,8 @@ humanHalo.fill()
 
 let human = NSBezierPath(ovalIn: NSRect(x: 446, y: 446, width: 132, height: 132))
 let humanGradient = NSGradient(colors: [
-    NSColor(calibratedRed: 1.0, green: 0.47, blue: 0.35, alpha: 1),
-    NSColor(calibratedRed: 1.0, green: 0.26, blue: 0.28, alpha: 1)
+    NSColor(calibratedRed: 1.0, green: 0.70, blue: 0.36, alpha: 1),
+    NSColor(calibratedRed: 1.0, green: 0.40, blue: 0.38, alpha: 1)
 ])!
 humanGradient.draw(in: human, angle: -90)
 
