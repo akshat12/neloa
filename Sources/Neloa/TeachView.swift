@@ -4,6 +4,7 @@ import SwiftUI
 struct TeachView: View {
     @EnvironmentObject private var teacher: TeachController
     @EnvironmentObject private var store: WorkflowStore
+    @EnvironmentObject private var permissions: PermissionCenter
     @State private var savedMessage = false
 
     var body: some View {
@@ -46,9 +47,16 @@ struct TeachView: View {
                                 TeachOptionToggle(
                                     icon: "rectangle.on.rectangle",
                                     title: "Screen",
-                                    isOn: captureScreenBinding
+                                    isOn: captureScreenBinding,
+                                    permissionStatus: permissions.screen,
+                                    permissionHelp: "Screen Recording permission is required to record the apps you demonstrate. Grant it in System Settings → Privacy & Security → Screen & System Audio Recording."
                                 )
-                                TeachIncludedOption(icon: "hand.tap", title: "Clicks & typing")
+                                TeachIncludedOption(
+                                    icon: "hand.tap",
+                                    title: "Clicks & Typing",
+                                    permissionStatus: permissions.accessibility,
+                                    permissionHelp: "Accessibility permission is required to capture clicks and typing and replay approved actions. Grant it in System Settings → Privacy & Security → Accessibility."
+                                )
                             }
                         }
 
@@ -59,12 +67,16 @@ struct TeachView: View {
                                 TeachOptionToggle(
                                     icon: "mic",
                                     title: "Use my voice",
-                                    isOn: captureMicrophoneBinding
+                                    isOn: captureMicrophoneBinding,
+                                    permissionStatus: voicePermissionStatus,
+                                    permissionHelp: "Microphone and Speech Recognition permissions are required for spoken explanations. Grant them in System Settings → Privacy & Security."
                                 )
                                 TeachOptionToggle(
                                     icon: "speaker.wave.2",
                                     title: "Computer audio",
-                                    isOn: captureSystemAudioBinding
+                                    isOn: captureSystemAudioBinding,
+                                    permissionStatus: permissions.screen,
+                                    permissionHelp: "Screen & System Audio Recording permission is required to capture computer audio. Grant it in System Settings → Privacy & Security."
                                 )
                                 .disabled(!teacher.captureScreen)
                             }
@@ -122,7 +134,7 @@ struct TeachView: View {
         VStack(alignment: .leading, spacing: 10) {
             Label(message, systemImage: "exclamationmark.triangle")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.orange)
+                .foregroundStyle(.red)
             if teacher.requiredPermission == .screenRecording {
                 HStack(spacing: 10) {
                     Button("Open Screen Recording Settings") { openScreenRecordingSettings() }
@@ -137,7 +149,7 @@ struct TeachView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+        .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
     }
 
     private var captureScreenBinding: Binding<Bool> {
@@ -159,6 +171,12 @@ struct TeachView: View {
             get: { teacher.captureSystemAudio },
             set: { teacher.setSystemAudioCaptureEnabled($0) }
         )
+    }
+
+    private var voicePermissionStatus: PermissionCenter.Status {
+        if permissions.microphone == .granted && permissions.speech == .granted { return .granted }
+        if permissions.microphone == .denied || permissions.speech == .denied { return .denied }
+        return .unknown
     }
 
     private func openScreenRecordingSettings() {
@@ -233,32 +251,76 @@ private struct TeachOptionToggle: View {
     let icon: String
     let title: String
     @Binding var isOn: Bool
+    let permissionStatus: PermissionCenter.Status
+    let permissionHelp: String
 
     var body: some View {
-        Toggle(isOn: $isOn) {
-            Label(title, systemImage: icon)
-                .font(.system(size: 13, weight: .medium))
+        Button {
+            isOn.toggle()
+        } label: {
+            TeachCaptureOptionLabel(
+                icon: icon,
+                title: title,
+                isActive: isOn,
+                needsPermission: isOn && permissionStatus != .granted,
+                permissionHelp: permissionHelp
+            )
         }
-        .toggleStyle(.button)
-        .buttonStyle(.bordered)
-        .tint(isOn ? Color.accentColor : .secondary)
+        .buttonStyle(.plain)
         .accessibilityLabel(title)
+        .accessibilityValue(isOn ? "On" : "Off")
     }
 }
 
 private struct TeachIncludedOption: View {
     let icon: String
     let title: String
+    let permissionStatus: PermissionCenter.Status
+    let permissionHelp: String
 
     var body: some View {
-        Label(title, systemImage: icon)
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(Color.accentColor)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 7)
-            .background(Color.accentColor.opacity(0.09), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor.opacity(0.28)))
-            .accessibilityLabel("\(title), included")
+        TeachCaptureOptionLabel(
+            icon: icon,
+            title: title,
+            isActive: true,
+            needsPermission: permissionStatus != .granted,
+            permissionHelp: permissionHelp
+        )
+        .accessibilityLabel("\(title), included")
+    }
+}
+
+private struct TeachCaptureOptionLabel: View {
+    let icon: String
+    let title: String
+    let isActive: Bool
+    let needsPermission: Bool
+    let permissionHelp: String
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Label(title, systemImage: icon)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            if needsPermission {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .accessibilityHidden(true)
+            }
+        }
+        .font(.system(size: 13, weight: .medium))
+        .foregroundStyle(optionColor)
+        .frame(width: 174, alignment: .leading)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .background(optionColor.opacity(isActive ? 0.11 : 0.06), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(optionColor.opacity(isActive ? 0.32 : 0.18)))
+        .contentShape(Rectangle())
+        .help(needsPermission ? permissionHelp : "\(title) is ready.")
+    }
+
+    private var optionColor: Color {
+        if needsPermission { return .red }
+        return isActive ? Color.accentColor : .secondary
     }
 }
 

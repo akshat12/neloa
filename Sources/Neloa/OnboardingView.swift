@@ -88,13 +88,34 @@ struct OnboardingView: View {
     private var permissionSetup: some View {
         VStack(alignment: .leading, spacing: 14) {
             PageHeader(title: "Allow only what you want to teach", subtitle: "These permissions let Neloa observe and replay your demonstration. Recordings stay on this Mac.")
-            permissionRow(icon: "rectangle.on.rectangle", title: "Screen recording", detail: "Records the apps you demonstrate", status: permissions.screen) {
+            permissionRow(
+                icon: "rectangle.on.rectangle",
+                title: "Screen Recording",
+                detail: "Records the apps you demonstrate",
+                status: permissions.screen,
+                permissionHelp: "Neloa needs Screen Recording permission to record the apps you demonstrate.",
+                settingsAnchor: "Privacy_ScreenCapture"
+            ) {
                 permissions.requestScreen()
             }
-            permissionRow(icon: "hand.tap", title: "Clicks, typing & replay", detail: "Learns your demonstration and replays only the actions you approve", status: permissions.accessibility) {
+            permissionRow(
+                icon: "hand.tap",
+                title: "Clicks & Typing",
+                detail: "Learns your demonstration and replays only the actions you approve",
+                status: permissions.accessibility,
+                permissionHelp: "Neloa needs Accessibility permission to capture clicks and typing and replay approved actions.",
+                settingsAnchor: "Privacy_Accessibility"
+            ) {
                 permissions.requestAccessibility()
             }
-            permissionRow(icon: "mic", title: "Microphone & speech", detail: "Understands explanations and spoken run instructions", status: combinedVoiceStatus) {
+            permissionRow(
+                icon: "mic",
+                title: "Microphone & Speech",
+                detail: "Understands explanations and spoken run instructions",
+                status: combinedVoiceStatus,
+                permissionHelp: "Neloa needs Microphone and Speech Recognition permissions for spoken explanations and voice instructions.",
+                settingsAnchor: voiceSettingsAnchor
+            ) {
                 Task { await permissions.requestMicrophoneAndSpeech() }
             }
             HStack {
@@ -118,6 +139,10 @@ struct OnboardingView: View {
         return .unknown
     }
 
+    private var voiceSettingsAnchor: String {
+        permissions.microphone == .denied ? "Privacy_Microphone" : "Privacy_SpeechRecognition"
+    }
+
     private func onboardingFeature(_ icon: String, _ title: String, _ detail: String, index: Int) -> some View {
         VStack(spacing: 9) {
             Image(systemName: icon).font(.system(size: 27, weight: .medium)).foregroundStyle(Color.accentColor)
@@ -131,7 +156,15 @@ struct OnboardingView: View {
         .animation(.spring(response: 0.7, dampingFraction: 0.78).delay(0.22 + Double(index) * 0.09), value: appeared)
     }
 
-    private func permissionRow(icon: String, title: String, detail: String, status: PermissionCenter.Status, action: @escaping () -> Void) -> some View {
+    private func permissionRow(
+        icon: String,
+        title: String,
+        detail: String,
+        status: PermissionCenter.Status,
+        permissionHelp: String,
+        settingsAnchor: String,
+        action: @escaping () -> Void
+    ) -> some View {
         HStack(spacing: 15) {
             Image(systemName: icon).font(.title2).foregroundStyle(Color.accentColor).frame(width: 36)
             VStack(alignment: .leading, spacing: 3) {
@@ -142,18 +175,26 @@ struct OnboardingView: View {
             if status == .granted {
                 Label(status.label, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
             } else {
+                Label(status.label, systemImage: "exclamationmark.circle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.red)
+                    .help(permissionHelp)
                 Button(status == .denied ? "Open Settings" : "Allow") {
                     if status == .denied {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                            NSWorkspace.shared.open(url)
-                        }
+                        openPrivacyPane(settingsAnchor)
                     } else {
                         action()
                     }
                 }
+                .help(permissionHelp)
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 13)
         .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func openPrivacyPane(_ anchor: String) {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") else { return }
+        NSWorkspace.shared.open(url)
     }
 }

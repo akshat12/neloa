@@ -135,6 +135,8 @@ enum SelfTests {
         try expect(PermissionCenter.accessibilityStatus(isTrusted: false, hasRequested: false) == .unknown, "unrequested Accessibility should show Allow")
         try expect(PermissionCenter.accessibilityStatus(isTrusted: false, hasRequested: true) == .denied, "previously requested Accessibility should continue to show Open Settings")
         try expect(PermissionCenter.accessibilityStatus(isTrusted: true, hasRequested: true) == .granted, "trusted Accessibility should show Ready")
+        try expect(PermissionCenter.Status.unknown.label == "Permission required", "unrequested permissions should explain why a feature is unavailable")
+        try expect(PermissionCenter.Status.denied.label == "Permission needed", "denied permissions should remain actionable")
 
         let suiteName = "NeloaSelfTests.Permission.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else { throw Failure(description: "could not create isolated permission defaults") }

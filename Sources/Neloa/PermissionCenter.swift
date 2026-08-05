@@ -15,9 +15,9 @@ final class PermissionCenter: ObservableObject {
 
         var label: String {
             switch self {
-            case .unknown: "Not requested"
+            case .unknown: "Permission required"
             case .granted: "Ready"
-            case .denied: "Needs permission"
+            case .denied: "Permission needed"
             }
         }
     }

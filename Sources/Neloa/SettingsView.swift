@@ -137,7 +137,10 @@ struct SettingsView: View {
                     icon: "rectangle.on.rectangle",
                     status: permissions.screen,
                     statusLabel: permissions.screenRestartNeeded ? "Restart to finish" : nil,
-                    actionTitle: permissions.screenRestartNeeded ? "Restart Neloa" : "Grant"
+                    actionTitle: permissions.screenRestartNeeded ? "Restart Neloa" : "Grant",
+                    permissionHelp: permissions.screenRestartNeeded
+                        ? "macOS granted Screen Recording, but Neloa must restart before it can use the permission."
+                        : "Neloa needs Screen Recording permission to record the apps you demonstrate."
                 ) {
                     if permissions.screenRestartNeeded {
                         restartNeloa()
@@ -146,11 +149,21 @@ struct SettingsView: View {
                     }
                 }
                 Divider()
-                permissionRow("Clicks, typing & replay", icon: "hand.tap", status: permissions.accessibility) {
+                permissionRow(
+                    "Clicks & Typing",
+                    icon: "hand.tap",
+                    status: permissions.accessibility,
+                    permissionHelp: "Neloa needs Accessibility permission to capture clicks and typing and replay approved actions."
+                ) {
                     grantAccessibility()
                 }
                 Divider()
-                permissionRow("Voice", icon: "waveform", status: voicePermissionStatus) {
+                permissionRow(
+                    "Voice",
+                    icon: "waveform",
+                    status: voicePermissionStatus,
+                    permissionHelp: "Neloa needs Microphone and Speech Recognition permissions for spoken explanations and voice instructions."
+                ) {
                     grantVoice()
                 }
             }
@@ -338,6 +351,7 @@ struct SettingsView: View {
         status: PermissionCenter.Status,
         statusLabel: String? = nil,
         actionTitle: String = "Grant",
+        permissionHelp: String,
         grant: @escaping () -> Void
     ) -> some View {
         let appearance = permissionAppearance(status)
@@ -347,13 +361,18 @@ struct SettingsView: View {
                 .frame(width: 22)
             Text(title).font(.system(size: 15, weight: .medium))
             Spacer(minLength: 10)
-            Text(statusLabel ?? appearance.label)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(appearance.color)
+            Label(
+                statusLabel ?? appearance.label,
+                systemImage: status == .granted ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
+            )
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(appearance.color)
+            .help(status == .granted ? "\(title) is ready." : permissionHelp)
             if status != .granted {
                 Button(actionTitle, action: grant)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
+                    .help(permissionHelp)
             }
         }
         .padding(.vertical, 8)
@@ -362,8 +381,8 @@ struct SettingsView: View {
     private func permissionAppearance(_ status: PermissionCenter.Status) -> (label: String, color: Color) {
         switch status {
         case .granted: ("Ready", .green)
-        case .denied: ("Needs permission", .orange)
-        case .unknown: ("Not requested", .secondary)
+        case .denied: ("Permission needed", .red)
+        case .unknown: ("Permission required", .red)
         }
     }
 
