@@ -32,7 +32,24 @@ open dist/Neloa.app
 
 The app asks for Screen Recording, Accessibility, Microphone, and Speech Recognition permissions. Accessibility lets Neloa learn clicks and typing during a demonstration and replay only the actions you approve. macOS may require reopening Neloa after it is granted.
 
-Public releases will be Developer ID signed, notarized by Apple, and published as GitHub Release downloads. See the [distribution plan](docs/DISTRIBUTION.md) for the signing, GitHub Actions, and release checklist.
+## Install an unsigned preview
+
+Unsigned universal ZIPs for Intel and Apple Silicon Macs are published on the GitHub Releases page. Because these previews are not notarized by Apple, macOS will block the first launch until you explicitly approve it:
+
+1. Download the ZIP and move `Neloa.app` to Applications.
+2. Try to open Neloa once, then dismiss the security warning.
+3. Open **System Settings → Privacy & Security**.
+4. Scroll to **Security**, choose **Open Anyway**, authenticate, and confirm **Open**.
+
+Only use a download from the official Neloa repository. Each release includes a `.sha256` file so the download can be checked with `shasum -a 256 -c <checksum-file>`. macOS may ask for Neloa's recording and control permissions again after an update because these previews do not have a stable Apple-issued Developer ID.
+
+Maintainers can reproduce the downloadable artifacts locally with:
+
+```sh
+make unsigned-release RELEASE_VERSION=0.2.17 BUILD_NUMBER=20
+```
+
+See the [distribution plan](docs/DISTRIBUTION.md) for the release workflow, limitations, and the future path to signed builds.
 
 ## Local models
 

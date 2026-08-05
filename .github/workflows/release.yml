@@ -1,0 +1,54 @@
+name: Publish unsigned preview
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Verify release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          plist_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
+          if [[ "$version" != "$plist_version" ]]; then
+            echo "Tag version $version does not match Info.plist version $plist_version" >&2
+            exit 1
+          fi
+
+      - name: Run deterministic checks
+        run: make test
+
+      - name: Build universal unsigned ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          make unsigned-release \
+            RELEASE_VERSION="${GITHUB_REF_NAME#v}" \
+            BUILD_NUMBER="$GITHUB_RUN_NUMBER"
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          zip="dist/Neloa-$version-macOS-universal-unsigned.zip"
+          gh release create "$GITHUB_REF_NAME" \
+            "$zip" "$zip.sha256" \
+            --verify-tag \
+            --generate-notes \
+            --prerelease \
+            --title "Neloa $version (unsigned preview)" \
+            --notes "This is an unsigned developer preview. macOS will require explicit approval in System Settings → Privacy & Security before first launch. See the README for installation steps."
