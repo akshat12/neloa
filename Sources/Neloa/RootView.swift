@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 
+private let sidebarIconColumnWidth: CGFloat = 36
+
 enum NavigationItem: String, CaseIterable, Identifiable {
     case teach = "Teach"
     case automations = "My automations"
@@ -51,6 +53,7 @@ struct RootView: View {
                     }
                 }
                 .listStyle(.sidebar)
+                .contentMargins(.horizontal, 0, for: .scrollContent)
 
                 Button {
                     selection = .settings
@@ -195,19 +198,24 @@ private struct SidebarNavigationRow: View {
 
     var body: some View {
         Button(action: select) {
-            Label(item.rawValue, systemImage: item.icon)
+            HStack(spacing: 10) {
+                Image(systemName: item.icon)
+                    .frame(width: sidebarIconColumnWidth)
+                Text(item.rawValue)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(isSelected ? selectedForeground : Color.primary)
-                .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(rowBackground, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+        .listRowInsets(EdgeInsets(top: 2, leading: 18, bottom: 2, trailing: 18))
         .listRowBackground(Color.clear)
         .onHover { isHovering = $0 }
+        .accessibilityLabel(item.rawValue)
         .accessibilityValue(isSelected ? "Selected" : "")
     }
 
@@ -225,11 +233,11 @@ private struct SidebarNavigationRow: View {
 struct BrandMark: View {
     var body: some View {
         HStack(spacing: 10) {
-            NeloaAppIcon(size: 36)
+            NeloaAppIcon(size: sidebarIconColumnWidth)
             Text("Neloa").font(.system(size: 22, weight: .bold, design: .rounded)).fixedSize()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 18)
+        .padding(.horizontal, 30)
     }
 }
 
