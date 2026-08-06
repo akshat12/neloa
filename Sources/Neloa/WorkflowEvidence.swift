@@ -14,7 +14,7 @@ enum WorkflowEvidenceExtractor {
 
     static func extract(recordingURL: URL, steps: [WorkflowStep]) async throws -> [WorkflowEvidenceFrame] {
         try await Task.detached(priority: .userInitiated) {
-            try extractSynchronously(recordingURL: recordingURL, steps: steps)
+            try await extractFrames(recordingURL: recordingURL, steps: steps)
         }.value
     }
 
@@ -42,7 +42,7 @@ enum WorkflowEvidenceExtractor {
         }
     }
 
-    private static func extractSynchronously(recordingURL: URL, steps: [WorkflowStep]) throws -> [WorkflowEvidenceFrame] {
+    private static func extractFrames(recordingURL: URL, steps: [WorkflowStep]) async throws -> [WorkflowEvidenceFrame] {
         let times = sampleTimes(steps: steps)
         guard !times.isEmpty else { return [] }
 
@@ -57,15 +57,16 @@ enum WorkflowEvidenceExtractor {
         generator.requestedTimeToleranceBefore = CMTime(seconds: 0.12, preferredTimescale: 600)
         generator.requestedTimeToleranceAfter = CMTime(seconds: 0.12, preferredTimescale: 600)
 
+        let requestedTimes = times.map { CMTime(seconds: $0, preferredTimescale: 600) }
         var frames: [WorkflowEvidenceFrame] = []
-        for (index, seconds) in times.enumerated() {
-            var actualTime = CMTime.zero
-            let requestedTime = CMTime(seconds: seconds, preferredTimescale: 600)
-            let image = try generator.copyCGImage(at: requestedTime, actualTime: &actualTime)
-            let imageURL = temporaryDirectory.appendingPathComponent("frame-\(index + 1).png")
+        for await result in generator.images(for: requestedTimes) {
+            guard case .success(requestedTime: let requestedTime, let image, actualTime: let actualTime) = result else {
+                continue
+            }
+            let imageURL = temporaryDirectory.appendingPathComponent("frame-\(frames.count + 1).png")
             try pngData(for: image).write(to: imageURL, options: .atomic)
             frames.append(WorkflowEvidenceFrame(
-                time: actualTime.seconds.isFinite ? actualTime.seconds : seconds,
+                time: actualTime.seconds.isFinite ? actualTime.seconds : requestedTime.seconds,
                 imageURL: imageURL,
                 recognizedText: recognizedText(in: image)
             ))

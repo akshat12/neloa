@@ -16,7 +16,7 @@ struct TeachView: View {
             case .recording:
                 RecordingView(controller: teacher)
             case .building:
-                ProgressView("Turning your demonstration into an automation…")
+                ProgressView(agent.isLearning ? "Looking at the captured actions…" : "Turning your demonstration into an automation…")
                     .controlSize(.large)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .review:
@@ -39,6 +39,10 @@ struct TeachView: View {
                 title: "Let’s get your teaching session ready.",
                 subtitle: "Three quick choices, then show Neloa the task."
             )
+
+            if agent.modelStatus != .ready {
+                visualModelBanner
+            }
 
             HStack(alignment: .top, spacing: 22) {
                 VStack(alignment: .leading, spacing: 16) {
@@ -129,6 +133,65 @@ struct TeachView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private var visualModelBanner: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "eye.circle.fill")
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 42, height: 42)
+                .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Add visual understanding")
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                Text(visualModelBannerMessage)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            visualModelBannerAction
+        }
+        .padding(14)
+        .background(Color.accentColor.opacity(0.055), in: RoundedRectangle(cornerRadius: 15))
+        .overlay(RoundedRectangle(cornerRadius: 15).stroke(Color.accentColor.opacity(0.14)))
+    }
+
+    private var visualModelBannerMessage: String {
+        switch agent.modelStatus {
+        case .notInstalled:
+            "Download Qwen once so Neloa can understand buttons, fields, and narrated rules."
+        case .downloading(let progress):
+            "Downloading privately on this Mac · \(Int(progress * 100))%"
+        case .loading, .checking:
+            "Preparing the private visual model…"
+        case .failed(let message), .unavailable(let message):
+            message
+        case .ready:
+            "Visual understanding is ready."
+        }
+    }
+
+    @ViewBuilder
+    private var visualModelBannerAction: some View {
+        switch agent.modelStatus {
+        case .notInstalled:
+            Button("Download · \(LocalModelPaths.downloadSizeLabel)") {
+                Task { await agent.setupModel() }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        case .failed:
+            Button("Try again") { Task { await agent.setupModel() } }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+        case .downloading(let progress):
+            ProgressView(value: progress).frame(width: 110)
+        case .checking, .loading:
+            ProgressView().controlSize(.small)
+        case .unavailable, .ready:
+            EmptyView()
+        }
     }
 
     private func permissionMessage(_ message: String) -> some View {

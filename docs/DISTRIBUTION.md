@@ -1,14 +1,14 @@
 # macOS distribution plan
 
-Last reviewed: 2026-08-04
+Last reviewed: 2026-08-06
 
 ## Current decision: unsigned GitHub previews
 
-Neloa will initially ship as an unsigned universal ZIP attached to each GitHub Release. This avoids Apple Developer Program fees while the product is in preview. It is a deliberate tradeoff: GitHub can build the app, but it cannot give Neloa an Apple-issued Developer ID or notarize it.
+Neloa will initially ship as an unsigned Apple silicon ZIP attached to each GitHub Release. This avoids Apple Developer Program fees while the product is in preview. It is a deliberate tradeoff: GitHub can build the app, but it cannot give Neloa an Apple-issued Developer ID or notarize it.
 
 Each release contains:
 
-- `Neloa-<version>-macOS-universal-unsigned.zip`, containing an ad-hoc-signed app for Apple Silicon and Intel Macs.
+- `Neloa-<version>-macOS-apple-silicon-unsigned.zip`, containing an ad-hoc-signed app for Apple silicon Macs with 16 GB or more memory.
 - A matching `.sha256` checksum.
 - Release notes that prominently identify the build as an unsigned preview.
 
@@ -39,11 +39,11 @@ make unsigned-release RELEASE_VERSION=0.2.17 BUILD_NUMBER=20
 
 The release script:
 
-1. Builds Neloa for `arm64` and `x86_64` with a macOS 15 deployment target.
-2. Combines both executables into a universal binary.
-3. Builds the app bundle with the checked-in icon, property list, and entitlements.
+1. Verifies that full Xcode and its Metal compiler are available. Xcode is free and does not require a paid developer membership.
+2. Builds Neloa for `arm64` with a macOS 15 deployment target and the embedded MLX/Qwen integration enabled.
+3. Copies Swift package resource bundles and Metal libraries into the app bundle alongside the checked-in icon, property list, and entitlements.
 4. Forces ad-hoc signing, even if the developer has a local signing identity.
-5. Verifies the signature and both architectures.
+5. Verifies the signature and Apple silicon architecture.
 6. Creates a ZIP with `ditto`, computes its SHA-256 checksum, extracts it into a temporary directory, verifies the extracted app again, and runs its self-tests.
 
 The downloadable ZIP and checksum are placed in `dist/`. The ad-hoc app bundle is assembled under `.build/unsigned-release/staging/`; it never replaces `dist/Neloa.app`, which is the stable locally signed development build. The packaging script fingerprints an existing local bundle before release assembly and fails if that fingerprint changes. This separation matters because macOS privacy grants are tied to an app's signing identity. Replacing the development app with the ad-hoc release bundle makes an enabled Screen Recording switch appear ineffective to the running app.
@@ -52,7 +52,7 @@ Version tags must match `CFBundleShortVersionString` in `Resources/Info.plist`.
 
 ## GitHub release automation
 
-`.github/workflows/release.yml` runs when a `v*` tag is pushed. It verifies the version, runs deterministic checks, packages the universal ZIP, and creates a GitHub Release. Public repositories can use [standard GitHub-hosted runners for free](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+`.github/workflows/release.yml` runs when a `v*` tag is pushed. It verifies the version, runs deterministic checks, packages the Apple silicon ZIP with Qwen support, and creates a GitHub Release. Public repositories can use [standard GitHub-hosted runners for free](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 
 A typical release is:
 
@@ -65,9 +65,10 @@ Before tagging:
 
 - Ensure `CFBundleShortVersionString` and `CFBundleVersion` are updated.
 - Run `make test` and `make agent-test` on a configured Mac.
+- Run `make build-mlx` with full Xcode to verify the direct Qwen/MLX integration.
 - Review privacy-sensitive changes and the requested entitlements.
 - Test the ZIP on a Mac or macOS account that has not run a development build.
-- Confirm the icon, first-launch warning, permission flow, recording, timeline review, and replay.
+- Confirm the icon, first-launch warning, permission flow, model download, visual learning, timeline review, and replay on a 16 GB Apple silicon Mac.
 
 The workflow requires only the repository-provided GitHub token. There are no Apple certificates, notarization keys, or release secrets.
 

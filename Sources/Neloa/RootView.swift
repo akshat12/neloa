@@ -32,6 +32,7 @@ enum NavigationItem: String, CaseIterable, Identifiable {
 struct RootView: View {
     @EnvironmentObject private var store: WorkflowStore
     @EnvironmentObject private var permissions: PermissionCenter
+    @EnvironmentObject private var agent: LocalAgentService
     @State private var selection: NavigationItem? = .teach
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     @State private var choseInitialDestination = false
@@ -103,7 +104,7 @@ struct RootView: View {
             }
         }
         .sheet(isPresented: $showOnboarding) {
-            OnboardingView(permissions: permissions) { shouldStartTour in
+            OnboardingView(permissions: permissions, agent: agent) { shouldStartTour in
                 UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
                 showOnboarding = false
                 if shouldStartTour {

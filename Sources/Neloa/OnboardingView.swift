@@ -3,6 +3,7 @@ import SwiftUI
 
 struct OnboardingView: View {
     @ObservedObject var permissions: PermissionCenter
+    @ObservedObject var agent: LocalAgentService
     let finish: (Bool) -> Void
     @State private var page = 0
     @State private var appeared = false
@@ -11,8 +12,10 @@ struct OnboardingView: View {
         ZStack {
             if page == 0 {
                 welcome.transition(.asymmetric(insertion: .move(edge: .leading).combined(with: .opacity), removal: .opacity))
-            } else {
+            } else if page == 1 {
                 permissionSetup.transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
+            } else {
+                modelSetup.transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
             }
         }
         .frame(width: 760, height: 640)
@@ -124,13 +127,116 @@ struct OnboardingView: View {
                 }
                 Spacer()
                 Button("Back") { withAnimation { page = 0 } }
-                Button("Skip tour") { finish(false) }
-                Button("Start guided tour") { finish(true) }
+                Button("Continue") { page = 2 }
                     .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
             }
             .padding(.top, 8)
         }
         .padding(34)
+    }
+
+    private var modelSetup: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            PageHeader(
+                title: "Give Neloa visual understanding",
+                subtitle: "A one-time local model download helps Neloa understand what each captured click and field means."
+            )
+
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 18) {
+                    Image(systemName: "eye.circle.fill")
+                        .font(.system(size: 38, weight: .medium))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 72, height: 72)
+                        .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 20))
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(LocalModelPaths.displayName)
+                            .font(.system(size: 21, weight: .semibold, design: .rounded))
+                        Text("\(LocalModelPaths.downloadSizeLabel) · Apple silicon · 16 GB or more")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    onboardingModelBadge
+                }
+
+                Divider()
+                onboardingModelStatus
+
+                if case .downloading(let progress) = agent.modelStatus {
+                    VStack(alignment: .leading, spacing: 7) {
+                        ProgressView(value: progress)
+                        Text("\(Int(progress * 100))% downloaded")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Label("Downloaded and run entirely inside Neloa—no account, Terminal, Ollama, local server, or cloud upload.", systemImage: "lock.shield.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(22)
+            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 18))
+
+            Spacer()
+            HStack {
+                Button("Back") { page = 1 }
+                Spacer()
+                Button("Skip tour") { finish(false) }
+                Button("Start guided tour") { finish(true) }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(34)
+    }
+
+    @ViewBuilder
+    private var onboardingModelStatus: some View {
+        switch agent.modelStatus {
+        case .notInstalled:
+            HStack {
+                Text("Recommended for accurate workflow names, action labels, and narrated rules.")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Download model") { Task { await agent.setupModel() } }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
+        case .checking:
+            Label("Checking the model…", systemImage: "arrow.triangle.2.circlepath")
+                .foregroundStyle(.secondary)
+        case .downloading:
+            Label("Downloading in the background. You can continue using Neloa.", systemImage: "arrow.down.circle.fill")
+                .foregroundStyle(Color.accentColor)
+        case .loading:
+            Label("Loading the model into memory…", systemImage: "memorychip")
+                .foregroundStyle(Color.accentColor)
+        case .ready:
+            Label("Visual understanding is ready on this Mac.", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        case .failed(let message):
+            HStack {
+                Label(message, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
+                Spacer()
+                Button("Try again") { Task { await agent.setupModel() } }
+                    .buttonStyle(.borderedProminent)
+            }
+        case .unavailable(let reason):
+            Label(reason, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+        }
+    }
+
+    private var onboardingModelBadge: some View {
+        let ready = agent.modelStatus == .ready
+        return Label(ready ? "Ready" : "Optional", systemImage: ready ? "checkmark.circle.fill" : "sparkles")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(ready ? Color.green : Color.accentColor)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background((ready ? Color.green : Color.accentColor).opacity(0.1), in: Capsule())
     }
 
     private var combinedVoiceStatus: PermissionCenter.Status {

@@ -59,6 +59,17 @@ fi
 cp "$PROJECT_DIR/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 cp "$EXECUTABLE_PATH" "$APP_DIR/Contents/MacOS/Neloa"
 chmod 755 "$APP_DIR/Contents/MacOS/Neloa"
+
+EXECUTABLE_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "$EXECUTABLE_PATH")" && pwd)
+for RESOURCE_BUNDLE in "$EXECUTABLE_DIRECTORY"/*.bundle; do
+    [ -d "$RESOURCE_BUNDLE" ] || continue
+    cp -R "$RESOURCE_BUNDLE" "$APP_DIR/Contents/Resources/"
+done
+for METAL_LIBRARY in "$EXECUTABLE_DIRECTORY"/*.metallib; do
+    [ -f "$METAL_LIBRARY" ] || continue
+    cp "$METAL_LIBRARY" "$APP_DIR/Contents/Resources/"
+done
+
 find "$APP_DIR/Contents/MacOS" -maxdepth 1 -type f -name '*.cstemp' -delete
 touch "$APP_DIR"
 LOCAL_SIGN_IDENTITY=${NELOA_LOCAL_CODE_SIGN_IDENTITY:-Neloa Local Development}

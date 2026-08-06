@@ -29,7 +29,7 @@ jobs:
       - name: Run deterministic checks
         run: make test
 
-      - name: Build universal unsigned ZIP
+      - name: Build Apple silicon unsigned ZIP
         shell: bash
         run: |
           set -euo pipefail
@@ -44,7 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
-          zip="dist/Neloa-$version-macOS-universal-unsigned.zip"
+          zip="dist/Neloa-$version-macOS-apple-silicon-unsigned.zip"
           gh release create "$GITHUB_REF_NAME" \
             "$zip" "$zip.sha256" \
             --verify-tag \

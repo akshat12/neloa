@@ -7,19 +7,20 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 - Records the primary display and optional system audio using ScreenCaptureKit.
 - Records and transcribes microphone narration using Apple's on-device speech recognition when available.
 - Learns mouse clicks, typed text, key presses, and app changes.
+- Samples salient video frames, reads visible interface text with Apple Vision, and uses an in-app Qwen3-VL model to label captured actions and narrated rules.
 - Turns the demonstration into an editable, locally saved workflow.
 - Lets users add typed or spoken instructions at any recording timestamp: approval wording creates a hard gate, while other free-form guidance becomes an explicit review checkpoint.
 - Replays the workflow under user supervision with the signature “Again, but…” interaction.
 - Accepts instructions such as “Replace June with July” or “use amount $750.”
 - Lets each change be used once, saved as a variant, or made the new default.
-- Uses Apple's on-device Foundation Model on macOS 26, with local Qwen3-VL through Ollama and a narrow built-in planner as fallbacks.
+- Uses one primary local model—Qwen3-VL 4B at 4-bit—for visual workflow learning and custom run planning, with Apple's on-device model and a narrow deterministic planner as safe fallbacks.
 - Pauses at spoken approval rules such as “always ask me before sending.”
 - Keeps a local activity receipt showing what ran and what changed.
 - Uses the Lagoon visual identity with persistent System, Light, and Dark appearance choices.
 
 ## Build and run
 
-Requirements: macOS 15 or newer and the Apple Command Line Tools (full Xcode also works).
+Requirements for the complete app: macOS 15 or newer, Apple silicon, 16 GB of memory, and full Xcode. Xcode is free; an Apple Developer Program membership is not required. The Metal compiler included with Xcode builds the local ML runtime.
 
 ```sh
 make setup-signing
@@ -31,11 +32,13 @@ open dist/Neloa.app
 
 `make setup-signing` is a one-time development setup that creates a local signing identity in your login Keychain. The first signed build may ask for your Mac login password; choose **Always Allow** so later builds can sign without prompting. Keeping the same identity across builds lets macOS retain Neloa’s privacy permissions. `make test` runs deterministic workflow checks. `make agent-test` makes a real request to Apple's on-device model and verifies the resulting executable change plan.
 
+For UI work on a Mac that only has the Apple Command Line Tools, `make basic-app` creates a build without Qwen. Complete local builds and GitHub releases always enable Qwen.
+
 The app asks for Screen Recording, Accessibility, Microphone, and Speech Recognition permissions. Accessibility lets Neloa learn clicks and typing during a demonstration and replay only the actions you approve. macOS may require reopening Neloa after it is granted.
 
 ## Install an unsigned preview
 
-Unsigned universal ZIPs for Intel and Apple Silicon Macs are published on the GitHub Releases page. Because these previews are not notarized by Apple, macOS will block the first launch until you explicitly approve it:
+Unsigned Apple silicon ZIPs are published on the GitHub Releases page. Because these previews are not notarized by Apple, macOS will block the first launch until you explicitly approve it:
 
 1. Download the ZIP and move `Neloa.app` to Applications.
 2. Try to open Neloa once, then dismiss the security warning.
@@ -54,19 +57,13 @@ Release packaging stages its ad-hoc app separately and does not overwrite `dist/
 
 See the [distribution plan](docs/DISTRIBUTION.md) for the release workflow, limitations, and the future path to signed builds.
 
-## Local models
+## Local model
 
-On macOS 26 with Apple Intelligence enabled, Neloa uses Apple's on-device Foundation Model automatically. No model installation is needed.
+Neloa offers a one-click, resumable first-time download of Qwen3-VL 4B Instruct (4-bit), approximately 3.1 GB. It is stored under Neloa's Application Support directory and runs directly on the Apple GPU through MLX Swift. There is no Ollama installation, Terminal command, local server, account, or cloud API.
 
-For Macs where that model is unavailable, optionally install a Qwen fallback:
+The model receives only a small set of salient recording frames, locally recognized interface text, captured actions, and narration. Model output may improve action names and add clearly narrated rules, but it cannot add replayable clicks or keystrokes: Neloa preserves the deterministic capture as the execution authority. The model can be removed from Settings without deleting automations or recordings.
 
-Install [Ollama](https://ollama.com), then run:
-
-```sh
-ollama pull qwen3-vl:4b
-```
-
-Neloa connects only to `http://127.0.0.1:11434`. The model name can be changed in Settings. Without Ollama, explicit date, amount, percentage, quoted-value, and “replace X with Y” variations continue to work locally.
+If the model is skipped or unavailable, Neloa still records and replays captured actions, handles explicit value replacements locally, and can use Apple's on-device language model as a planning fallback on supported macOS versions.
 
 ## Privacy and safety
 
