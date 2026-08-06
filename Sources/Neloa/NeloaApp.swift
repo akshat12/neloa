@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 final class NeloaAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        WorkflowEvidenceExtractor.purgeStaleTemporaryEvidence()
         guard let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
               let icon = NSImage(contentsOf: iconURL) else { return }
         NSApplication.shared.applicationIconImage = icon
@@ -78,6 +79,18 @@ enum NeloaMain {
                     Foundation.exit(0)
                 } catch {
                     fputs("Neloa on-device agent smoke test failed: \(error)\n", stderr)
+                    Foundation.exit(1)
+                }
+            }
+            dispatchMain()
+        } else if CommandLine.arguments.contains("--qwen-smoke-test") {
+            Task { @MainActor in
+                do {
+                    try await SelfTests.qwenSmokeTest()
+                    print("Neloa Qwen visual model smoke test passed")
+                    Foundation.exit(0)
+                } catch {
+                    fputs("Neloa Qwen visual model smoke test failed: \(error)\n", stderr)
                     Foundation.exit(1)
                 }
             }

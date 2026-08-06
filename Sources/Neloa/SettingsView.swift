@@ -15,9 +15,15 @@ struct SettingsView: View {
                 intelligenceCard
                 appearanceCard
 
-                HStack(alignment: .top, spacing: 18) {
-                    permissionsCard.frame(maxWidth: .infinity)
-                    privacyCard.frame(maxWidth: .infinity)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 18) {
+                        permissionsCard.frame(minWidth: 450, maxWidth: .infinity)
+                        privacyCard.frame(minWidth: 360, maxWidth: .infinity)
+                    }
+                    VStack(spacing: 18) {
+                        permissionsCard
+                        privacyCard
+                    }
                 }
 
                 localModelCard
@@ -115,7 +121,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("On-device intelligence")
                         .font(.system(size: 19, weight: .semibold, design: .rounded))
-                    Text("Neloa understands recordings and plans changes without sending them to a cloud model.")
+                    Text(intelligenceDescription)
                         .font(.system(size: 15))
                         .foregroundStyle(.secondary)
                 }
@@ -254,6 +260,8 @@ struct SettingsView: View {
                 if case .downloading(let progress) = agent.modelStatus {
                     VStack(alignment: .leading, spacing: 6) {
                         ProgressView(value: progress)
+                            .accessibilityLabel("Model download progress")
+                            .accessibilityValue("\(Int(progress * 100)) percent")
                         Text("\(Int(progress * 100))% · Keep Neloa open while the first-time download finishes")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
@@ -262,7 +270,7 @@ struct SettingsView: View {
 
                 HStack(spacing: 10) {
                     modelAction
-                    if agent.modelStatus == .ready {
+                    if canRemoveModel {
                         Button("Remove model…", role: .destructive) { confirmRemoveModel = true }
                             .buttonStyle(.bordered)
                             .controlSize(.large)
@@ -300,6 +308,9 @@ struct SettingsView: View {
         case .loading:
             Label("Loading the local model into memory…", systemImage: "memorychip")
                 .foregroundStyle(Color.accentColor)
+        case .removing:
+            Label("Finishing up…", systemImage: "hourglass")
+                .foregroundStyle(Color.accentColor)
         case .ready:
             Label("Ready to understand recordings and plan custom runs privately.", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
@@ -322,11 +333,15 @@ struct SettingsView: View {
             Button("Try again") { Task { await agent.setupModel() } }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+        case .downloading, .loading:
+            Button("Cancel download") { Task { await agent.cancelModelSetup() } }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
         case .checking:
             Button("Load model") { Task { await agent.setupModel() } }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-        case .unavailable, .downloading, .loading, .ready:
+        case .unavailable, .removing, .ready:
             EmptyView()
         }
     }
@@ -338,6 +353,7 @@ struct SettingsView: View {
         case .notInstalled: "Not installed"
         case .downloading: "Downloading"
         case .loading: "Loading"
+        case .removing: "Working"
         case .ready: "Ready"
         case .failed: "Needs attention"
         }
@@ -347,13 +363,28 @@ struct SettingsView: View {
         switch agent.modelStatus {
         case .ready: .green
         case .failed, .unavailable: .orange
-        case .downloading, .loading: Color.accentColor
+        case .downloading, .loading, .removing: Color.accentColor
         case .checking, .notInstalled: .secondary
         }
     }
 
     private var consumerStatus: String {
         agent.modelStatus == .ready ? "Ready" : "Basic"
+    }
+
+    private var canRemoveModel: Bool {
+        guard LocalModelPaths.hasCachedFiles else { return false }
+        return switch agent.modelStatus {
+        case .downloading, .loading, .removing: false
+        default: true
+        }
+    }
+
+    private var intelligenceDescription: String {
+        if agent.modelStatus == .ready {
+            return "Neloa interprets recordings and plans changes on this Mac without using a cloud model."
+        }
+        return "Basic mode records and replays workflows. The optional local model also interprets what appears on screen."
     }
 
     private var voicePermissionStatus: PermissionCenter.Status {

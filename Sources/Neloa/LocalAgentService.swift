@@ -12,6 +12,7 @@ final class LocalAgentService: ObservableObject {
 
     let hardware: LocalModelHardware
     private let qwen = QwenRuntime()
+    private var setupTask: Task<Bool, Never>?
 
     init(hardware: LocalModelHardware = .current) {
         self.hardware = hardware
@@ -36,6 +37,12 @@ final class LocalAgentService: ObservableObject {
     }
 
     func refreshModelStatus() {
+        switch modelStatus {
+        case .downloading, .loading, .removing, .ready, .failed:
+            return
+        case .checking, .notInstalled, .unavailable:
+            break
+        }
         if let issue = hardware.eligibilityIssue {
             modelStatus = .unavailable(issue)
         } else if !Self.isQwenRuntimeBundled {
@@ -50,13 +57,27 @@ final class LocalAgentService: ObservableObject {
     }
 
     func setupModel() async {
+        if let setupTask {
+            _ = await setupTask.value
+            return
+        }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return false }
+            return await self.performModelSetup()
+        }
+        setupTask = task
+        _ = await task.value
+        setupTask = nil
+    }
+
+    private func performModelSetup() async -> Bool {
         guard hardware.eligibilityIssue == nil else {
             modelStatus = .unavailable(hardware.eligibilityIssue ?? "This Mac is not supported.")
-            return
+            return false
         }
         guard Self.isQwenRuntimeBundled else {
             modelStatus = .unavailable("This development build does not include the Apple GPU model runtime.")
-            return
+            return false
         }
 
         let wasInstalled = LocalModelPaths.isInstalled
@@ -66,23 +87,61 @@ final class LocalAgentService: ObservableObject {
             try await qwen.load { [weak self] progress in
                 Task { @MainActor in
                     guard let self, !wasInstalled else { return }
-                    self.modelStatus = .downloading(min(max(progress, 0), 1))
+                    let progress = min(max(progress, 0), 1)
+                    self.modelStatus = progress >= 0.999 ? .loading : .downloading(progress)
                 }
             }
             modelStatus = .ready
             status = "Qwen visual intelligence ready on this Mac"
+            return true
         } catch {
             LocalModelPaths.clearInstallMarker()
-            modelStatus = .failed(error.localizedDescription)
+            if error is CancellationError || Task.isCancelled {
+                modelStatus = .notInstalled
+                status = "Model download paused; Neloa will resume it next time"
+                return false
+            }
+            modelStatus = .failed(friendlyModelError(error))
             status = "Local visual intelligence needs attention"
+            return false
         }
     }
 
-    func removeModel() async {
-        await qwen.unload()
-        try? FileManager.default.removeItem(at: LocalModelPaths.modelsDirectory)
+    func cancelModelSetup() async {
+        guard modelStatus.isPreparing else { return }
+        modelStatus = .removing
+        status = "Pausing the model download…"
+        setupTask?.cancel()
+        await qwen.cancelLoad()
+        if let setupTask {
+            _ = await setupTask.value
+        }
+        setupTask = nil
+        LocalModelPaths.clearInstallMarker()
         modelStatus = .notInstalled
-        status = "Local visual model removed"
+        status = "Model download paused; Neloa will resume it next time"
+    }
+
+    func removeModel() async {
+        modelStatus = .removing
+        status = "Removing the local visual model…"
+        setupTask?.cancel()
+        await qwen.cancelLoad()
+        if let setupTask {
+            _ = await setupTask.value
+        }
+        setupTask = nil
+        await qwen.unload()
+        do {
+            if FileManager.default.fileExists(atPath: LocalModelPaths.modelsDirectory.path) {
+                try FileManager.default.removeItem(at: LocalModelPaths.modelsDirectory)
+            }
+            modelStatus = .notInstalled
+            status = "Local visual model removed"
+        } catch {
+            modelStatus = .failed("Neloa could not remove the model: \(error.localizedDescription)")
+            status = "Local visual intelligence needs attention"
+        }
     }
 
     func learnWorkflow(candidate: Workflow, recordingURL: URL?) async -> Workflow {
@@ -157,6 +216,10 @@ final class LocalAgentService: ObservableObject {
 
     private func ensureQwenReady() async -> Bool {
         if modelStatus == .ready { return true }
+        if modelStatus.isPreparing {
+            await setupModel()
+            return modelStatus == .ready
+        }
         guard LocalModelPaths.isInstalled else { return false }
         await setupModel()
         return modelStatus == .ready
@@ -195,14 +258,15 @@ final class LocalAgentService: ObservableObject {
     }
 
     private func validatedPlan(workflow: Workflow, instruction: String, response: AgentPlanResponse) -> RunPlan {
+        let grounded = RunPlanner.plan(workflow: workflow, instruction: instruction)
+        if !grounded.changes.isEmpty {
+            var verified = grounded
+            verified.summary = "\(String(response.summary.prefix(180))) Verified against your requested value."
+            return verified
+        }
+
         let agentPlan = RunPlanner.plan(workflow: workflow, instruction: instruction, agentResponse: response)
         guard agentPlan.changes.isEmpty else { return agentPlan }
-
-        var grounded = RunPlanner.plan(workflow: workflow, instruction: instruction)
-        if !grounded.changes.isEmpty {
-            grounded.summary = "\(response.summary) Verified against the requested value."
-            return grounded
-        }
         return agentPlan
     }
 
@@ -213,5 +277,21 @@ final class LocalAgentService: ObservableObject {
         }
     }
 
+    private func friendlyModelError(_ error: Error) -> String {
+        if let urlError = error as? URLError, urlError.code == .timedOut {
+            return "The download timed out. Try again to resume where it stopped."
+        }
+        return "Neloa couldn't prepare the model. Try again, or reset the download below."
+    }
+
     enum AgentError: Error { case badResponse }
+}
+
+private extension LocalModelStatus {
+    var isPreparing: Bool {
+        switch self {
+        case .downloading, .loading: true
+        default: false
+        }
+    }
 }

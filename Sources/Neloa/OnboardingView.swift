@@ -155,6 +155,9 @@ struct OnboardingView: View {
                         Text("\(LocalModelPaths.downloadSizeLabel) · Apple silicon · 16 GB or more")
                             .font(.system(size: 15))
                             .foregroundStyle(.secondary)
+                        Text("Basic mode still records and replays workflows on other supported Macs.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
                     }
                     Spacer()
                     onboardingModelBadge
@@ -166,6 +169,8 @@ struct OnboardingView: View {
                 if case .downloading(let progress) = agent.modelStatus {
                     VStack(alignment: .leading, spacing: 7) {
                         ProgressView(value: progress)
+                            .accessibilityLabel("Model download progress")
+                            .accessibilityValue("\(Int(progress * 100)) percent")
                         Text("\(Int(progress * 100))% downloaded")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(.secondary)
@@ -209,10 +214,19 @@ struct OnboardingView: View {
             Label("Checking the model…", systemImage: "arrow.triangle.2.circlepath")
                 .foregroundStyle(.secondary)
         case .downloading:
-            Label("Downloading in the background. You can continue using Neloa.", systemImage: "arrow.down.circle.fill")
-                .foregroundStyle(Color.accentColor)
+            HStack {
+                Label("Downloading in the background. If you teach now, Neloa will wait here before building the automation.", systemImage: "arrow.down.circle.fill")
+                    .foregroundStyle(Color.accentColor)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Cancel") { Task { await agent.cancelModelSetup() } }
+                    .buttonStyle(.bordered)
+            }
         case .loading:
             Label("Loading the model into memory…", systemImage: "memorychip")
+                .foregroundStyle(Color.accentColor)
+        case .removing:
+            Label("Finishing up…", systemImage: "hourglass")
                 .foregroundStyle(Color.accentColor)
         case .ready:
             Label("Visual understanding is ready on this Mac.", systemImage: "checkmark.circle.fill")

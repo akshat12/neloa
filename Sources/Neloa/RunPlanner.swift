@@ -33,12 +33,22 @@ enum RunPlanner {
                       let index = steps.firstIndex(where: { $0.id == id }),
                       let before = steps[index].text,
                       steps[index].kind == .typeText else { continue }
-                guard replacement.text != before else { continue }
-                steps[index].text = replacement.text
-                steps[index].title = "Type \(short(replacement.text))"
-                changes.append(PlannedChange(stepID: id, before: before, after: replacement.text, reason: replacement.reason))
+                guard let safeText = safeAgentText(replacement.text), safeText != before else { continue }
+                steps[index].text = safeText
+                steps[index].title = "Type \(short(safeText))"
+                changes.append(PlannedChange(
+                    stepID: id,
+                    before: before,
+                    after: safeText,
+                    reason: String(replacement.reason.prefix(240))
+                ))
             }
-            return RunPlan(instruction: cleanInstruction, steps: steps, changes: changes, summary: agentResponse.summary)
+            return RunPlan(
+                instruction: cleanInstruction,
+                steps: steps,
+                changes: changes,
+                summary: String(agentResponse.summary.prefix(240))
+            )
         }
 
         if let replacement = explicitReplacement(in: cleanInstruction) {
@@ -123,6 +133,14 @@ enum RunPlanner {
 
     private static func short(_ text: String) -> String {
         text.count > 28 ? "\(text.prefix(28))…" : text
+    }
+
+    private static func safeAgentText(_ text: String) -> String? {
+        guard !text.isEmpty, text.count <= 500 else { return nil }
+        let disallowed = text.unicodeScalars.contains {
+            CharacterSet.controlCharacters.contains($0) && $0 != "\n" && $0 != "\t"
+        }
+        return disallowed ? nil : text
     }
 
     private static func jsonEscape(_ value: String) -> String {

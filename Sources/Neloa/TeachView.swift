@@ -163,7 +163,7 @@ struct TeachView: View {
             "Download Qwen once so Neloa can understand buttons, fields, and narrated rules."
         case .downloading(let progress):
             "Downloading privately on this Mac · \(Int(progress * 100))%"
-        case .loading, .checking:
+        case .loading, .checking, .removing:
             "Preparing the private visual model…"
         case .failed(let message), .unavailable(let message):
             message
@@ -186,8 +186,16 @@ struct TeachView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
         case .downloading(let progress):
-            ProgressView(value: progress).frame(width: 110)
-        case .checking, .loading:
+            HStack(spacing: 8) {
+                ProgressView(value: progress)
+                    .frame(width: 90)
+                    .accessibilityLabel("Model download progress")
+                    .accessibilityValue("\(Int(progress * 100)) percent")
+                Button("Cancel") { Task { await agent.cancelModelSetup() } }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            }
+        case .checking, .loading, .removing:
             ProgressView().controlSize(.small)
         case .unavailable, .ready:
             EmptyView()

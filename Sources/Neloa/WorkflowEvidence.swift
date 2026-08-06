@@ -12,6 +12,23 @@ struct WorkflowEvidenceFrame: Sendable {
 enum WorkflowEvidenceExtractor {
     static let maximumFrameCount = 8
 
+    static func purgeStaleTemporaryEvidence(olderThan age: TimeInterval = 60 * 60) {
+        let fileManager = FileManager.default
+        let temporaryDirectory = fileManager.temporaryDirectory
+        guard let contents = try? fileManager.contentsOfDirectory(
+            at: temporaryDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        let cutoff = Date().addingTimeInterval(-age)
+        for url in contents where url.lastPathComponent.hasPrefix("NeloaEvidence-") {
+            let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+            if modified.map({ $0 < cutoff }) ?? true {
+                try? fileManager.removeItem(at: url)
+            }
+        }
+    }
+
     static func extract(recordingURL: URL, steps: [WorkflowStep]) async throws -> [WorkflowEvidenceFrame] {
         try await Task.detached(priority: .userInitiated) {
             try await extractFrames(recordingURL: recordingURL, steps: steps)

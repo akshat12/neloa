@@ -16,6 +16,7 @@ enum SelfTests {
         try skillExportCheck()
         try brandMigrationCheck()
         try localModelEligibilityCheck()
+        try localModelCacheValidationCheck()
         try workflowLearningCheck()
         try permissionStateCheck()
         try appearanceCheck()
@@ -25,6 +26,8 @@ enum SelfTests {
         try appTourStructureCheck()
         try reviewTimelineSelectionCheck()
         try workflowInstructionCheck()
+        try agentResponseSafetyCheck()
+        try staleEvidenceCleanupCheck()
     }
 
     private static func appearanceCheck() throws {
@@ -47,6 +50,23 @@ enum SelfTests {
         let teacher = TeachController()
         teacher.setScreenCaptureEnabled(false)
         try expect(!teacher.captureScreen && !teacher.captureSystemAudio, "turning off screen capture should also turn off computer audio")
+    }
+
+    @MainActor
+    static func qwenSmokeTest() async throws {
+        guard LocalAgentService.isQwenRuntimeBundled else {
+            throw Failure(description: "Qwen smoke test requires NELOA_ENABLE_MLX=1")
+        }
+        let agent = LocalAgentService()
+        print("Preparing \(LocalModelPaths.displayName); the first run downloads \(LocalModelPaths.downloadSizeLabel)…")
+        await agent.setupModel()
+        try expect(agent.modelStatus == .ready, "Qwen should load successfully; status was: \(agent.modelStatus)")
+
+        let input = WorkflowStep(kind: .typeText, title: "Type June", time: 0, text: "June")
+        let workflow = Workflow(name: "Monthly report", transcript: "", steps: [input])
+        let plan = await agent.makePlan(workflow: workflow, instruction: "Replace June with August")
+        try expect(agent.status.contains("Qwen"), "Qwen should be the primary run planner; status was: \(agent.status)")
+        try expect(plan.steps.first?.text == "August", "Qwen plan should preserve the verified June to August replacement")
     }
 
     private static func compilationCheck() throws {
@@ -81,6 +101,36 @@ enum SelfTests {
         let workflow = Workflow(name: "Expense", transcript: "", steps: [amount, note])
         let plan = RunPlanner.plan(workflow: workflow, instruction: "Run it using amount $750")
         try expect(plan.steps[0].text == "$750" && plan.changes.first?.before == "$500", "amount variation should target numeric input")
+    }
+
+    private static func agentResponseSafetyCheck() throws {
+        let input = WorkflowStep(kind: .typeText, title: "Type month", time: 0, text: "June")
+        let workflow = Workflow(name: "Report", transcript: "", steps: [input])
+        let injected = AgentPlanResponse(
+            summary: String(repeating: "s", count: 400),
+            replacements: [
+                AgentReplacement(stepID: input.id.uuidString, text: "July\u{0}unsafe", reason: String(repeating: "r", count: 400))
+            ]
+        )
+        let rejected = RunPlanner.plan(workflow: workflow, instruction: "Use a different month", agentResponse: injected)
+        try expect(rejected.changes.isEmpty, "agent output containing hidden control characters must be rejected")
+        try expect(rejected.summary.count == 240, "agent summaries should be capped before display")
+
+        let valid = AgentPlanResponse(
+            summary: "Use July",
+            replacements: [AgentReplacement(stepID: input.id.uuidString, text: "July", reason: "Requested month")]
+        )
+        let accepted = RunPlanner.plan(workflow: workflow, instruction: "Use a different month", agentResponse: valid)
+        try expect(accepted.steps.first?.text == "July", "a safe agent replacement should still be accepted for review")
+    }
+
+    private static func staleEvidenceCleanupCheck() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NeloaEvidence-SelfTest-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        WorkflowEvidenceExtractor.purgeStaleTemporaryEvidence(olderThan: 0)
+        try expect(!FileManager.default.fileExists(atPath: directory.path), "stale temporary screenshots should be removed")
     }
 
     private static func serializationCheck() throws {
@@ -138,6 +188,19 @@ enum SelfTests {
         unsupported = supported
         unsupported.isAppleSilicon = false
         try expect(unsupported.eligibilityIssue?.contains("Apple silicon") == true, "Intel Macs should receive a clear model requirement")
+        unsupported = supported
+        unsupported.freeDiskBytes = 2 * 1_024 * 1_024 * 1_024
+        try expect(unsupported.eligibilityIssue?.contains("6 GB") == true, "low-storage Macs should receive a clear model requirement")
+    }
+
+    private static func localModelCacheValidationCheck() throws {
+        try expect(
+            LocalModelPaths.modelRevision.count == 40,
+            "the downloaded visual model should be pinned to an immutable revision"
+        )
+        if !FileManager.default.fileExists(atPath: LocalModelPaths.installMarkerURL.path) {
+            try expect(!LocalModelPaths.isInstalled, "a cache without a ready marker must not be treated as installed")
+        }
     }
 
     private static func workflowLearningCheck() throws {

@@ -6,6 +6,7 @@ enum LocalModelStatus: Equatable, Sendable {
     case notInstalled
     case downloading(Double)
     case loading
+    case removing
     case ready
     case failed(String)
 }
@@ -58,6 +59,7 @@ struct LocalModelHardware: Equatable, Sendable {
 
 enum LocalModelPaths {
     static let modelID = "lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit"
+    static let modelRevision = "552af30c9952c44f1e1a27c7c5810ded58e892bc"
     static let displayName = "Qwen3-VL 4B"
     static let downloadSizeLabel = "3.1 GB"
 
@@ -73,9 +75,25 @@ enum LocalModelPaths {
         modelsDirectory.appendingPathComponent("qwen3-vl-4b.ready")
     }
 
+    static var snapshotDirectory: URL {
+        let repositoryFolder = "models--" + modelID.replacingOccurrences(of: "/", with: "--")
+        return cacheDirectory
+            .appendingPathComponent(repositoryFolder, isDirectory: true)
+            .appendingPathComponent("snapshots", isDirectory: true)
+            .appendingPathComponent(modelRevision, isDirectory: true)
+    }
+
+    static var hasCachedFiles: Bool {
+        FileManager.default.fileExists(atPath: modelsDirectory.path)
+    }
+
     static var isInstalled: Bool {
         guard let marker = try? String(contentsOf: installMarkerURL, encoding: .utf8) else { return false }
-        return marker.trimmingCharacters(in: .whitespacesAndNewlines) == modelID
+        guard marker.trimmingCharacters(in: .whitespacesAndNewlines) == installMarker else { return false }
+        let requiredFiles = ["config.json", "tokenizer.json", "model.safetensors"]
+        return requiredFiles.allSatisfy {
+            FileManager.default.fileExists(atPath: snapshotDirectory.appendingPathComponent($0).path)
+        }
     }
 
     static func prepareDirectories() throws {
@@ -85,10 +103,14 @@ enum LocalModelPaths {
 
     static func markInstalled() throws {
         try prepareDirectories()
-        try Data(modelID.utf8).write(to: installMarkerURL, options: .atomic)
+        try Data(installMarker.utf8).write(to: installMarkerURL, options: .atomic)
     }
 
     static func clearInstallMarker() {
         try? FileManager.default.removeItem(at: installMarkerURL)
+    }
+
+    private static var installMarker: String {
+        "\(modelID)@\(modelRevision)"
     }
 }
