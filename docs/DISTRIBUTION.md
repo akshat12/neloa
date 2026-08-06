@@ -39,9 +39,9 @@ make unsigned-release RELEASE_VERSION=0.2.17 BUILD_NUMBER=20
 
 The release script:
 
-1. Verifies that full Xcode and its Metal compiler are available. Xcode is free and does not require a paid developer membership.
-2. Builds Neloa for `arm64` with a macOS 15 deployment target and the embedded MLX/Qwen integration enabled.
-3. Copies Swift package resource bundles and Metal libraries into the app bundle alongside the checked-in icon, property list, and entitlements.
+1. Verifies that full Xcode and its Metal compiler are available. Xcode is free and does not require a paid developer membership; it is only needed to build, not to install the ZIP.
+2. Uses Xcode to build Neloa for `arm64` with a macOS 15 deployment target and the embedded MLX/Qwen integration enabled.
+3. Refuses to package the app unless MLX's compiled Metal shader library is present, then copies all Swift package resources into the app bundle.
 4. Forces ad-hoc signing, even if the developer has a local signing identity.
 5. Verifies the signature and Apple silicon architecture.
 6. Creates a ZIP with `ditto`, computes its SHA-256 checksum, extracts it into a temporary directory, verifies the extracted app again, and runs its self-tests.
@@ -65,7 +65,7 @@ Before tagging:
 
 - Ensure `CFBundleShortVersionString` and `CFBundleVersion` are updated.
 - Run `make test` and `make agent-test` on a configured Mac.
-- Run `make build-mlx` with full Xcode to verify the direct Qwen/MLX integration.
+- Run `make build-mlx` with full Xcode to verify the direct Qwen/MLX integration and compiled GPU shaders.
 - Review privacy-sensitive changes and the requested entitlements.
 - Test the ZIP on a Mac or macOS account that has not run a development build.
 - Confirm the icon, first-launch warning, permission flow, model download, visual learning, timeline review, and replay on a 16 GB Apple silicon Mac.

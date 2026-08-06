@@ -40,17 +40,16 @@ fi
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR" "$PROJECT_DIR/dist"
 
-sh "$PROJECT_DIR/scripts/check-mlx-toolchain.sh"
-NELOA_ENABLE_MLX=1 swift build -c release \
-    --triple arm64-apple-macosx15.0 \
-    --scratch-path "$ARM_SCRATCH" \
-    --product Neloa
+NELOA_MLX_CONFIGURATION=Release \
+NELOA_MLX_DERIVED_DATA="$ARM_SCRATCH" \
+    sh "$PROJECT_DIR/scripts/build-mlx.sh"
 
-ARM_BIN_DIR=$(NELOA_ENABLE_MLX=1 swift build -c release --triple arm64-apple-macosx15.0 --scratch-path "$ARM_SCRATCH" --show-bin-path)
+ARM_BIN_DIR="$ARM_SCRATCH/Build/Products/Release"
 
 NELOA_EXECUTABLE_PATH="$ARM_BIN_DIR/Neloa" \
 NELOA_APP_OUTPUT_PATH="$APP_PATH" \
 NELOA_FORCE_ADHOC=1 \
+NELOA_EXPECT_MLX_RESOURCES=1 \
 NELOA_APP_VERSION="$VERSION" \
 NELOA_BUILD_NUMBER="$BUILD_NUMBER" \
     sh "$PROJECT_DIR/scripts/package-app.sh"

@@ -20,7 +20,7 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 
 ## Build and run
 
-Requirements for the complete app: macOS 15 or newer, Apple silicon, 16 GB of memory, and full Xcode. Xcode is free; an Apple Developer Program membership is not required. The Metal compiler included with Xcode builds the local ML runtime.
+Requirements for the complete app: macOS 15 or newer, Apple silicon, 16 GB of memory, and full Xcode. Xcode is free; an Apple Developer Program membership is not required. Xcode supplies the Metal compiler needed to bundle MLX's GPU shaders. People installing the GitHub ZIP do not need Xcode.
 
 ```sh
 make setup-signing
@@ -32,7 +32,9 @@ open dist/Neloa.app
 
 `make setup-signing` is a one-time development setup that creates a local signing identity in your login Keychain. The first signed build may ask for your Mac login password; choose **Always Allow** so later builds can sign without prompting. Keeping the same identity across builds lets macOS retain Neloa’s privacy permissions. `make test` runs deterministic workflow checks. `make agent-test` makes a real request to Apple's on-device model and verifies the resulting executable change plan.
 
-For UI work on a Mac that only has the Apple Command Line Tools, `make basic-app` creates a build without Qwen. Complete local builds and GitHub releases always enable Qwen.
+`make qwen-test` performs the end-to-end direct MLX model check, including real GPU inference. Its first run downloads the same 3.1 GB model used by the app; later runs reuse Neloa's private local cache.
+
+For UI work on a Mac that only has the Apple Command Line Tools, `make basic-app` creates a build without Qwen. Complete local builds and GitHub releases use Xcode and always enable Qwen.
 
 The app asks for Screen Recording, Accessibility, Microphone, and Speech Recognition permissions. Accessibility lets Neloa learn clicks and typing during a demonstration and replay only the actions you approve. macOS may require reopening Neloa after it is granted.
 

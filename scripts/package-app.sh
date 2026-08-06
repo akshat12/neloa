@@ -75,6 +75,12 @@ for METAL_LIBRARY in "$EXECUTABLE_DIRECTORY"/*.metallib; do
     cp "$METAL_LIBRARY" "$APP_DIR/Contents/Resources/"
 done
 
+if [ "${NELOA_EXPECT_MLX_RESOURCES:-0}" = "1" ] && \
+   ! find "$APP_DIR/Contents/Resources" -type f -name 'default.metallib' -print -quit | grep -q .; then
+    echo "error: refusing to package Qwen without its MLX Metal shader library" >&2
+    exit 1
+fi
+
 find "$APP_DIR/Contents/MacOS" -maxdepth 1 -type f -name '*.cstemp' -delete
 touch "$APP_DIR"
 LOCAL_SIGN_IDENTITY=${NELOA_LOCAL_CODE_SIGN_IDENTITY:-Neloa Local Development}
@@ -118,8 +124,23 @@ fi
 
 if [ "$FINAL_APP_DIR" = "$DEFAULT_APP_DIR" ]; then
     mkdir -p "$PROJECT_DIR/dist"
-    rm -rf "$FINAL_APP_DIR"
-    mv "$APP_DIR" "$FINAL_APP_DIR"
+    BACKUP_APP_DIR="$PROJECT_DIR/dist/.Neloa.app.previous"
+    rm -rf "$BACKUP_APP_DIR"
+    if [ -d "$FINAL_APP_DIR" ]; then
+        mv "$FINAL_APP_DIR" "$BACKUP_APP_DIR"
+    fi
+    restore_previous_app() {
+        if [ ! -d "$FINAL_APP_DIR" ] && [ -d "$BACKUP_APP_DIR" ]; then
+            mv "$BACKUP_APP_DIR" "$FINAL_APP_DIR"
+        fi
+    }
+    trap restore_previous_app EXIT HUP INT TERM
+    if ! mv "$APP_DIR" "$FINAL_APP_DIR"; then
+        restore_previous_app
+        exit 1
+    fi
+    rm -rf "$BACKUP_APP_DIR"
+    trap - EXIT HUP INT TERM
     APP_DIR=$FINAL_APP_DIR
     rm -rf "$LEGACY_APP_DIR"
 fi
