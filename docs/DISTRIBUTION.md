@@ -46,7 +46,9 @@ The release script:
 5. Verifies the signature and both architectures.
 6. Creates a ZIP with `ditto`, computes its SHA-256 checksum, extracts it into a temporary directory, verifies the extracted app again, and runs its self-tests.
 
-The output is placed in `dist/`. Version tags must match `CFBundleShortVersionString` in `Resources/Info.plist`.
+The downloadable ZIP and checksum are placed in `dist/`. The ad-hoc app bundle is assembled under `.build/unsigned-release/staging/`; it never replaces `dist/Neloa.app`, which is the stable locally signed development build. The packaging script fingerprints an existing local bundle before release assembly and fails if that fingerprint changes. This separation matters because macOS privacy grants are tied to an app's signing identity. Replacing the development app with the ad-hoc release bundle makes an enabled Screen Recording switch appear ineffective to the running app.
+
+Version tags must match `CFBundleShortVersionString` in `Resources/Info.plist`.
 
 ## GitHub release automation
 

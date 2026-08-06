@@ -18,9 +18,34 @@ if [ ! -f "$EXECUTABLE_PATH" ]; then
 fi
 
 sh "$PROJECT_DIR/scripts/build-icon.sh"
-APP_DIR="$PROJECT_DIR/dist/Neloa.app"
+DEFAULT_APP_DIR="$PROJECT_DIR/dist/Neloa.app"
+APP_DIR=${NELOA_APP_OUTPUT_PATH:-$DEFAULT_APP_DIR}
 LEGACY_APP_DIR="$PROJECT_DIR/dist/Humana.app"
 ENTITLEMENTS="$PROJECT_DIR/Resources/Neloa.entitlements"
+
+if [ -n "${NELOA_APP_OUTPUT_PATH:-}" ]; then
+    case "/$APP_DIR/" in
+        */../*|*/./*)
+            echo "error: custom app output may not contain . or .. path components" >&2
+            exit 1
+            ;;
+    esac
+    case "$APP_DIR" in
+        "$PROJECT_DIR/.build/"*.app) ;;
+        *)
+            echo "error: custom app output must be a .app bundle under $PROJECT_DIR/.build" >&2
+            exit 1
+            ;;
+    esac
+fi
+
+case "$APP_DIR" in
+    "$PROJECT_DIR/"*.app) ;;
+    *)
+        echo "error: app output must be a .app bundle inside the project: $APP_DIR" >&2
+        exit 1
+        ;;
+esac
 
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
@@ -74,6 +99,9 @@ else
         --sign "$SIGN_IDENTITY" \
         "$APP_DIR"
 fi
-rm -rf "$LEGACY_APP_DIR"
+
+if [ "$APP_DIR" = "$DEFAULT_APP_DIR" ]; then
+    rm -rf "$LEGACY_APP_DIR"
+fi
 
 echo "$APP_DIR"

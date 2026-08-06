@@ -50,6 +50,8 @@ Maintainers can reproduce the downloadable artifacts locally with:
 make unsigned-release RELEASE_VERSION=0.2.17 BUILD_NUMBER=20
 ```
 
+Release packaging stages its ad-hoc app separately and does not overwrite `dist/Neloa.app`. The local app therefore keeps its stable development signature and its macOS privacy permissions.
+
 See the [distribution plan](docs/DISTRIBUTION.md) for the release workflow, limitations, and the future path to signed builds.
 
 ## Local models
