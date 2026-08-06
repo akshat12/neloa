@@ -1,0 +1,97 @@
+import AppKit
+@preconcurrency import AVFoundation
+import Foundation
+import Vision
+
+struct WorkflowEvidenceFrame: Sendable {
+    var time: TimeInterval
+    var imageURL: URL
+    var recognizedText: [String]
+}
+
+enum WorkflowEvidenceExtractor {
+    static let maximumFrameCount = 8
+
+    static func extract(recordingURL: URL, steps: [WorkflowStep]) async throws -> [WorkflowEvidenceFrame] {
+        try await Task.detached(priority: .userInitiated) {
+            try extractSynchronously(recordingURL: recordingURL, steps: steps)
+        }.value
+    }
+
+    static func sampleTimes(steps: [WorkflowStep], maximumCount: Int = maximumFrameCount) -> [TimeInterval] {
+        let usefulKinds: Set<WorkflowStepKind> = [.click, .typeText, .keyPress, .decision, .approval]
+        var times = steps
+            .filter { usefulKinds.contains($0.kind) }
+            .map { max(0, $0.time - ($0.kind == .click ? 0.18 : 0.05)) }
+            .sorted()
+
+        times = times.reduce(into: []) { result, time in
+            if result.last.map({ abs($0 - time) >= 0.3 }) ?? true {
+                result.append(time)
+            }
+        }
+
+        guard times.count > maximumCount, maximumCount > 1 else {
+            return Array(times.prefix(maximumCount))
+        }
+
+        return (0..<maximumCount).map { position in
+            let fraction = Double(position) / Double(maximumCount - 1)
+            let index = Int((fraction * Double(times.count - 1)).rounded())
+            return times[index]
+        }
+    }
+
+    private static func extractSynchronously(recordingURL: URL, steps: [WorkflowStep]) throws -> [WorkflowEvidenceFrame] {
+        let times = sampleTimes(steps: steps)
+        guard !times.isEmpty else { return [] }
+
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NeloaEvidence-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+
+        let asset = AVURLAsset(url: recordingURL)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 1_280, height: 1_280)
+        generator.requestedTimeToleranceBefore = CMTime(seconds: 0.12, preferredTimescale: 600)
+        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.12, preferredTimescale: 600)
+
+        var frames: [WorkflowEvidenceFrame] = []
+        for (index, seconds) in times.enumerated() {
+            var actualTime = CMTime.zero
+            let requestedTime = CMTime(seconds: seconds, preferredTimescale: 600)
+            let image = try generator.copyCGImage(at: requestedTime, actualTime: &actualTime)
+            let imageURL = temporaryDirectory.appendingPathComponent("frame-\(index + 1).png")
+            try pngData(for: image).write(to: imageURL, options: .atomic)
+            frames.append(WorkflowEvidenceFrame(
+                time: actualTime.seconds.isFinite ? actualTime.seconds : seconds,
+                imageURL: imageURL,
+                recognizedText: recognizedText(in: image)
+            ))
+        }
+        return frames
+    }
+
+    private static func pngData(for image: CGImage) throws -> Data {
+        let representation = NSBitmapImageRep(cgImage: image)
+        guard let data = representation.representation(using: .png, properties: [:]) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        return data
+    }
+
+    private static func recognizedText(in image: CGImage) -> [String] {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        request.minimumTextHeight = 0.012
+        let handler = VNImageRequestHandler(cgImage: image, options: [:])
+        guard (try? handler.perform([request])) != nil else { return [] }
+        return (request.results ?? [])
+            .compactMap { $0.topCandidates(1).first?.string }
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .prefix(24)
+            .map { String($0.prefix(120)) }
+    }
+}

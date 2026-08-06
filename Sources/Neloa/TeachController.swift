@@ -68,7 +68,7 @@ final class TeachController: ObservableObject {
         }
     }
 
-    func stopAndBuild() async {
+    func stopAndBuild(using agent: LocalAgentService) async {
         phase = .building
         let events = interactions.stop()
         if screen.isRecording { screenURL = await screen.stop() }
@@ -78,7 +78,7 @@ final class TeachController: ObservableObject {
         workflow.name = suggestedName(from: voice.transcript)
         workflow.recordingPath = screenURL?.path
         workflow.narrationPath = narrationURL?.path
-        draft = workflow
+        draft = await agent.learnWorkflow(candidate: workflow, recordingURL: screenURL)
         phase = .review
     }
 

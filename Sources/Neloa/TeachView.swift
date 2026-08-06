@@ -3,6 +3,7 @@ import SwiftUI
 
 struct TeachView: View {
     @EnvironmentObject private var teacher: TeachController
+    @EnvironmentObject private var agent: LocalAgentService
     @EnvironmentObject private var store: WorkflowStore
     @EnvironmentObject private var permissions: PermissionCenter
     @State private var savedMessage = false
@@ -366,6 +367,7 @@ private struct WhatNeloaLearnsCard: View {
 }
 
 private struct RecordingView: View {
+    @EnvironmentObject private var agent: LocalAgentService
     @ObservedObject var controller: TeachController
     @ObservedObject private var screen: ScreenRecorder
     @ObservedObject private var voice: VoiceService
@@ -426,7 +428,7 @@ private struct RecordingView: View {
             }
 
             Button {
-                Task { await controller.stopAndBuild() }
+                Task { await controller.stopAndBuild(using: agent) }
             } label: {
                 Label("Finish teaching", systemImage: "stop.fill")
                     .frame(maxWidth: .infinity).padding(.vertical, 8)

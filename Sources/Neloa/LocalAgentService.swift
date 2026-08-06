@@ -5,30 +5,120 @@ import FoundationModels
 
 @MainActor
 final class LocalAgentService: ObservableObject {
-    @Published var modelName: String {
-        didSet {
-            UserDefaults.standard.set(modelName, forKey: "localModelName")
-            fallbackStatus = .checking
-        }
-    }
     @Published private(set) var isPlanning = false
+    @Published private(set) var isLearning = false
     @Published var status = "Local agent ready"
-    @Published private(set) var fallbackStatus: FallbackStatus = .checking
+    @Published private(set) var modelStatus: LocalModelStatus = .checking
 
-    enum FallbackStatus: Equatable {
-        case checking
-        case ollamaUnavailable
-        case modelMissing
-        case ready
+    let hardware: LocalModelHardware
+    private let qwen = QwenRuntime()
+
+    init(hardware: LocalModelHardware = .current) {
+        self.hardware = hardware
+        refreshModelStatus()
+        if LocalModelPaths.isInstalled, hardware.eligibilityIssue == nil, Self.isQwenRuntimeBundled {
+            Task { await setupModel() }
+        } else {
+            #if canImport(FoundationModels)
+            if #available(macOS 26.0, *), SystemLanguageModel.default.isAvailable {
+                status = "Apple on-device fallback ready"
+            }
+            #endif
+        }
     }
 
-    init() {
-        self.modelName = UserDefaults.standard.string(forKey: "localModelName") ?? "qwen3-vl:4b"
-        #if canImport(FoundationModels)
-        if #available(macOS 26.0, *), SystemLanguageModel.default.isAvailable {
-            self.status = "Apple on-device agent ready"
-        }
+    static var isQwenRuntimeBundled: Bool {
+        #if NELOA_MLX
+        true
+        #else
+        false
         #endif
+    }
+
+    func refreshModelStatus() {
+        if let issue = hardware.eligibilityIssue {
+            modelStatus = .unavailable(issue)
+        } else if !Self.isQwenRuntimeBundled {
+            modelStatus = .unavailable("This development build does not include the Apple GPU model runtime.")
+        } else if LocalModelPaths.isInstalled {
+            if modelStatus != .ready && modelStatus != .loading {
+                modelStatus = .checking
+            }
+        } else {
+            modelStatus = .notInstalled
+        }
+    }
+
+    func setupModel() async {
+        guard hardware.eligibilityIssue == nil else {
+            modelStatus = .unavailable(hardware.eligibilityIssue ?? "This Mac is not supported.")
+            return
+        }
+        guard Self.isQwenRuntimeBundled else {
+            modelStatus = .unavailable("This development build does not include the Apple GPU model runtime.")
+            return
+        }
+
+        let wasInstalled = LocalModelPaths.isInstalled
+        modelStatus = wasInstalled ? .loading : .downloading(0)
+        status = wasInstalled ? "Loading local visual intelligence…" : "Downloading local visual intelligence…"
+        do {
+            try await qwen.load { [weak self] progress in
+                Task { @MainActor in
+                    guard let self, !wasInstalled else { return }
+                    self.modelStatus = .downloading(min(max(progress, 0), 1))
+                }
+            }
+            modelStatus = .ready
+            status = "Qwen visual intelligence ready on this Mac"
+        } catch {
+            LocalModelPaths.clearInstallMarker()
+            modelStatus = .failed(error.localizedDescription)
+            status = "Local visual intelligence needs attention"
+        }
+    }
+
+    func removeModel() async {
+        await qwen.unload()
+        try? FileManager.default.removeItem(at: LocalModelPaths.modelsDirectory)
+        modelStatus = .notInstalled
+        status = "Local visual model removed"
+    }
+
+    func learnWorkflow(candidate: Workflow, recordingURL: URL?) async -> Workflow {
+        guard await ensureQwenReady() else {
+            status = "Built safely from captured actions; visual understanding is not set up"
+            return candidate
+        }
+
+        isLearning = true
+        defer { isLearning = false }
+        do {
+            let frames: [WorkflowEvidenceFrame]
+            if let recordingURL, FileManager.default.fileExists(atPath: recordingURL.path) {
+                frames = try await WorkflowEvidenceExtractor.extract(
+                    recordingURL: recordingURL,
+                    steps: candidate.steps
+                )
+            } else {
+                frames = []
+            }
+            defer { removeTemporaryEvidence(frames) }
+
+            let prompt = try WorkflowLearner.prompt(candidate: candidate, frames: frames)
+            let content = try await qwen.respond(
+                prompt: prompt,
+                imageURLs: frames.map(\.imageURL),
+                instructions: WorkflowLearner.instructions,
+                maximumTokens: 1_250
+            )
+            let response = try WorkflowLearner.decode(content)
+            status = "Learned privately with Qwen visual intelligence"
+            return WorkflowLearner.apply(response, to: candidate)
+        } catch {
+            status = "Visual understanding could not finish; kept the captured actions"
+            return candidate
+        }
     }
 
     func makePlan(workflow: Workflow, instruction: String) async -> RunPlan {
@@ -38,70 +128,51 @@ final class LocalAgentService: ObservableObject {
         isPlanning = true
         defer { isPlanning = false }
 
+        if await ensureQwenReady() {
+            do {
+                let response = try await queryQwen(
+                    prompt: RunPlanner.prompt(workflow: workflow, instruction: instruction)
+                )
+                status = "Planned privately with Qwen"
+                return validatedPlan(workflow: workflow, instruction: instruction, response: response)
+            } catch {
+                status = "Qwen could not finish—trying the on-device fallback"
+            }
+        }
+
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *), SystemLanguageModel.default.isAvailable {
             do {
                 let response = try await queryApple(prompt: RunPlanner.prompt(workflow: workflow, instruction: instruction))
-                status = "Planned on device with Apple Intelligence"
+                status = "Planned with the Apple on-device fallback"
                 return validatedPlan(workflow: workflow, instruction: instruction, response: response)
             } catch {
-                status = "Apple agent unavailable—trying local Qwen"
+                status = "On-device models unavailable—used safe built-in planning"
             }
         }
         #endif
 
-        do {
-            let response = try await queryOllama(prompt: RunPlanner.prompt(workflow: workflow, instruction: instruction))
-            status = "Planned locally with \(modelName)"
-            return validatedPlan(workflow: workflow, instruction: instruction, response: response)
-        } catch {
-            status = "Local model unavailable—used safe built-in planning"
-            return RunPlanner.plan(workflow: workflow, instruction: instruction)
-        }
+        return RunPlanner.plan(workflow: workflow, instruction: instruction)
     }
 
-    func refreshFallbackStatus() async {
-        fallbackStatus = .checking
-        guard let url = URL(string: "http://127.0.0.1:11434/api/tags") else {
-            fallbackStatus = .ollamaUnavailable
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 2
-
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                fallbackStatus = .ollamaUnavailable
-                return
-            }
-
-            let installedModels = try Self.installedModelNames(from: data)
-            fallbackStatus = Self.containsModel(modelName, in: installedModels) ? .ready : .modelMissing
-        } catch {
-            fallbackStatus = .ollamaUnavailable
-        }
+    private func ensureQwenReady() async -> Bool {
+        if modelStatus == .ready { return true }
+        guard LocalModelPaths.isInstalled else { return false }
+        await setupModel()
+        return modelStatus == .ready
     }
 
-    nonisolated static func installedModelNames(from data: Data) throws -> Set<String> {
-        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let models = root["models"] as? [[String: Any]] else {
+    private func queryQwen(prompt: String) async throws -> AgentPlanResponse {
+        let content = try await qwen.respond(
+            prompt: prompt,
+            imageURLs: [],
+            instructions: "You are Neloa's private local run planner. Return only the requested JSON object. Do not include markdown fences.",
+            maximumTokens: 700
+        )
+        guard let data = extractJSONObject(from: content).data(using: .utf8) else {
             throw AgentError.badResponse
         }
-
-        return Set(models.compactMap { model in
-            (model["name"] as? String) ?? (model["model"] as? String)
-        })
-    }
-
-    nonisolated static func containsModel(_ requestedModel: String, in installedModels: Set<String>) -> Bool {
-        let requested = requestedModel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !requested.isEmpty else { return false }
-        return installedModels.contains { installed in
-            let candidate = installed.lowercased()
-            return candidate == requested || (!requested.contains(":") && candidate == "\(requested):latest")
-        }
+        return try JSONDecoder().decode(AgentPlanResponse.self, from: data)
     }
 
     #if canImport(FoundationModels)
@@ -109,35 +180,17 @@ final class LocalAgentService: ObservableObject {
     private func queryApple(prompt: String) async throws -> AgentPlanResponse {
         let session = LanguageModelSession(instructions: "You are Neloa's private on-device run planner. Follow the requested JSON schema exactly and do not include markdown fences.")
         let response = try await session.respond(to: prompt, options: GenerationOptions(sampling: .greedy, maximumResponseTokens: 700))
-        guard let data = extractJSONObject(from: response.content).data(using: .utf8) else { throw AgentError.badResponse }
+        guard let data = extractJSONObject(from: response.content).data(using: .utf8) else {
+            throw AgentError.badResponse
+        }
         return try JSONDecoder().decode(AgentPlanResponse.self, from: data)
     }
     #endif
 
-    private func queryOllama(prompt: String) async throws -> AgentPlanResponse {
-        guard let url = URL(string: "http://127.0.0.1:11434/api/chat") else { throw AgentError.badResponse }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 20
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "model": modelName,
-            "stream": false,
-            "format": "json",
-            "messages": [["role": "user", "content": prompt]]
-        ])
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200,
-              let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let message = root["message"] as? [String: Any],
-              let content = message["content"] as? String,
-              let contentData = content.data(using: .utf8) else { throw AgentError.badResponse }
-        return try JSONDecoder().decode(AgentPlanResponse.self, from: contentData)
-    }
-
     private func extractJSONObject(from content: String) -> String {
-        guard let start = content.firstIndex(of: "{"), let end = content.lastIndex(of: "}"), start <= end else { return content }
+        guard let start = content.firstIndex(of: "{"), let end = content.lastIndex(of: "}"), start <= end else {
+            return content
+        }
         return String(content[start...end])
     }
 
@@ -151,6 +204,13 @@ final class LocalAgentService: ObservableObject {
             return grounded
         }
         return agentPlan
+    }
+
+    private func removeTemporaryEvidence(_ frames: [WorkflowEvidenceFrame]) {
+        let directories = Set(frames.map { $0.imageURL.deletingLastPathComponent() })
+        for directory in directories where directory.lastPathComponent.hasPrefix("NeloaEvidence-") {
+            try? FileManager.default.removeItem(at: directory)
+        }
     }
 
     enum AgentError: Error { case badResponse }

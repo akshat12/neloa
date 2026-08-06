@@ -15,7 +15,8 @@ enum SelfTests {
         try receiptSerializationCheck()
         try skillExportCheck()
         try brandMigrationCheck()
-        try localModelDiscoveryCheck()
+        try localModelEligibilityCheck()
+        try workflowLearningCheck()
         try permissionStateCheck()
         try appearanceCheck()
         try recordingErrorCopyCheck()
@@ -39,7 +40,7 @@ enum SelfTests {
         let workflow = Workflow(name: "Monthly report", transcript: "", steps: [input])
         let agent = LocalAgentService()
         let plan = await agent.makePlan(workflow: workflow, instruction: "Replace June with August")
-        try expect(agent.status.contains("Apple Intelligence"), "Apple on-device agent should handle the test plan; status was: \(agent.status)")
+        try expect(agent.status.contains("Apple on-device"), "Apple on-device fallback should handle the test plan; status was: \(agent.status)")
         try expect(plan.steps.first?.text == "August", "on-device agent should replace June with August; got text=\(plan.steps.first?.text ?? "nil"), summary=\(plan.summary), changes=\(plan.changes.map { "\($0.before)->\($0.after)" })")
         try expect(plan.changes.count == 1, "on-device agent should report one reviewed change; got \(plan.changes.count)")
 
@@ -124,12 +125,38 @@ enum SelfTests {
         try expect(repaired == expected, "legacy Humana recording paths should migrate to Neloa")
     }
 
-    private static func localModelDiscoveryCheck() throws {
-        let response = #"{"models":[{"name":"qwen3-vl:4b"},{"model":"llama3.2:latest"}]}"#
-        let installed = try LocalAgentService.installedModelNames(from: Data(response.utf8))
-        try expect(LocalAgentService.containsModel("qwen3-vl:4b", in: installed), "exact Ollama model tags should be discovered")
-        try expect(LocalAgentService.containsModel("llama3.2", in: installed), "Ollama's implicit latest tag should be discovered")
-        try expect(!LocalAgentService.containsModel("missing:1b", in: installed), "unavailable Ollama models should be reported as missing")
+    private static func localModelEligibilityCheck() throws {
+        let supported = LocalModelHardware(
+            isAppleSilicon: true,
+            physicalMemoryBytes: 16 * 1_024 * 1_024 * 1_024,
+            freeDiskBytes: 8 * 1_024 * 1_024 * 1_024
+        )
+        try expect(supported.eligibilityIssue == nil, "an Apple silicon Mac with 16 GB should support the local model")
+        var unsupported = supported
+        unsupported.physicalMemoryBytes = 8 * 1_024 * 1_024 * 1_024
+        try expect(unsupported.eligibilityIssue?.contains("16 GB") == true, "lower-memory Macs should receive a clear model requirement")
+        unsupported = supported
+        unsupported.isAppleSilicon = false
+        try expect(unsupported.eligibilityIssue?.contains("Apple silicon") == true, "Intel Macs should receive a clear model requirement")
+    }
+
+    private static func workflowLearningCheck() throws {
+        let click = WorkflowStep(kind: .click, title: "Click", time: 1, x: 30, y: 40)
+        let input = WorkflowStep(kind: .typeText, title: "Type June", time: 2, text: "June")
+        let workflow = Workflow(name: "My automation", transcript: "Use the monthly report", steps: [click, input])
+        let response = LearnedWorkflowResponse(
+            name: "Prepare monthly report",
+            annotations: [
+                .init(stepID: click.id.uuidString, title: "Click Download report", detail: "Download the monthly CSV", confidence: 0.92),
+                .init(stepID: UUID().uuidString, title: "Invented action", detail: nil, confidence: 1)
+            ],
+            decisions: []
+        )
+        let learned = WorkflowLearner.apply(response, to: workflow)
+        try expect(learned.name == "Prepare monthly report", "the visual model should improve the workflow name")
+        try expect(learned.steps.count == workflow.steps.count, "the visual model must not invent executable steps")
+        try expect(learned.steps[0].title == "Click Download report" && learned.steps[0].x == 30, "visual labels should preserve replay coordinates")
+        try expect(WorkflowEvidenceExtractor.sampleTimes(steps: workflow.steps, maximumCount: 1).count == 1, "evidence sampling should stay within its memory budget")
     }
 
     private static func permissionStateCheck() throws {

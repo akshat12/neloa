@@ -7,8 +7,7 @@ struct SettingsView: View {
     @EnvironmentObject private var store: WorkflowStore
     @AppStorage(AppAppearance.storageKey) private var appearanceRawValue = AppAppearance.system.rawValue
     @State private var confirmDeleteRecordings = false
-    @State private var showAdvanced = false
-    @State private var copiedPullCommand = false
+    @State private var confirmRemoveModel = false
 
     var body: some View {
         ScrollView {
@@ -21,23 +20,27 @@ struct SettingsView: View {
                     privacyCard.frame(maxWidth: .infinity)
                 }
 
-                advancedCard
+                localModelCard
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { permissions.refresh() }
-        .task(id: agent.modelName) {
-            try? await Task.sleep(for: .milliseconds(350))
-            guard !Task.isCancelled else { return }
-            await agent.refreshFallbackStatus()
+        .onAppear {
+            permissions.refresh()
+            agent.refreshModelStatus()
         }
         .alert("Delete all teaching recordings?", isPresented: $confirmDeleteRecordings) {
             Button("Delete recordings", role: .destructive) { store.deleteAllRecordings() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Your saved automations will remain, but their screen and narration recordings cannot be recovered.")
+        }
+        .alert("Remove the local visual model?", isPresented: $confirmRemoveModel) {
+            Button("Remove model", role: .destructive) { Task { await agent.removeModel() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Neloa will keep your automations and recordings. Visual workflow understanding will use the basic captured-action fallback until you download the model again.")
         }
     }
 
@@ -112,7 +115,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("On-device intelligence")
                         .font(.system(size: 19, weight: .semibold, design: .rounded))
-                    Text("Neloa plans changes without sending your workflow or recordings to a cloud model.")
+                    Text("Neloa understands recordings and plans changes without sending them to a cloud model.")
                         .font(.system(size: 15))
                         .foregroundStyle(.secondary)
                 }
@@ -222,121 +225,135 @@ struct SettingsView: View {
         .tint(.red)
     }
 
-    private var advancedCard: some View {
+    private var localModelCard: some View {
         SettingsCard {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) { showAdvanced.toggle() }
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "cpu")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(Color.accentColor)
-                        .frame(width: 24)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Advanced model fallback").font(.system(size: 16, weight: .semibold))
-                        Text("Optional local model for Macs without Apple Intelligence")
-                            .font(.system(size: 13)).foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 16) {
+                Image(systemName: "eye.circle.fill")
+                    .font(.system(size: 25, weight: .medium))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 48, height: 48)
+                    .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Local visual intelligence")
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    Text("\(LocalModelPaths.displayName) · Built for Apple silicon Macs with 16 GB or more")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 16)
+                StatusBadge(label: modelStatusLabel, color: modelStatusColor)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 13) {
+                modelStatusMessage
+
+                if case .downloading(let progress) = agent.modelStatus {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ProgressView(value: progress)
+                        Text("\(Int(progress * 100))% · Keep Neloa open while the first-time download finishes")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    modelAction
+                    if agent.modelStatus == .ready {
+                        Button("Remove model…", role: .destructive) { confirmRemoveModel = true }
+                            .buttonStyle(.bordered)
+                            .controlSize(.large)
+                            .tint(.red)
                     }
                     Spacer()
-                    StatusBadge(label: fallbackStatusLabel, color: fallbackStatusColor)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
+                    Label("\(agent.hardware.memoryLabel) memory", systemImage: "memorychip")
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(showAdvanced ? 90 : 0))
                 }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
 
-            if showAdvanced {
-                Divider()
-                VStack(alignment: .leading, spacing: 16) {
-                    fallbackStatusMessage
-
-                    HStack(alignment: .bottom, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Ollama model")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                            TextField("Local model name", text: $agent.modelName)
-                                .textFieldStyle(.roundedBorder)
-                                .onSubmit { Task { await agent.refreshFallbackStatus() } }
-                        }
-                        .frame(maxWidth: 380)
-
-                        Button("Check again") {
-                            Task { await agent.refreshFallbackStatus() }
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                        .disabled(agent.fallbackStatus == .checking)
-
-                        fallbackAction
-                    }
-
-                    Text("Apple’s on-device intelligence remains the first choice. Neloa uses this model only when Apple Intelligence is unavailable or cannot complete a plan.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .transition(.move(edge: .top).combined(with: .opacity))
+                Text("The model is downloaded directly inside Neloa and stays on this Mac. There is no Ollama setup, Terminal command, local server, account, or cloud upload.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
     @ViewBuilder
-    private var fallbackStatusMessage: some View {
-        switch agent.fallbackStatus {
+    private var modelStatusMessage: some View {
+        switch agent.modelStatus {
         case .checking:
             Label("Checking the local model…", systemImage: "arrow.triangle.2.circlepath")
                 .foregroundStyle(.secondary)
-        case .ollamaUnavailable:
-            Label("Ollama is not installed or is not running on this Mac.", systemImage: "exclamationmark.triangle.fill")
+        case .unavailable(let reason):
+            Label(reason, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
-        case .modelMissing:
-            Label("Ollama is running, but \(agent.modelName) has not been downloaded.", systemImage: "arrow.down.circle.fill")
-                .foregroundStyle(.orange)
+        case .notInstalled:
+            Label("Download once to let Neloa understand the screen around each captured action.", systemImage: "arrow.down.circle.fill")
+                .foregroundStyle(.secondary)
+        case .downloading:
+            Label("Downloading \(LocalModelPaths.downloadSizeLabel) directly to this Mac…", systemImage: "arrow.down.circle.fill")
+                .foregroundStyle(Color.accentColor)
+        case .loading:
+            Label("Loading the local model into memory…", systemImage: "memorychip")
+                .foregroundStyle(Color.accentColor)
         case .ready:
-            Label("\(agent.modelName) is installed and ready for private, local use.", systemImage: "checkmark.circle.fill")
+            Label("Ready to understand recordings and plan custom runs privately.", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
         }
     }
 
     @ViewBuilder
-    private var fallbackAction: some View {
-        switch agent.fallbackStatus {
-        case .ollamaUnavailable:
-            Button("Get Ollama") { openOllamaDownload() }
+    private var modelAction: some View {
+        switch agent.modelStatus {
+        case .notInstalled:
+            Button("Download model · \(LocalModelPaths.downloadSizeLabel)") {
+                Task { await agent.setupModel() }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        case .failed:
+            Button("Try again") { Task { await agent.setupModel() } }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-        case .modelMissing:
-            Button(copiedPullCommand ? "Copied" : "Copy download command") { copyPullCommand() }
+        case .checking:
+            Button("Load model") { Task { await agent.setupModel() } }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-        case .checking, .ready:
+        case .unavailable, .downloading, .loading, .ready:
             EmptyView()
         }
     }
 
-    private var fallbackStatusLabel: String {
-        switch agent.fallbackStatus {
+    private var modelStatusLabel: String {
+        switch agent.modelStatus {
         case .checking: "Checking"
-        case .ollamaUnavailable: "Needs Ollama"
-        case .modelMissing: "Needs model"
+        case .unavailable: "Unavailable"
+        case .notInstalled: "Not installed"
+        case .downloading: "Downloading"
+        case .loading: "Loading"
         case .ready: "Ready"
+        case .failed: "Needs attention"
         }
     }
 
-    private var fallbackStatusColor: Color {
-        switch agent.fallbackStatus {
-        case .checking: .secondary
-        case .ollamaUnavailable, .modelMissing: .orange
+    private var modelStatusColor: Color {
+        switch agent.modelStatus {
         case .ready: .green
+        case .failed, .unavailable: .orange
+        case .downloading, .loading: Color.accentColor
+        case .checking, .notInstalled: .secondary
         }
     }
 
     private var consumerStatus: String {
-        agent.status.contains("unavailable") ? "Limited" : "Ready"
+        agent.modelStatus == .ready ? "Ready" : "Basic"
     }
 
     private var voicePermissionStatus: PermissionCenter.Status {
@@ -463,20 +480,6 @@ struct SettingsView: View {
         NSWorkspace.shared.open(base)
     }
 
-    private func openOllamaDownload() {
-        guard let url = URL(string: "https://ollama.com/download/mac") else { return }
-        NSWorkspace.shared.open(url)
-    }
-
-    private func copyPullCommand() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString("ollama pull \(agent.modelName)", forType: .string)
-        copiedPullCommand = true
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            copiedPullCommand = false
-        }
-    }
 }
 
 private struct SettingsCard<Content: View>: View {
