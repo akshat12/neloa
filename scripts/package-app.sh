@@ -19,7 +19,12 @@ fi
 
 sh "$PROJECT_DIR/scripts/build-icon.sh"
 DEFAULT_APP_DIR="$PROJECT_DIR/dist/Neloa.app"
-APP_DIR=${NELOA_APP_OUTPUT_PATH:-$DEFAULT_APP_DIR}
+FINAL_APP_DIR=${NELOA_APP_OUTPUT_PATH:-$DEFAULT_APP_DIR}
+if [ -n "${NELOA_APP_OUTPUT_PATH:-}" ]; then
+    APP_DIR=$FINAL_APP_DIR
+else
+    APP_DIR="$PROJECT_DIR/.build/package-app-staging/Neloa.app"
+fi
 LEGACY_APP_DIR="$PROJECT_DIR/dist/Humana.app"
 ENTITLEMENTS="$PROJECT_DIR/Resources/Neloa.entitlements"
 
@@ -111,7 +116,11 @@ else
         "$APP_DIR"
 fi
 
-if [ "$APP_DIR" = "$DEFAULT_APP_DIR" ]; then
+if [ "$FINAL_APP_DIR" = "$DEFAULT_APP_DIR" ]; then
+    mkdir -p "$PROJECT_DIR/dist"
+    rm -rf "$FINAL_APP_DIR"
+    mv "$APP_DIR" "$FINAL_APP_DIR"
+    APP_DIR=$FINAL_APP_DIR
     rm -rf "$LEGACY_APP_DIR"
 fi
 

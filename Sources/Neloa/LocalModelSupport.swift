@@ -25,7 +25,10 @@ struct LocalModelHardware: Equatable, Sendable {
         let isAppleSilicon = false
         #endif
 
-        let resourceValues = try? LocalModelPaths.modelsDirectory.resourceValues(
+        let diskProbe = LocalModelPaths.modelsDirectory
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let resourceValues = try? diskProbe.resourceValues(
             forKeys: [.volumeAvailableCapacityForImportantUsageKey]
         )
         return LocalModelHardware(

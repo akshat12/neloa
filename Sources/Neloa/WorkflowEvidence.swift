@@ -50,28 +50,36 @@ enum WorkflowEvidenceExtractor {
             .appendingPathComponent("NeloaEvidence-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
 
-        let asset = AVURLAsset(url: recordingURL)
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: 1_280, height: 1_280)
-        generator.requestedTimeToleranceBefore = CMTime(seconds: 0.12, preferredTimescale: 600)
-        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.12, preferredTimescale: 600)
+        do {
+            let asset = AVURLAsset(url: recordingURL)
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 1_280, height: 1_280)
+            generator.requestedTimeToleranceBefore = CMTime(seconds: 0.12, preferredTimescale: 600)
+            generator.requestedTimeToleranceAfter = CMTime(seconds: 0.12, preferredTimescale: 600)
 
-        let requestedTimes = times.map { CMTime(seconds: $0, preferredTimescale: 600) }
-        var frames: [WorkflowEvidenceFrame] = []
-        for await result in generator.images(for: requestedTimes) {
-            guard case .success(requestedTime: let requestedTime, let image, actualTime: let actualTime) = result else {
-                continue
+            let requestedTimes = times.map { CMTime(seconds: $0, preferredTimescale: 600) }
+            var frames: [WorkflowEvidenceFrame] = []
+            for await result in generator.images(for: requestedTimes) {
+                guard case .success(requestedTime: let requestedTime, let image, actualTime: let actualTime) = result else {
+                    continue
+                }
+                let imageURL = temporaryDirectory.appendingPathComponent("frame-\(frames.count + 1).png")
+                try pngData(for: image).write(to: imageURL, options: .atomic)
+                frames.append(WorkflowEvidenceFrame(
+                    time: actualTime.seconds.isFinite ? actualTime.seconds : requestedTime.seconds,
+                    imageURL: imageURL,
+                    recognizedText: recognizedText(in: image)
+                ))
             }
-            let imageURL = temporaryDirectory.appendingPathComponent("frame-\(frames.count + 1).png")
-            try pngData(for: image).write(to: imageURL, options: .atomic)
-            frames.append(WorkflowEvidenceFrame(
-                time: actualTime.seconds.isFinite ? actualTime.seconds : requestedTime.seconds,
-                imageURL: imageURL,
-                recognizedText: recognizedText(in: image)
-            ))
+            if frames.isEmpty {
+                try? FileManager.default.removeItem(at: temporaryDirectory)
+            }
+            return frames
+        } catch {
+            try? FileManager.default.removeItem(at: temporaryDirectory)
+            throw error
         }
-        return frames
     }
 
     private static func pngData(for image: CGImage) throws -> Data {

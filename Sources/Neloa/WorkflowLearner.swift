@@ -109,7 +109,7 @@ enum WorkflowLearner {
             (workflow.steps[$0].id.uuidString.lowercased(), $0)
         })
 
-        for annotation in response.annotations where (annotation.confidence ?? 1) >= 0.55 {
+        for annotation in response.annotations where (annotation.confidence ?? 0) >= 0.55 {
             guard let index = stepIndices[annotation.stepID.lowercased()] else { continue }
             let title = cleaned(annotation.title, maximumLength: 90)
             guard !title.isEmpty else { continue }
@@ -120,13 +120,14 @@ enum WorkflowLearner {
             }
         }
 
-        let existingDecisions = Set(workflow.steps
+        var existingDecisions = Set(workflow.steps
             .filter { $0.kind == .decision || $0.kind == .approval }
             .map { normalized($0.title) })
         let finalTime = workflow.steps.map(\.time).max() ?? 0
-        for decision in response.decisions where (decision.confidence ?? 1) >= 0.65 {
+        for decision in response.decisions where (decision.confidence ?? 0) >= 0.65 {
             let title = cleaned(decision.title, maximumLength: 120)
             guard !title.isEmpty, !existingDecisions.contains(normalized(title)) else { continue }
+            existingDecisions.insert(normalized(title))
             let requiresApproval = decision.requiresApproval ?? false
             workflow.steps.append(WorkflowStep(
                 kind: requiresApproval ? .approval : .decision,
