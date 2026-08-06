@@ -121,9 +121,9 @@ struct TeachView: View {
                 .frame(maxWidth: .infinity, alignment: .topLeading)
 
                 WhatNeloaLearnsCard()
-                    .frame(width: 280)
+                    .frame(minWidth: 280, idealWidth: 310, maxWidth: 340)
             }
-            .frame(maxWidth: 920, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
 
             Spacer(minLength: 0)
         }
