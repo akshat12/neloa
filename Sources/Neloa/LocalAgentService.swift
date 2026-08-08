@@ -250,18 +250,23 @@ final class LocalAgentService: ObservableObject {
         candidate: Workflow,
         frames: [WorkflowEvidenceFrame]
     ) async throws -> Workflow {
-        let basePrompt = try WorkflowLearner.prompt(candidate: candidate, frames: frames)
         let needsConsensus = !frames.isEmpty && WorkflowLearner.needsClickConsensus(candidate)
         let maximumAttempts = needsConsensus ? 3 : 1
+        let focusedFrames = needsConsensus
+            ? (try? await WorkflowEvidenceExtractor.focusedClickFrames(candidate: candidate, frames: frames)) ?? []
+            : []
+        defer { removeTemporaryEvidence(focusedFrames) }
         var responses: [LearnedWorkflowResponse] = []
         for attempt in 0..<maximumAttempts {
+            let attemptFrames = attempt > 0 && !focusedFrames.isEmpty ? focusedFrames : frames
+            let basePrompt = try WorkflowLearner.prompt(candidate: candidate, frames: attemptFrames)
             let correction = attempt == 0 ? "" : """
 
             Independent visual verification pass \(attempt + 1): ignore earlier answers. For every supplied click whose currentTitle is Click or Right-click, inspect evidenceImage at imageX/imageY and return the exact visible target. A generic Click title, an omitted click annotation, or a nearby target that is not at the supplied coordinates is invalid.
             """
             let content = try await qwen.respond(
                 prompt: basePrompt + correction,
-                imageURLs: frames.map(\.imageURL),
+                imageURLs: attemptFrames.map(\.imageURL),
                 instructions: WorkflowLearner.instructions,
                 maximumTokens: 1_250
             )

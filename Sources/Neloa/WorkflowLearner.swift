@@ -61,7 +61,8 @@ enum WorkflowLearner {
         let stepsJSON = String(decoding: stepsData, as: UTF8.self)
         let evidence = frames.enumerated().map { index, frame in
             let text = frame.recognizedText.joined(separator: " | ")
-            return "Image \(index + 1): \(clock(frame.time)); visible text: \(text.isEmpty ? "none recognized" : text)"
+            let focus = frame.focusStepID.map { "; close-up centered on step \($0.uuidString)" } ?? ""
+            return "Image \(index + 1): \(clock(frame.time))\(focus); visible text: \(text.isEmpty ? "none recognized" : text)"
         }.joined(separator: "\n")
 
         return """
@@ -102,8 +103,10 @@ enum WorkflowLearner {
         for step: WorkflowStep,
         frames: [WorkflowEvidenceFrame]
     ) -> (image: Int, point: CGPoint)? {
+        let focused = frames.enumerated().filter { $0.element.focusStepID == step.id }
+        let candidates = focused.isEmpty ? Array(frames.enumerated()) : focused
         guard let x = step.x, let y = step.y,
-              let match = frames.enumerated().min(by: {
+              let match = candidates.min(by: {
                   abs($0.element.time - step.time) < abs($1.element.time - step.time)
               }),
               let width = match.element.imageWidth,
@@ -172,6 +175,10 @@ enum WorkflowLearner {
         !genericClickIDs(in: candidate).isEmpty
     }
 
+    static func isGenericCapturedClick(_ step: WorkflowStep) -> Bool {
+        step.kind == .click && isGenericClickTitle(step.title)
+    }
+
     static func consensusResponse(
         from responses: [LearnedWorkflowResponse],
         candidate: Workflow
@@ -206,7 +213,7 @@ enum WorkflowLearner {
 
     private static func genericClickIDs(in candidate: Workflow) -> Set<String> {
         Set(candidate.steps.compactMap { step -> String? in
-            guard step.kind == .click, isGenericClickTitle(step.title) else { return nil }
+            guard isGenericCapturedClick(step) else { return nil }
             return step.id.uuidString.lowercased()
         })
     }

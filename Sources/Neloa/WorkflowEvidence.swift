@@ -10,6 +10,7 @@ struct WorkflowEvidenceFrame: Sendable {
     var imageWidth: Int? = nil
     var imageHeight: Int? = nil
     var captureFrame: CGRect? = nil
+    var focusStepID: UUID? = nil
 }
 
 enum WorkflowEvidenceExtractor {
@@ -63,6 +64,90 @@ enum WorkflowEvidenceExtractor {
             let fraction = Double(position) / Double(maximumCount - 1)
             let index = Int((fraction * Double(times.count - 1)).rounded())
             return times[index]
+        }
+    }
+
+    static func focusedClickFrames(
+        candidate: Workflow,
+        frames: [WorkflowEvidenceFrame]
+    ) async throws -> [WorkflowEvidenceFrame] {
+        try await Task.detached(priority: .userInitiated) {
+            try makeFocusedClickFrames(candidate: candidate, frames: frames)
+        }.value
+    }
+
+    private static func makeFocusedClickFrames(
+        candidate: Workflow,
+        frames: [WorkflowEvidenceFrame]
+    ) throws -> [WorkflowEvidenceFrame] {
+        let clickSteps = candidate.steps.filter(WorkflowLearner.isGenericCapturedClick)
+        guard !clickSteps.isEmpty else { return [] }
+
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NeloaEvidence-Focus-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+
+        do {
+            var focused: [WorkflowEvidenceFrame] = []
+            for step in clickSteps {
+                guard let match = frames.enumerated().min(by: {
+                    abs($0.element.time - step.time) < abs($1.element.time - step.time)
+                }),
+                let location = WorkflowLearner.evidenceLocation(for: step, frames: [match.element]),
+                let imageData = try? Data(contentsOf: match.element.imageURL),
+                let sourceImage = NSBitmapImageRep(data: imageData)?.cgImage,
+                let originalCaptureFrame = match.element.captureFrame else { continue }
+
+                let cropWidth = min(CGFloat(sourceImage.width), 420)
+                let cropHeight = min(CGFloat(sourceImage.height), 260)
+                let originX = min(
+                    max(0, location.point.x - cropWidth / 2),
+                    CGFloat(sourceImage.width) - cropWidth
+                )
+                let originYFromTop = min(
+                    max(0, location.point.y - cropHeight / 2),
+                    CGFloat(sourceImage.height) - cropHeight
+                )
+                // CGImage cropping uses a bottom-left origin; captured CGEvent
+                // coordinates and the model prompt use a top-left origin.
+                let cropRect = CGRect(
+                    x: originX,
+                    y: CGFloat(sourceImage.height) - originYFromTop - cropHeight,
+                    width: cropWidth,
+                    height: cropHeight
+                ).integral
+                guard let croppedImage = sourceImage.cropping(to: cropRect) else { continue }
+
+                let url = directory.appendingPathComponent("click-\(focused.count + 1).png")
+                try pngData(for: croppedImage).write(to: url, options: .atomic)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+
+                let scaleX = originalCaptureFrame.width / CGFloat(sourceImage.width)
+                let scaleY = originalCaptureFrame.height / CGFloat(sourceImage.height)
+                focused.append(WorkflowEvidenceFrame(
+                    time: step.time,
+                    imageURL: url,
+                    recognizedText: [],
+                    imageWidth: croppedImage.width,
+                    imageHeight: croppedImage.height,
+                    captureFrame: CGRect(
+                        x: originalCaptureFrame.minX + cropRect.minX * scaleX,
+                        y: originalCaptureFrame.minY + originYFromTop * scaleY,
+                        width: cropRect.width * scaleX,
+                        height: cropRect.height * scaleY
+                    ),
+                    focusStepID: step.id
+                ))
+            }
+            if focused.isEmpty { try? FileManager.default.removeItem(at: directory) }
+            return focused
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            throw error
         }
     }
 
