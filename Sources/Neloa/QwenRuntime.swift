@@ -28,23 +28,41 @@ import Tokenizers
 actor QwenRuntime {
     private var container: ModelContainer?
     private var loadTask: Task<ModelContainer, Error>?
+    private var loadedTier: LocalModelTier?
+    private var loadingTier: LocalModelTier?
     private var loadEpoch: UInt = 0
     private var generationInProgress = false
     private var generationWaiters: [CheckedContinuation<Void, Never>] = []
 
-    func load(progress: @Sendable @escaping (Double) -> Void) async throws {
-        if container != nil {
+    func load(tier: LocalModelTier, progress: @Sendable @escaping (Double) -> Void) async throws {
+        if container != nil, loadedTier == tier {
             progress(1)
             return
         }
 
-        if let loadTask {
-            let epoch = loadEpoch
-            let loaded = try await loadTask.value
-            guard epoch == loadEpoch else { throw CancellationError() }
-            container = loaded
-            progress(1)
-            return
+        if container != nil, loadedTier != tier {
+            container = nil
+            loadedTier = nil
+            Memory.clearCache()
+        }
+
+        if let pendingLoad = loadTask {
+            if loadingTier == tier {
+                let epoch = loadEpoch
+                let loaded = try await pendingLoad.value
+                guard epoch == loadEpoch else { throw CancellationError() }
+                container = loaded
+                loadedTier = tier
+                self.loadTask = nil
+                loadingTier = nil
+                progress(1)
+                return
+            }
+
+            loadEpoch &+= 1
+            pendingLoad.cancel()
+            loadTask = nil
+            loadingTier = nil
         }
 
         let epoch = loadEpoch
@@ -61,8 +79,8 @@ actor QwenRuntime {
                 cache: HubCache(cacheDirectory: LocalModelPaths.cacheDirectory)
             )
             let configuration = ModelConfiguration(
-                id: LocalModelPaths.modelID,
-                revision: LocalModelPaths.modelRevision
+                id: tier.modelID,
+                revision: tier.modelRevision
             )
             let loaded = try await loadModelContainer(
                 from: #hubDownloader(hub),
@@ -74,19 +92,25 @@ actor QwenRuntime {
                 }
             )
             try Task.checkCancellation()
-            try LocalModelPaths.markInstalled()
+            try LocalModelPaths.markInstalled(tier)
             return loaded
         }
+        loadingTier = tier
         loadTask = task
         do {
             let loaded = try await task.value
             guard epoch == loadEpoch else { throw CancellationError() }
             container = loaded
+            loadedTier = tier
             loadTask = nil
+            loadingTier = nil
             progress(1)
         } catch {
-            container = nil
-            loadTask = nil
+            if epoch == loadEpoch {
+                container = nil
+                loadTask = nil
+                loadingTier = nil
+            }
             throw error
         }
     }
@@ -127,6 +151,7 @@ actor QwenRuntime {
     func unload() async {
         await acquireGenerationSlot()
         container = nil
+        loadedTier = nil
         Memory.clearCache()
         releaseGenerationSlot()
     }
@@ -140,7 +165,9 @@ actor QwenRuntime {
         }
         loadTask = nil
         container = nil
-        LocalModelPaths.clearInstallMarker()
+        if let loadingTier { LocalModelPaths.clearInstallMarker(loadingTier) }
+        loadingTier = nil
+        loadedTier = nil
         Memory.clearCache()
     }
 
@@ -164,7 +191,7 @@ actor QwenRuntime {
 }
 #else
 actor QwenRuntime {
-    func load(progress: @Sendable @escaping (Double) -> Void) async throws {
+    func load(tier: LocalModelTier, progress: @Sendable @escaping (Double) -> Void) async throws {
         throw QwenRuntimeError.runtimeNotBundled
     }
 

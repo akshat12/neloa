@@ -152,7 +152,7 @@ struct OnboardingView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(LocalModelPaths.displayName)
                             .font(.system(size: 21, weight: .semibold, design: .rounded))
-                        Text("\(LocalModelPaths.downloadSizeLabel) · Apple silicon · 16 GB or more")
+                        Text("\(agent.selectedTier.precisionLabel) · \(agent.selectedTier.downloadSizeLabel) · Apple silicon · 16 GB or more")
                             .font(.system(size: 15))
                             .foregroundStyle(.secondary)
                         Text("Basic mode still records and replays workflows on other supported Macs.")

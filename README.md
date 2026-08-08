@@ -13,7 +13,7 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 - Replays the workflow under user supervision with the signature “Again, but…” interaction.
 - Accepts instructions such as “Replace June with July” or “use amount $750.”
 - Lets each change be used once, saved as a variant, or made the new default.
-- Uses one primary local model—Qwen3-VL 4B at 4-bit—for visual workflow learning and custom run planning, with Apple's on-device model and a narrow deterministic planner as safe fallbacks.
+- Uses one primary local model family—Qwen3-VL 4B—with a recommended 4-bit tier and an optional higher-precision 8-bit tier, plus Apple's on-device model and a narrow deterministic planner as safe fallbacks.
 - Pauses at spoken approval rules such as “always ask me before sending.”
 - Keeps a local activity receipt showing what ran and what changed.
 - Uses the Lagoon visual identity with persistent System, Light, and Dark appearance choices.
@@ -32,7 +32,7 @@ open dist/Neloa.app
 
 `make setup-signing` is a one-time development setup that creates a local signing identity in your login Keychain. The first signed build may ask for your Mac login password; choose **Always Allow** so later builds can sign without prompting. Keeping the same identity across builds lets macOS retain Neloa’s privacy permissions. `make test` runs deterministic workflow checks. `make agent-test` makes a real request to Apple's on-device model and verifies the resulting executable change plan.
 
-`make qwen-test` performs the end-to-end direct MLX model check, including real GPU inference. Its first run downloads the same 3.1 GB model used by the app; later runs reuse Neloa's private local cache.
+`make qwen-test` performs the end-to-end direct MLX model check, including real GPU inference. Its first run downloads the same 3.1 GB 4-bit model used by the app; later runs reuse Neloa's private local cache. `make qwen-8bit-test` performs the equivalent check for the optional 5.1 GB 8-bit tier.
 
 For faster UI-only work, `make basic-app` creates a build without Qwen. Complete local builds and GitHub releases always enable Qwen and include the verified MLX GPU shader.
 
@@ -59,13 +59,17 @@ Release packaging stages its ad-hoc app separately and does not overwrite `dist/
 
 See the [distribution plan](docs/DISTRIBUTION.md) for the release workflow, limitations, and the future path to signed builds.
 
-## Local model
+## Local visual intelligence
 
-Neloa offers a one-click, resumable first-time download of Qwen3-VL 4B Instruct (4-bit), approximately 3.1 GB. It is stored under Neloa's Application Support directory and runs directly on the Apple GPU through MLX Swift. There is no Ollama installation, Terminal command, local server, account, or cloud API.
+Neloa offers two precisions of the same Qwen3-VL 4B Instruct model. **Balanced · 4-bit** is the 3.1 GB default and is recommended for 16 GB Macs. **Higher precision · 8-bit** is an optional 5.1 GB download and is best with 24 GB or more. People can switch tiers in Settings; only the selected tier is loaded into memory.
+
+Downloads are one-click and resumable. Models are stored under Neloa's Application Support directory and run directly on the Apple GPU through MLX Swift. There is no Ollama installation, Terminal command, local server, account, or cloud API.
 
 The model receives only a small set of salient recording frames, locally recognized interface text, captured actions, and narration. Model output may improve action names and add clearly narrated rules, but it cannot add replayable clicks or keystrokes: Neloa preserves the deterministic capture as the execution authority. The model can be removed from Settings without deleting automations or recordings.
 
 If the model is skipped or unavailable, Neloa still records and replays captured actions, handles explicit value replacements locally, and can use Apple's on-device language model as a planning fallback on supported macOS versions.
+
+See the [model strategy](docs/MODELS.md) for tier guidance, measured resource use, and the visual models being evaluated.
 
 ## Privacy and safety
 

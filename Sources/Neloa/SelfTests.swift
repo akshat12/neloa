@@ -55,12 +55,12 @@ enum SelfTests {
     }
 
     @MainActor
-    static func qwenSmokeTest() async throws {
+    static func qwenSmokeTest(tier: LocalModelTier = .balanced4Bit) async throws {
         guard LocalAgentService.isQwenRuntimeBundled else {
             throw Failure(description: "Qwen smoke test requires NELOA_ENABLE_MLX=1")
         }
-        let agent = LocalAgentService()
-        print("Preparing \(LocalModelPaths.displayName); the first run downloads \(LocalModelPaths.downloadSizeLabel)…")
+        let agent = LocalAgentService(selectedTier: tier)
+        print("Preparing \(LocalModelPaths.displayName) \(tier.precisionLabel); the first run downloads \(tier.downloadSizeLabel)…")
         await agent.setupModel()
         try expect(agent.modelStatus == .ready, "Qwen should load successfully; status was: \(agent.modelStatus)")
 
@@ -293,6 +293,7 @@ enum SelfTests {
             freeDiskBytes: 8 * 1_024 * 1_024 * 1_024
         )
         try expect(supported.eligibilityIssue == nil, "an Apple silicon Mac with 16 GB should support the local model")
+        try expect(supported.eligibilityIssue(for: .quality8Bit)?.contains("10 GB") == true, "the 8-bit tier should reserve enough download workspace")
         var unsupported = supported
         unsupported.physicalMemoryBytes = 8 * 1_024 * 1_024 * 1_024
         try expect(unsupported.eligibilityIssue?.contains("16 GB") == true, "lower-memory Macs should receive a clear model requirement")
@@ -305,12 +306,12 @@ enum SelfTests {
     }
 
     private static func localModelCacheValidationCheck() throws {
-        try expect(
-            LocalModelPaths.modelRevision.count == 40,
-            "the downloaded visual model should be pinned to an immutable revision"
-        )
-        if !FileManager.default.fileExists(atPath: LocalModelPaths.installMarkerURL.path) {
-            try expect(!LocalModelPaths.isInstalled, "a cache without a ready marker must not be treated as installed")
+        try expect(LocalModelTier.resolve(nil) == .balanced4Bit, "4-bit should remain the safe default")
+        for tier in LocalModelTier.allCases {
+            try expect(tier.modelRevision.count == 40, "every visual model tier should be pinned to an immutable revision")
+            if !FileManager.default.fileExists(atPath: LocalModelPaths.installMarkerURL(for: tier).path) {
+                try expect(!LocalModelPaths.isInstalled(tier), "a cache without its tier marker must not be treated as installed")
+            }
         }
     }
 

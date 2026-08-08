@@ -176,7 +176,7 @@ struct TeachView: View {
     private var visualModelBannerAction: some View {
         switch agent.modelStatus {
         case .notInstalled:
-            Button("Download · \(LocalModelPaths.downloadSizeLabel)") {
+            Button("Download · \(agent.selectedTier.downloadSizeLabel)") {
                 Task { await agent.setupModel() }
             }
             .buttonStyle(.borderedProminent)

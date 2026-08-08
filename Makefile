@@ -1,4 +1,4 @@
-.PHONY: build build-mlx test agent-test qwen-test setup-signing app basic-app unsigned-release run clean
+.PHONY: build build-mlx test agent-test qwen-test qwen-8bit-test setup-signing app basic-app unsigned-release run clean
 
 build:
 	swift build
@@ -16,6 +16,11 @@ qwen-test:
 	NELOA_MLX_CONFIGURATION=Debug sh scripts/build-mlx.sh
 	NELOA_EXECUTABLE_PATH="$(CURDIR)/.build/arm64-apple-macosx/debug/Neloa" NELOA_APP_OUTPUT_PATH="$(CURDIR)/.build/qwen-qa/Neloa.app" NELOA_FORCE_ADHOC=1 NELOA_EXPECT_MLX_RESOURCES=1 sh scripts/package-app.sh
 	.build/qwen-qa/Neloa.app/Contents/MacOS/Neloa --qwen-smoke-test
+
+qwen-8bit-test:
+	NELOA_MLX_CONFIGURATION=Debug sh scripts/build-mlx.sh
+	NELOA_EXECUTABLE_PATH="$(CURDIR)/.build/arm64-apple-macosx/debug/Neloa" NELOA_APP_OUTPUT_PATH="$(CURDIR)/.build/qwen-qa/Neloa.app" NELOA_FORCE_ADHOC=1 NELOA_EXPECT_MLX_RESOURCES=1 sh scripts/package-app.sh
+	.build/qwen-qa/Neloa.app/Contents/MacOS/Neloa --qwen-8bit-smoke-test
 
 setup-signing:
 	sh scripts/setup-local-signing.sh

@@ -83,10 +83,11 @@ enum NeloaMain {
                 }
             }
             dispatchMain()
-        } else if CommandLine.arguments.contains("--qwen-smoke-test") {
+        } else if CommandLine.arguments.contains("--qwen-smoke-test") || CommandLine.arguments.contains("--qwen-8bit-smoke-test") {
             Task { @MainActor in
                 do {
-                    try await SelfTests.qwenSmokeTest()
+                    let tier: LocalModelTier = CommandLine.arguments.contains("--qwen-8bit-smoke-test") ? .quality8Bit : .balanced4Bit
+                    try await SelfTests.qwenSmokeTest(tier: tier)
                     print("Neloa Qwen visual model smoke test passed")
                     Foundation.exit(0)
                 } catch {

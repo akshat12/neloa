@@ -9,15 +9,25 @@ final class LocalAgentService: ObservableObject {
     @Published private(set) var isLearning = false
     @Published var status = "Local agent ready"
     @Published private(set) var modelStatus: LocalModelStatus = .checking
+    @Published private(set) var selectedTier: LocalModelTier
 
     let hardware: LocalModelHardware
     private let qwen = QwenRuntime()
     private var setupTask: Task<Bool, Never>?
+    private let defaults: UserDefaults?
 
-    init(hardware: LocalModelHardware = .current) {
+    init(
+        hardware: LocalModelHardware = .current,
+        selectedTier: LocalModelTier? = nil,
+        defaults: UserDefaults = .standard
+    ) {
         self.hardware = hardware
+        self.selectedTier = selectedTier ?? LocalModelTier.resolve(defaults.string(forKey: LocalModelTier.storageKey))
+        self.defaults = selectedTier == nil ? defaults : nil
         refreshModelStatus()
-        if LocalModelPaths.isInstalled, hardware.eligibilityIssue == nil, Self.isQwenRuntimeBundled {
+        if LocalModelPaths.isInstalled(self.selectedTier),
+           hardware.eligibilityIssue(for: self.selectedTier) == nil,
+           Self.isQwenRuntimeBundled {
             Task { await setupModel() }
         } else {
             #if canImport(FoundationModels)
@@ -43,11 +53,11 @@ final class LocalAgentService: ObservableObject {
         case .checking, .notInstalled, .unavailable:
             break
         }
-        if let issue = hardware.eligibilityIssue {
+        if let issue = hardware.eligibilityIssue(for: selectedTier) {
             modelStatus = .unavailable(issue)
         } else if !Self.isQwenRuntimeBundled {
             modelStatus = .unavailable("This development build does not include the Apple GPU model runtime.")
-        } else if LocalModelPaths.isInstalled {
+        } else if LocalModelPaths.isInstalled(selectedTier) {
             if modelStatus != .ready && modelStatus != .loading {
                 modelStatus = .checking
             }
@@ -71,8 +81,9 @@ final class LocalAgentService: ObservableObject {
     }
 
     private func performModelSetup() async -> Bool {
-        guard hardware.eligibilityIssue == nil else {
-            modelStatus = .unavailable(hardware.eligibilityIssue ?? "This Mac is not supported.")
+        let tier = selectedTier
+        guard hardware.eligibilityIssue(for: tier) == nil else {
+            modelStatus = .unavailable(hardware.eligibilityIssue(for: tier) ?? "This Mac is not supported.")
             return false
         }
         guard Self.isQwenRuntimeBundled else {
@@ -80,11 +91,11 @@ final class LocalAgentService: ObservableObject {
             return false
         }
 
-        let wasInstalled = LocalModelPaths.isInstalled
+        let wasInstalled = LocalModelPaths.isInstalled(tier)
         modelStatus = wasInstalled ? .loading : .downloading(0)
         status = wasInstalled ? "Loading local visual intelligence…" : "Downloading local visual intelligence…"
         do {
-            try await qwen.load { [weak self] progress in
+            try await qwen.load(tier: tier) { [weak self] progress in
                 Task { @MainActor in
                     guard let self, !wasInstalled else { return }
                     let progress = min(max(progress, 0), 1)
@@ -92,10 +103,10 @@ final class LocalAgentService: ObservableObject {
                 }
             }
             modelStatus = .ready
-            status = "Qwen visual intelligence ready on this Mac"
+            status = "Qwen \(tier.precisionLabel) visual intelligence ready on this Mac"
             return true
         } catch {
-            LocalModelPaths.clearInstallMarker()
+            LocalModelPaths.clearInstallMarker(tier)
             if error is CancellationError || Task.isCancelled {
                 modelStatus = .notInstalled
                 status = "Model download paused; Neloa will resume it next time"
@@ -117,12 +128,13 @@ final class LocalAgentService: ObservableObject {
             _ = await setupTask.value
         }
         setupTask = nil
-        LocalModelPaths.clearInstallMarker()
+        LocalModelPaths.clearInstallMarker(selectedTier)
         modelStatus = .notInstalled
         status = "Model download paused; Neloa will resume it next time"
     }
 
     func removeModel() async {
+        let tier = selectedTier
         modelStatus = .removing
         status = "Removing the local visual model…"
         setupTask?.cancel()
@@ -133,14 +145,33 @@ final class LocalAgentService: ObservableObject {
         setupTask = nil
         await qwen.unload()
         do {
-            if FileManager.default.fileExists(atPath: LocalModelPaths.modelsDirectory.path) {
-                try FileManager.default.removeItem(at: LocalModelPaths.modelsDirectory)
+            let repository = LocalModelPaths.repositoryDirectory(for: tier)
+            if FileManager.default.fileExists(atPath: repository.path) {
+                try FileManager.default.removeItem(at: repository)
             }
+            LocalModelPaths.clearInstallMarker(tier)
             modelStatus = .notInstalled
-            status = "Local visual model removed"
+            status = "Qwen \(tier.precisionLabel) model removed"
         } catch {
             modelStatus = .failed("Neloa could not remove the model: \(error.localizedDescription)")
             status = "Local visual intelligence needs attention"
+        }
+    }
+
+    func selectTier(_ tier: LocalModelTier) async {
+        guard tier != selectedTier else { return }
+        setupTask?.cancel()
+        await qwen.cancelLoad()
+        if let setupTask { _ = await setupTask.value }
+        setupTask = nil
+        await qwen.unload()
+        selectedTier = tier
+        defaults?.set(tier.rawValue, forKey: LocalModelTier.storageKey)
+        modelStatus = .checking
+        status = "Checking the \(tier.precisionLabel) model…"
+        refreshModelStatus()
+        if LocalModelPaths.isInstalled(tier), hardware.eligibilityIssue(for: tier) == nil {
+            await setupModel()
         }
     }
 
@@ -225,7 +256,7 @@ final class LocalAgentService: ObservableObject {
             await setupModel()
             return modelStatus == .ready
         }
-        guard LocalModelPaths.isInstalled else { return false }
+        guard LocalModelPaths.isInstalled(selectedTier) else { return false }
         await setupModel()
         return modelStatus == .ready
     }
@@ -272,7 +303,7 @@ final class LocalAgentService: ObservableObject {
             )
             do {
                 let response = try WorkflowLearner.decode(content)
-                if CommandLine.arguments.contains("--qwen-smoke-test") {
+                if isQwenSmokeTest {
                     fputs("Neloa Qwen visual-learning response (attempt \(attempt + 1)): \(content)\n", stderr)
                 }
                 if !needsConsensus {
@@ -285,7 +316,7 @@ final class LocalAgentService: ObservableObject {
                     return WorkflowLearner.apply(consensus, to: candidate)
                 }
             } catch {
-                if CommandLine.arguments.contains("--qwen-smoke-test") {
+                if isQwenSmokeTest {
                     fputs("Neloa Qwen raw visual-learning response (attempt \(attempt + 1)): \(content)\n", stderr)
                 }
                 if attempt == maximumAttempts - 1 { throw error }
@@ -338,6 +369,10 @@ final class LocalAgentService: ObservableObject {
             return "The download timed out. Try again to resume where it stopped."
         }
         return "Neloa couldn't prepare the model. Try again, or reset the download below."
+    }
+
+    private var isQwenSmokeTest: Bool {
+        CommandLine.arguments.contains("--qwen-smoke-test") || CommandLine.arguments.contains("--qwen-8bit-smoke-test")
     }
 
     enum AgentError: Error { case badResponse }

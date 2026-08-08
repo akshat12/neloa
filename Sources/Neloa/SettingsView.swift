@@ -46,7 +46,7 @@ struct SettingsView: View {
             Button("Remove model", role: .destructive) { Task { await agent.removeModel() } }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Neloa will keep your automations and recordings. Visual workflow understanding will use the basic captured-action fallback until you download the model again.")
+            Text("Neloa will keep your automations, recordings, and any other model tier. The selected tier can be downloaded again later.")
         }
     }
 
@@ -243,7 +243,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Local visual intelligence")
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
-                    Text("\(LocalModelPaths.displayName) · Built for Apple silicon Macs with 16 GB or more")
+                    Text("\(LocalModelPaths.displayName) · \(agent.selectedTier.precisionLabel) · Apple silicon")
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary)
                 }
@@ -255,6 +255,24 @@ struct SettingsView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 13) {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Model quality")
+                        .font(.system(size: 13, weight: .semibold))
+                    Picker("Model quality", selection: Binding(
+                        get: { agent.selectedTier },
+                        set: { tier in Task { await agent.selectTier(tier) } }
+                    )) {
+                        ForEach(LocalModelTier.allCases) { tier in
+                            Text("\(tier.title) · \(tier.precisionLabel)").tag(tier)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(modelSelectionDisabled)
+                    Text("\(agent.selectedTier.recommendation) · \(agent.selectedTier.downloadSizeLabel) download")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+
                 modelStatusMessage
 
                 if case .downloading(let progress) = agent.modelStatus {
@@ -271,7 +289,7 @@ struct SettingsView: View {
                 HStack(spacing: 10) {
                     modelAction
                     if canRemoveModel {
-                        Button("Remove model…", role: .destructive) { confirmRemoveModel = true }
+                        Button("Remove \(agent.selectedTier.precisionLabel) model…", role: .destructive) { confirmRemoveModel = true }
                             .buttonStyle(.bordered)
                             .controlSize(.large)
                             .tint(.red)
@@ -303,7 +321,7 @@ struct SettingsView: View {
             Label("Download once to let Neloa understand the screen around each captured action.", systemImage: "arrow.down.circle.fill")
                 .foregroundStyle(.secondary)
         case .downloading:
-            Label("Downloading \(LocalModelPaths.downloadSizeLabel) directly to this Mac…", systemImage: "arrow.down.circle.fill")
+            Label("Downloading \(agent.selectedTier.downloadSizeLabel) directly to this Mac…", systemImage: "arrow.down.circle.fill")
                 .foregroundStyle(Color.accentColor)
         case .loading:
             Label("Loading the local model into memory…", systemImage: "memorychip")
@@ -324,7 +342,7 @@ struct SettingsView: View {
     private var modelAction: some View {
         switch agent.modelStatus {
         case .notInstalled:
-            Button("Download model · \(LocalModelPaths.downloadSizeLabel)") {
+            Button("Download \(agent.selectedTier.precisionLabel) model · \(agent.selectedTier.downloadSizeLabel)") {
                 Task { await agent.setupModel() }
             }
             .buttonStyle(.borderedProminent)
@@ -373,10 +391,17 @@ struct SettingsView: View {
     }
 
     private var canRemoveModel: Bool {
-        guard LocalModelPaths.hasCachedFiles else { return false }
+        guard LocalModelPaths.hasCachedFiles(for: agent.selectedTier) else { return false }
         return switch agent.modelStatus {
         case .downloading, .loading, .removing: false
         default: true
+        }
+    }
+
+    private var modelSelectionDisabled: Bool {
+        switch agent.modelStatus {
+        case .downloading, .loading, .removing: true
+        default: false
         }
     }
 
