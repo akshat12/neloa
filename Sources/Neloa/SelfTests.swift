@@ -25,6 +25,7 @@ enum SelfTests {
         try captureOptionCheck()
         try screenPermissionBranchCheck()
         try appTourStructureCheck()
+        try reviewFixtureLaunchCheck()
         try reviewTimelineSelectionCheck()
         try workflowInstructionCheck()
         try agentResponseSafetyCheck()
@@ -424,6 +425,29 @@ enum SelfTests {
         try expect(Set(steps.map(\.target)).count == steps.count, "each guided tour step should spotlight a unique control")
         try expect(steps.first?.target == .teachNavigation, "the guided tour should begin with Teach")
         try expect(steps.last?.target == .settingsNavigation, "the guided tour should finish with privacy and Settings")
+    }
+
+    private static func reviewFixtureLaunchCheck() throws {
+        try expect(
+            TeachController.shouldLoadReviewFixture(arguments: ["Neloa", "--ui-test-review"]),
+            "the review fixture should be available to an explicitly launched UI test"
+        )
+        try expect(
+            !TeachController.shouldLoadReviewFixture(arguments: ["Neloa"]),
+            "a normal app launch must never substitute a canned movie for the user's recording"
+        )
+
+        let suiteName = "NeloaSelfTests.ReviewFixture.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            throw Failure(description: "could not create isolated defaults for the review fixture test")
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: "NeloaUITestReview")
+        TeachController.clearLegacyReviewFixture(in: defaults)
+        try expect(
+            defaults.object(forKey: "NeloaUITestReview") == nil,
+            "startup should remove the stale persistent review fixture preference"
+        )
     }
 
     private static func reviewTimelineSelectionCheck() throws {
