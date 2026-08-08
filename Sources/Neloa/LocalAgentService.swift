@@ -251,10 +251,13 @@ final class LocalAgentService: ObservableObject {
         frames: [WorkflowEvidenceFrame]
     ) async throws -> Workflow {
         let basePrompt = try WorkflowLearner.prompt(candidate: candidate, frames: frames)
-        for attempt in 0..<3 {
+        let needsConsensus = !frames.isEmpty && WorkflowLearner.needsClickConsensus(candidate)
+        let maximumAttempts = needsConsensus ? 3 : 1
+        var responses: [LearnedWorkflowResponse] = []
+        for attempt in 0..<maximumAttempts {
             let correction = attempt == 0 ? "" : """
 
-            Correction attempt \(attempt): the earlier interpretation left at least one captured click generic. For every supplied click whose currentTitle is Click or Right-click, inspect evidenceImage at imageX/imageY and return a concrete target label such as “Click Download report.” A generic Click title or an omitted click annotation is invalid.
+            Independent visual verification pass \(attempt + 1): ignore earlier answers. For every supplied click whose currentTitle is Click or Right-click, inspect evidenceImage at imageX/imageY and return the exact visible target. A generic Click title, an omitted click annotation, or a nearby target that is not at the supplied coordinates is invalid.
             """
             let content = try await qwen.respond(
                 prompt: basePrompt + correction,
@@ -267,16 +270,20 @@ final class LocalAgentService: ObservableObject {
                 if CommandLine.arguments.contains("--qwen-smoke-test") {
                     fputs("Neloa Qwen visual-learning response (attempt \(attempt + 1)): \(content)\n", stderr)
                 }
-                guard frames.isEmpty || WorkflowLearner.groundsGenericClicks(response, in: candidate) else {
-                    continue
+                if !needsConsensus {
+                    status = "Learned privately with Qwen visual intelligence"
+                    return WorkflowLearner.apply(response, to: candidate)
                 }
-                status = "Learned privately with Qwen visual intelligence"
-                return WorkflowLearner.apply(response, to: candidate)
+                responses.append(response)
+                if let consensus = WorkflowLearner.consensusResponse(from: responses, candidate: candidate) {
+                    status = "Learned privately with Qwen visual intelligence"
+                    return WorkflowLearner.apply(consensus, to: candidate)
+                }
             } catch {
                 if CommandLine.arguments.contains("--qwen-smoke-test") {
                     fputs("Neloa Qwen raw visual-learning response (attempt \(attempt + 1)): \(content)\n", stderr)
                 }
-                if attempt == 2 { throw error }
+                if attempt == maximumAttempts - 1 { throw error }
             }
         }
         throw QwenRuntimeError.invalidResponse

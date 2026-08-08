@@ -157,10 +157,7 @@ enum WorkflowLearner {
     }
 
     static func groundsGenericClicks(_ response: LearnedWorkflowResponse, in candidate: Workflow) -> Bool {
-        let genericClickIDs = Set(candidate.steps.compactMap { step -> String? in
-            guard step.kind == .click, isGenericClickTitle(step.title) else { return nil }
-            return step.id.uuidString.lowercased()
-        })
+        let genericClickIDs = genericClickIDs(in: candidate)
         guard !genericClickIDs.isEmpty else { return true }
 
         let groundedIDs = Set(response.annotations.compactMap { annotation -> String? in
@@ -169,6 +166,25 @@ enum WorkflowLearner {
             return annotation.stepID.lowercased()
         })
         return genericClickIDs.isSubset(of: groundedIDs)
+    }
+
+    static func needsClickConsensus(_ candidate: Workflow) -> Bool {
+        !genericClickIDs(in: candidate).isEmpty
+    }
+
+    static func consensusResponse(
+        from responses: [LearnedWorkflowResponse],
+        candidate: Workflow
+    ) -> LearnedWorkflowResponse? {
+        guard responses.count >= 2 else { return nil }
+        for rightIndex in stride(from: responses.count - 1, through: 1, by: -1) {
+            for leftIndex in stride(from: rightIndex - 1, through: 0, by: -1) {
+                if clickAnnotationsAgree(responses[leftIndex], responses[rightIndex], candidate: candidate) {
+                    return responses[rightIndex]
+                }
+            }
+        }
+        return nil
     }
 
     private static func cleaned(_ value: String, maximumLength: Int) -> String {
@@ -186,6 +202,52 @@ enum WorkflowLearner {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "-", with: " ")
         return normalized == "click" || normalized == "right click"
+    }
+
+    private static func genericClickIDs(in candidate: Workflow) -> Set<String> {
+        Set(candidate.steps.compactMap { step -> String? in
+            guard step.kind == .click, isGenericClickTitle(step.title) else { return nil }
+            return step.id.uuidString.lowercased()
+        })
+    }
+
+    private static func clickAnnotationsAgree(
+        _ lhs: LearnedWorkflowResponse,
+        _ rhs: LearnedWorkflowResponse,
+        candidate: Workflow
+    ) -> Bool {
+        let requiredIDs = genericClickIDs(in: candidate)
+        guard !requiredIDs.isEmpty else { return true }
+        let left = concreteClickLabels(lhs, requiredIDs: requiredIDs)
+        let right = concreteClickLabels(rhs, requiredIDs: requiredIDs)
+        return requiredIDs.allSatisfy { id in
+            guard let leftTitle = left[id], let rightTitle = right[id] else { return false }
+            return titlesAgree(leftTitle, rightTitle)
+        }
+    }
+
+    private static func concreteClickLabels(
+        _ response: LearnedWorkflowResponse,
+        requiredIDs: Set<String>
+    ) -> [String: String] {
+        response.annotations.reduce(into: [:]) { result, annotation in
+            let id = annotation.stepID.lowercased()
+            guard requiredIDs.contains(id),
+                  (annotation.confidence ?? 0) >= 0.55,
+                  !isGenericClickTitle(annotation.title) else { return }
+            result[id] = annotation.title
+        }
+    }
+
+    private static func titlesAgree(_ lhs: String, _ rhs: String) -> Bool {
+        let ignored = Set(["click", "press", "choose", "select", "button", "field", "selector", "the", "a", "an"])
+        func terms(_ value: String) -> Set<String> {
+            Set(value.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init))
+                .subtracting(ignored)
+        }
+        let left = terms(lhs)
+        let right = terms(rhs)
+        return !left.isEmpty && !right.isEmpty && !left.isDisjoint(with: right)
     }
 
     private static func clock(_ time: TimeInterval) -> String {

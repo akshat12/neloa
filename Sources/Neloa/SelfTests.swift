@@ -360,6 +360,25 @@ enum SelfTests {
         )
         try expect(!WorkflowLearner.groundsGenericClicks(generic, in: workflow), "a generic Qwen click must trigger visual self-correction")
         try expect(WorkflowLearner.groundsGenericClicks(response, in: workflow), "a concrete visual click target should pass the grounding gate")
+
+        let wrongTarget = LearnedWorkflowResponse(
+            name: nil,
+            annotations: [.init(stepID: click.id.uuidString, title: "Click Month selector", detail: nil, confidence: 1)],
+            decisions: []
+        )
+        let confirmingTarget = LearnedWorkflowResponse(
+            name: nil,
+            annotations: [.init(stepID: click.id.uuidString, title: "Press the report download button", detail: nil, confidence: 1)],
+            decisions: []
+        )
+        try expect(
+            WorkflowLearner.consensusResponse(from: [wrongTarget, response], candidate: workflow) == nil,
+            "two specific but conflicting click targets must not be trusted"
+        )
+        try expect(
+            WorkflowLearner.consensusResponse(from: [wrongTarget, response, confirmingTarget], candidate: workflow) != nil,
+            "an independently agreeing click description should establish visual consensus"
+        )
     }
 
     private static func permissionStateCheck() throws {
