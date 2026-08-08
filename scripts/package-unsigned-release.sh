@@ -41,10 +41,11 @@ rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR" "$PROJECT_DIR/dist"
 
 NELOA_MLX_CONFIGURATION=Release \
-NELOA_MLX_DERIVED_DATA="$ARM_SCRATCH" \
+NELOA_MLX_SCRATCH_PATH="$ARM_SCRATCH" \
+NELOA_MLX_TRIPLE="arm64-apple-macosx15.0" \
     sh "$PROJECT_DIR/scripts/build-mlx.sh"
 
-ARM_BIN_DIR="$ARM_SCRATCH/Build/Products/Release"
+ARM_BIN_DIR="$ARM_SCRATCH/arm64-apple-macosx/release"
 
 NELOA_EXECUTABLE_PATH="$ARM_BIN_DIR/Neloa" \
 NELOA_APP_OUTPUT_PATH="$APP_PATH" \

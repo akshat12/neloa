@@ -20,7 +20,7 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 
 ## Build and run
 
-Requirements for the complete app: macOS 15 or newer, Apple silicon, 16 GB of memory, and full Xcode. Xcode is free; an Apple Developer Program membership is not required. Xcode supplies the Metal compiler needed to bundle MLX's GPU shaders. People installing the GitHub ZIP do not need Xcode.
+Requirements for the complete app: macOS 15 or newer, Apple silicon, 16 GB of memory, and the free Apple Command Line Tools. An Apple Developer Program membership is not required. The build downloads MLX Swift's official, checksum-pinned macOS GPU shader from the matching GitHub release; people installing Neloa's ZIP do not need any developer tools.
 
 ```sh
 make setup-signing
@@ -34,7 +34,7 @@ open dist/Neloa.app
 
 `make qwen-test` performs the end-to-end direct MLX model check, including real GPU inference. Its first run downloads the same 3.1 GB model used by the app; later runs reuse Neloa's private local cache.
 
-For UI work on a Mac that only has the Apple Command Line Tools, `make basic-app` creates a build without Qwen. Complete local builds and GitHub releases use Xcode and always enable Qwen.
+For faster UI-only work, `make basic-app` creates a build without Qwen. Complete local builds and GitHub releases always enable Qwen and include the verified MLX GPU shader.
 
 The app asks for Screen Recording, Accessibility, Microphone, and Speech Recognition permissions. Accessibility lets Neloa learn clicks and typing during a demonstration and replay only the actions you approve. macOS may require reopening Neloa after it is granted.
 

@@ -3,7 +3,7 @@ set -eu
 
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 CONFIGURATION=${NELOA_MLX_CONFIGURATION:-Debug}
-DERIVED_DATA=${NELOA_MLX_DERIVED_DATA:-$PROJECT_DIR/.build/xcode-mlx}
+SCRATCH_PATH=${NELOA_MLX_SCRATCH_PATH:-$PROJECT_DIR/.build}
 
 case "$CONFIGURATION" in
     Debug|Release) ;;
@@ -16,28 +16,29 @@ esac
 sh "$PROJECT_DIR/scripts/check-mlx-toolchain.sh"
 
 cd "$PROJECT_DIR"
-NELOA_ENABLE_MLX=1 xcodebuild \
-    -scheme Neloa \
-    -destination 'platform=macOS' \
-    -configuration "$CONFIGURATION" \
-    -derivedDataPath "$DERIVED_DATA" \
-    -skipMacroValidation \
-    -skipPackagePluginValidation \
-    ARCHS=arm64 \
-    ONLY_ACTIVE_ARCH=NO \
-    MACOSX_DEPLOYMENT_TARGET=15.0 \
-    build
+case "$CONFIGURATION" in
+    Debug) SWIFT_CONFIGURATION=debug ;;
+    Release) SWIFT_CONFIGURATION=release ;;
+esac
 
-EXECUTABLE_PATH="$DERIVED_DATA/Build/Products/$CONFIGURATION/Neloa"
+set -- swift build -c "$SWIFT_CONFIGURATION" --scratch-path "$SCRATCH_PATH" --product Neloa
+if [ -n "${NELOA_MLX_TRIPLE:-}" ]; then
+    set -- "$@" --triple "$NELOA_MLX_TRIPLE"
+fi
+NELOA_ENABLE_MLX=1 "$@"
+
+set -- swift build -c "$SWIFT_CONFIGURATION" --scratch-path "$SCRATCH_PATH" --show-bin-path
+if [ -n "${NELOA_MLX_TRIPLE:-}" ]; then
+    set -- "$@" --triple "$NELOA_MLX_TRIPLE"
+fi
+BIN_DIRECTORY=$(NELOA_ENABLE_MLX=1 "$@")
+EXECUTABLE_PATH="$BIN_DIRECTORY/Neloa"
 if [ ! -f "$EXECUTABLE_PATH" ]; then
-    echo "error: Xcode did not produce Neloa at $EXECUTABLE_PATH" >&2
+    echo "error: Swift did not produce Neloa at $EXECUTABLE_PATH" >&2
     exit 1
 fi
 
-RESOURCE_DIRECTORY=$(dirname "$EXECUTABLE_PATH")
-if ! find "$RESOURCE_DIRECTORY" -type f -name 'default.metallib' -print -quit | grep -q .; then
-    echo "error: Xcode built Neloa without the MLX Metal shader library" >&2
-    exit 1
-fi
+METALLIB=$(sh "$PROJECT_DIR/scripts/fetch-mlx-metallib.sh")
+cp "$METALLIB" "$BIN_DIRECTORY/mlx.metallib"
 
 echo "$EXECUTABLE_PATH"

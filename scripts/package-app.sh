@@ -73,10 +73,11 @@ done
 for METAL_LIBRARY in "$EXECUTABLE_DIRECTORY"/*.metallib; do
     [ -f "$METAL_LIBRARY" ] || continue
     cp "$METAL_LIBRARY" "$APP_DIR/Contents/Resources/"
+    cp "$METAL_LIBRARY" "$APP_DIR/Contents/MacOS/"
 done
 
 if [ "${NELOA_EXPECT_MLX_RESOURCES:-0}" = "1" ] && \
-   ! find "$APP_DIR/Contents/Resources" -type f -name 'default.metallib' -print -quit | grep -q .; then
+   ! find "$APP_DIR/Contents/MacOS" -maxdepth 1 -type f \( -name 'mlx.metallib' -o -name 'default.metallib' \) -print -quit | grep -q .; then
     echo "error: refusing to package Qwen without its MLX Metal shader library" >&2
     exit 1
 fi

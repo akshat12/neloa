@@ -14,14 +14,15 @@ agent-test:
 
 qwen-test:
 	NELOA_MLX_CONFIGURATION=Debug sh scripts/build-mlx.sh
-	.build/xcode-mlx/Build/Products/Debug/Neloa --qwen-smoke-test
+	NELOA_EXECUTABLE_PATH="$(CURDIR)/.build/arm64-apple-macosx/debug/Neloa" NELOA_APP_OUTPUT_PATH="$(CURDIR)/.build/qwen-qa/Neloa.app" NELOA_FORCE_ADHOC=1 NELOA_EXPECT_MLX_RESOURCES=1 sh scripts/package-app.sh
+	.build/qwen-qa/Neloa.app/Contents/MacOS/Neloa --qwen-smoke-test
 
 setup-signing:
 	sh scripts/setup-local-signing.sh
 
 app:
 	NELOA_MLX_CONFIGURATION=Release sh scripts/build-mlx.sh
-	NELOA_EXECUTABLE_PATH="$(CURDIR)/.build/xcode-mlx/Build/Products/Release/Neloa" NELOA_EXPECT_MLX_RESOURCES=1 sh scripts/package-app.sh
+	NELOA_EXECUTABLE_PATH="$(CURDIR)/.build/arm64-apple-macosx/release/Neloa" NELOA_EXPECT_MLX_RESOURCES=1 sh scripts/package-app.sh
 
 basic-app:
 	sh scripts/package-app.sh
