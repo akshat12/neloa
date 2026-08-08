@@ -14,6 +14,7 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
     private var timer: Timer?
     private var startedAt: Date?
     private var outputURL: URL?
+    private(set) var captureFrame: CGRect?
 
     func start(includeSystemAudio: Bool) async throws -> URL {
         let preflightGranted = CGPreflightScreenCaptureAccess()
@@ -40,7 +41,11 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
         }
 
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Neloa-Captures", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
         let url = directory.appendingPathComponent("teach-\(UUID().uuidString).mp4")
 
         let excludedApplications = content.applications.filter { PrivacyShield.excludes($0.bundleIdentifier) }
@@ -53,6 +58,7 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
         configuration.showsCursor = true
         configuration.capturesAudio = includeSystemAudio
         configuration.excludesCurrentProcessAudio = true
+        captureFrame = display.frame
 
         let outputConfiguration = SCRecordingOutputConfiguration()
         outputConfiguration.outputURL = url

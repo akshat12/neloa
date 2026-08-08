@@ -72,11 +72,13 @@ enum SelfTests {
 
         let evidenceURL = try makeQwenVisualSmokeImage()
         defer { try? FileManager.default.removeItem(at: evidenceURL.deletingLastPathComponent()) }
-        let click = WorkflowStep(kind: .click, title: "Click", time: 0.5, x: 400, y: 140)
+        // CGEvent locations use a top-left screen origin. The button is drawn at
+        // y 140...198 in the 500-point AppKit image, so its screen-space center is 331.
+        let click = WorkflowStep(kind: .click, title: "Click", time: 0.5, x: 168, y: 331)
         let month = WorkflowStep(kind: .typeText, title: "Type June", time: 1, text: "June")
         let visualWorkflow = Workflow(
             name: "My automation",
-            transcript: "Download the monthly report and use June as the month.",
+            transcript: "Use June as the month.",
             steps: [click, month]
         )
         let learned = await agent.learnWorkflow(
@@ -84,15 +86,19 @@ enum SelfTests {
             evidenceFrames: [WorkflowEvidenceFrame(
                 time: 0.5,
                 imageURL: evidenceURL,
-                recognizedText: ["Monthly Report", "Download report", "Month", "June"]
+                recognizedText: [],
+                imageWidth: 800,
+                imageHeight: 500,
+                captureFrame: CGRect(x: 0, y: 0, width: 800, height: 500)
             )]
         )
         try expect(agent.status.contains("Learned privately with Qwen"), "Qwen should complete visual workflow learning; status was: \(agent.status)")
         try expect(learned.steps.count == visualWorkflow.steps.count, "visual learning must not add executable actions")
         try expect(learned.steps[0].x == click.x && learned.steps[0].y == click.y, "visual learning must preserve replay coordinates")
+        let learnedClickTitle = learned.steps[0].title.lowercased()
         try expect(
-            learned.name != visualWorkflow.name || learned.steps[0].title != click.title,
-            "Qwen should use the screenshot to improve at least one human-readable label"
+            learnedClickTitle.contains("download") || learnedClickTitle.contains("report"),
+            "Qwen should identify the report action from image pixels without OCR hints; got \(learned.steps[0].title)"
         )
     }
 
@@ -100,7 +106,11 @@ enum SelfTests {
     private static func makeQwenVisualSmokeImage() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("NeloaQwenSmoke-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
         let image = NSImage(size: NSSize(width: 800, height: 500))
         image.lockFocus()
         NSColor.white.setFill()
@@ -134,6 +144,7 @@ enum SelfTests {
         }
         let url = directory.appendingPathComponent("monthly-report.png")
         try png.write(to: url, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         return url
     }
 
@@ -320,6 +331,19 @@ enum SelfTests {
         try expect(learned.steps.count == workflow.steps.count, "the visual model must not invent executable steps")
         try expect(learned.steps[0].title == "Click Download report" && learned.steps[0].x == 30, "visual labels should preserve replay coordinates")
         try expect(WorkflowEvidenceExtractor.sampleTimes(steps: workflow.steps, maximumCount: 1).count == 1, "evidence sampling should stay within its memory budget")
+
+        let location = WorkflowLearner.evidenceLocation(
+            for: WorkflowStep(kind: .click, title: "Click", time: 1, x: 1_100, y: 350),
+            frames: [WorkflowEvidenceFrame(
+                time: 1,
+                imageURL: URL(fileURLWithPath: "/tmp/not-read.png"),
+                recognizedText: [],
+                imageWidth: 1_000,
+                imageHeight: 500,
+                captureFrame: CGRect(x: 100, y: 100, width: 2_000, height: 1_000)
+            )]
+        )
+        try expect(location?.image == 1 && location?.point == CGPoint(x: 500, y: 125), "global Retina-display clicks should normalize into evidence-image pixels")
 
         let hallucinatedDecision = LearnedWorkflowResponse(
             name: nil,

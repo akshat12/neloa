@@ -78,7 +78,11 @@ final class TeachController: ObservableObject {
         workflow.name = suggestedName(from: voice.transcript)
         workflow.recordingPath = screenURL?.path
         workflow.narrationPath = narrationURL?.path
-        draft = await agent.learnWorkflow(candidate: workflow, recordingURL: screenURL)
+        draft = await agent.learnWorkflow(
+            candidate: workflow,
+            recordingURL: screenURL,
+            captureFrame: screen.captureFrame
+        )
         phase = .review
     }
 

@@ -35,7 +35,11 @@ final class VoiceService: ObservableObject {
         errorMessage = nil
 
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Neloa-Captures", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
         let url = directory.appendingPathComponent("narration-\(UUID().uuidString).caf")
 
         let input = audioEngine.inputNode

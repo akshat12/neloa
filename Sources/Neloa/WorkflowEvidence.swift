@@ -7,6 +7,9 @@ struct WorkflowEvidenceFrame: Sendable {
     var time: TimeInterval
     var imageURL: URL
     var recognizedText: [String]
+    var imageWidth: Int? = nil
+    var imageHeight: Int? = nil
+    var captureFrame: CGRect? = nil
 }
 
 enum WorkflowEvidenceExtractor {
@@ -29,9 +32,13 @@ enum WorkflowEvidenceExtractor {
         }
     }
 
-    static func extract(recordingURL: URL, steps: [WorkflowStep]) async throws -> [WorkflowEvidenceFrame] {
+    static func extract(
+        recordingURL: URL,
+        steps: [WorkflowStep],
+        captureFrame: CGRect?
+    ) async throws -> [WorkflowEvidenceFrame] {
         try await Task.detached(priority: .userInitiated) {
-            try await extractFrames(recordingURL: recordingURL, steps: steps)
+            try await extractFrames(recordingURL: recordingURL, steps: steps, captureFrame: captureFrame)
         }.value
     }
 
@@ -59,13 +66,21 @@ enum WorkflowEvidenceExtractor {
         }
     }
 
-    private static func extractFrames(recordingURL: URL, steps: [WorkflowStep]) async throws -> [WorkflowEvidenceFrame] {
+    private static func extractFrames(
+        recordingURL: URL,
+        steps: [WorkflowStep],
+        captureFrame: CGRect?
+    ) async throws -> [WorkflowEvidenceFrame] {
         let times = sampleTimes(steps: steps)
         guard !times.isEmpty else { return [] }
 
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("NeloaEvidence-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: temporaryDirectory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
 
         do {
             let asset = AVURLAsset(url: recordingURL)
@@ -83,10 +98,14 @@ enum WorkflowEvidenceExtractor {
                 }
                 let imageURL = temporaryDirectory.appendingPathComponent("frame-\(frames.count + 1).png")
                 try pngData(for: image).write(to: imageURL, options: .atomic)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: imageURL.path)
                 frames.append(WorkflowEvidenceFrame(
                     time: actualTime.seconds.isFinite ? actualTime.seconds : requestedTime.seconds,
                     imageURL: imageURL,
-                    recognizedText: recognizedText(in: image)
+                    recognizedText: recognizedText(in: image),
+                    imageWidth: image.width,
+                    imageHeight: image.height,
+                    captureFrame: captureFrame
                 ))
             }
             if frames.isEmpty {

@@ -31,8 +31,9 @@ enum WorkflowLearner {
         var application: String?
         var text: String?
         var keyCode: Int?
-        var x: Double?
-        var y: Double?
+        var evidenceImage: Int?
+        var imageX: Double?
+        var imageY: Double?
     }
 
     static let instructions = """
@@ -40,18 +41,20 @@ enum WorkflowLearner {
     """
 
     static func prompt(candidate: Workflow, frames: [WorkflowEvidenceFrame]) throws -> String {
-        let promptSteps = candidate.steps.map {
-            PromptStep(
-                id: $0.id.uuidString,
-                time: $0.time,
-                kind: $0.kind.rawValue,
-                currentTitle: $0.title,
-                currentDetail: $0.detail,
-                application: $0.application,
-                text: $0.text,
-                keyCode: $0.keyCode,
-                x: $0.x,
-                y: $0.y
+        let promptSteps = candidate.steps.map { step in
+            let visualLocation = evidenceLocation(for: step, frames: frames)
+            return PromptStep(
+                id: step.id.uuidString,
+                time: step.time,
+                kind: step.kind.rawValue,
+                currentTitle: step.title,
+                currentDetail: step.detail,
+                application: step.application,
+                text: step.text,
+                keyCode: step.keyCode,
+                evidenceImage: visualLocation?.image,
+                imageX: visualLocation.map { Double($0.point.x) },
+                imageY: visualLocation.map { Double($0.point.y) }
             )
         }
         let stepsData = try JSONEncoder().encode(promptSteps)
@@ -86,12 +89,35 @@ enum WorkflowLearner {
 
         Rules:
         - Keep actions in the captured order and annotate only supplied IDs.
+        - evidenceImage is one-based. imageX/imageY are pixels in that image with a top-left origin; use them to identify a clicked target.
         - Prefer labels such as “Click Download report” over “Click”.
         - Treat typed values, dates, people, files, amounts, and thresholds as details that may vary later.
         - Do not add decisions. Captured narration has already been compiled into supplied decision or approval steps; annotate those supplied IDs instead.
         - Return an empty decisions array. It remains in the response shape only for compatibility with older local-model responses.
         - Use confidence from 0 to 1. Omit uncertain guesses by excluding them.
         """
+    }
+
+    static func evidenceLocation(
+        for step: WorkflowStep,
+        frames: [WorkflowEvidenceFrame]
+    ) -> (image: Int, point: CGPoint)? {
+        guard let x = step.x, let y = step.y,
+              let match = frames.enumerated().min(by: {
+                  abs($0.element.time - step.time) < abs($1.element.time - step.time)
+              }),
+              let width = match.element.imageWidth,
+              let height = match.element.imageHeight,
+              let captureFrame = match.element.captureFrame,
+              width > 0, height > 0, captureFrame.width > 0, captureFrame.height > 0 else { return nil }
+
+        let normalizedX = (x - captureFrame.minX) / captureFrame.width
+        let normalizedY = (y - captureFrame.minY) / captureFrame.height
+        guard (0...1).contains(normalizedX), (0...1).contains(normalizedY) else { return nil }
+        return (
+            match.offset + 1,
+            CGPoint(x: normalizedX * Double(width), y: normalizedY * Double(height))
+        )
     }
 
     static func decode(_ content: String) throws -> LearnedWorkflowResponse {

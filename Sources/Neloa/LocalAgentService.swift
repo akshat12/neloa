@@ -144,7 +144,7 @@ final class LocalAgentService: ObservableObject {
         }
     }
 
-    func learnWorkflow(candidate: Workflow, recordingURL: URL?) async -> Workflow {
+    func learnWorkflow(candidate: Workflow, recordingURL: URL?, captureFrame: CGRect?) async -> Workflow {
         guard await ensureQwenReady() else {
             status = "Built safely from captured actions; visual understanding is not set up"
             return candidate
@@ -157,7 +157,8 @@ final class LocalAgentService: ObservableObject {
             if let recordingURL, FileManager.default.fileExists(atPath: recordingURL.path) {
                 frames = try await WorkflowEvidenceExtractor.extract(
                     recordingURL: recordingURL,
-                    steps: candidate.steps
+                    steps: candidate.steps,
+                    captureFrame: captureFrame
                 )
             } else {
                 frames = []
@@ -259,6 +260,9 @@ final class LocalAgentService: ObservableObject {
         let response: LearnedWorkflowResponse
         do {
             response = try WorkflowLearner.decode(content)
+            if CommandLine.arguments.contains("--qwen-smoke-test") {
+                fputs("Neloa Qwen visual-learning response: \(content)\n", stderr)
+            }
         } catch {
             if CommandLine.arguments.contains("--qwen-smoke-test") {
                 fputs("Neloa Qwen raw visual-learning response: \(content)\n", stderr)
