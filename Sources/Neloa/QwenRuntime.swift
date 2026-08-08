@@ -111,7 +111,7 @@ actor QwenRuntime {
                 maxTokens: maximumTokens,
                 maxKVSize: 2_048,
                 kvBits: 8,
-                temperature: 0.1,
+                temperature: 0,
                 topP: 0.9,
                 repetitionPenalty: 1.05
             )

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import ScreenCaptureKit
 
@@ -28,6 +29,7 @@ enum SelfTests {
         try workflowInstructionCheck()
         try agentResponseSafetyCheck()
         try staleEvidenceCleanupCheck()
+        try qwenResponseRepairCheck()
     }
 
     private static func appearanceCheck() throws {
@@ -67,6 +69,72 @@ enum SelfTests {
         let plan = await agent.makePlan(workflow: workflow, instruction: "Replace June with August")
         try expect(agent.status.contains("Qwen"), "Qwen should be the primary run planner; status was: \(agent.status)")
         try expect(plan.steps.first?.text == "August", "Qwen plan should preserve the verified June to August replacement")
+
+        let evidenceURL = try makeQwenVisualSmokeImage()
+        defer { try? FileManager.default.removeItem(at: evidenceURL.deletingLastPathComponent()) }
+        let click = WorkflowStep(kind: .click, title: "Click", time: 0.5, x: 400, y: 140)
+        let month = WorkflowStep(kind: .typeText, title: "Type June", time: 1, text: "June")
+        let visualWorkflow = Workflow(
+            name: "My automation",
+            transcript: "Download the monthly report and use June as the month.",
+            steps: [click, month]
+        )
+        let learned = await agent.learnWorkflow(
+            candidate: visualWorkflow,
+            evidenceFrames: [WorkflowEvidenceFrame(
+                time: 0.5,
+                imageURL: evidenceURL,
+                recognizedText: ["Monthly Report", "Download report", "Month", "June"]
+            )]
+        )
+        try expect(agent.status.contains("Learned privately with Qwen"), "Qwen should complete visual workflow learning; status was: \(agent.status)")
+        try expect(learned.steps.count == visualWorkflow.steps.count, "visual learning must not add executable actions")
+        try expect(learned.steps[0].x == click.x && learned.steps[0].y == click.y, "visual learning must preserve replay coordinates")
+        try expect(
+            learned.name != visualWorkflow.name || learned.steps[0].title != click.title,
+            "Qwen should use the screenshot to improve at least one human-readable label"
+        )
+    }
+
+    @MainActor
+    private static func makeQwenVisualSmokeImage() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NeloaQwenSmoke-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let image = NSImage(size: NSSize(width: 800, height: 500))
+        image.lockFocus()
+        NSColor.white.setFill()
+        NSRect(x: 0, y: 0, width: 800, height: 500).fill()
+        ("Monthly Report" as NSString).draw(
+            at: NSPoint(x: 48, y: 410),
+            withAttributes: [.font: NSFont.systemFont(ofSize: 30, weight: .bold), .foregroundColor: NSColor.black]
+        )
+        ("Month" as NSString).draw(
+            at: NSPoint(x: 48, y: 315),
+            withAttributes: [.font: NSFont.systemFont(ofSize: 18, weight: .medium), .foregroundColor: NSColor.darkGray]
+        )
+        NSColor.controlBackgroundColor.setFill()
+        NSBezierPath(roundedRect: NSRect(x: 48, y: 250, width: 300, height: 52), xRadius: 10, yRadius: 10).fill()
+        ("June" as NSString).draw(
+            at: NSPoint(x: 66, y: 265),
+            withAttributes: [.font: NSFont.systemFont(ofSize: 19), .foregroundColor: NSColor.black]
+        )
+        NSColor.systemBlue.setFill()
+        NSBezierPath(roundedRect: NSRect(x: 48, y: 140, width: 240, height: 58), xRadius: 14, yRadius: 14).fill()
+        ("Download report" as NSString).draw(
+            at: NSPoint(x: 82, y: 157),
+            withAttributes: [.font: NSFont.systemFont(ofSize: 19, weight: .semibold), .foregroundColor: NSColor.white]
+        )
+        image.unlockFocus()
+
+        guard let tiff = image.tiffRepresentation,
+              let representation = NSBitmapImageRep(data: tiff),
+              let png = representation.representation(using: .png, properties: [:]) else {
+            throw Failure(description: "could not create the Qwen visual smoke-test image")
+        }
+        let url = directory.appendingPathComponent("monthly-report.png")
+        try png.write(to: url, options: .atomic)
+        return url
     }
 
     private static func compilationCheck() throws {
@@ -131,6 +199,38 @@ enum SelfTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         WorkflowEvidenceExtractor.purgeStaleTemporaryEvidence(olderThan: 0)
         try expect(!FileManager.default.fileExists(atPath: directory.path), "stale temporary screenshots should be removed")
+    }
+
+    private static func qwenResponseRepairCheck() throws {
+        let stepID = UUID().uuidString
+        let malformed = """
+        {"summary:"Replaced June with August."
+        replacements:[{"step_id":"\(stepID)","text":"August","reason":"Requested month"}]
+        """
+        guard let data = QwenResponseSupport.jsonData(
+            from: malformed,
+            topLevelKeys: ["summary", "replacements"]
+        ) else {
+            throw Failure(description: "Qwen's known top-level punctuation error should be repairable")
+        }
+        let response = try JSONDecoder().decode(AgentPlanResponse.self, from: data)
+        try expect(response.replacements.first?.text == "August", "repaired Qwen output should preserve the requested value")
+
+        let wrapped = "{ stray preface\n{\"name\":\"Download report\",\"annotations\":[],\"decisions\":[]}"
+        guard let wrappedData = QwenResponseSupport.jsonData(
+            from: wrapped,
+            topLevelKeys: ["name", "annotations", "decisions"]
+        ) else {
+            throw Failure(description: "a valid Qwen object should be extracted from a stray preface")
+        }
+        let learned = try JSONDecoder().decode(LearnedWorkflowResponse.self, from: wrappedData)
+        try expect(learned.name == "Download report", "visual response extraction should select the schema object")
+
+        let unrelated = "This is not a structured response"
+        try expect(
+            QwenResponseSupport.jsonData(from: unrelated, topLevelKeys: ["summary", "replacements"]) == nil,
+            "unstructured model output must still be rejected"
+        )
     }
 
     private static func serializationCheck() throws {
@@ -220,6 +320,14 @@ enum SelfTests {
         try expect(learned.steps.count == workflow.steps.count, "the visual model must not invent executable steps")
         try expect(learned.steps[0].title == "Click Download report" && learned.steps[0].x == 30, "visual labels should preserve replay coordinates")
         try expect(WorkflowEvidenceExtractor.sampleTimes(steps: workflow.steps, maximumCount: 1).count == 1, "evidence sampling should stay within its memory budget")
+
+        let hallucinatedDecision = LearnedWorkflowResponse(
+            name: nil,
+            annotations: [],
+            decisions: [.init(title: "Upload it publicly", detail: "Model-invented action", time: 1.5, requiresApproval: false, confidence: 1)]
+        )
+        let safelyLearned = WorkflowLearner.apply(hallucinatedDecision, to: workflow)
+        try expect(safelyLearned.steps == workflow.steps, "visual learning must ignore model-invented decisions and preserve the captured action graph")
     }
 
     private static func permissionStateCheck() throws {

@@ -88,18 +88,17 @@ enum WorkflowLearner {
         - Keep actions in the captured order and annotate only supplied IDs.
         - Prefer labels such as “Click Download report” over “Click”.
         - Treat typed values, dates, people, files, amounts, and thresholds as details that may vary later.
-        - Add a decision only when narration clearly states a rule, exception, threshold, or approval.
-        - requiresApproval is true only when the person explicitly said to ask, confirm, or get approval.
+        - Do not add decisions. Captured narration has already been compiled into supplied decision or approval steps; annotate those supplied IDs instead.
+        - Return an empty decisions array. It remains in the response shape only for compatibility with older local-model responses.
         - Use confidence from 0 to 1. Omit uncertain guesses by excluding them.
         """
     }
 
     static func decode(_ content: String) throws -> LearnedWorkflowResponse {
-        guard let start = content.firstIndex(of: "{"), let end = content.lastIndex(of: "}"), start <= end else {
-            throw QwenRuntimeError.invalidResponse
-        }
-        let json = String(content[start...end])
-        guard let data = json.data(using: .utf8) else { throw QwenRuntimeError.invalidResponse }
+        guard let data = QwenResponseSupport.jsonData(
+            from: content,
+            topLevelKeys: ["name", "annotations", "decisions"]
+        ) else { throw QwenRuntimeError.invalidResponse }
         return try JSONDecoder().decode(LearnedWorkflowResponse.self, from: data)
     }
 
@@ -120,25 +119,6 @@ enum WorkflowLearner {
             }
         }
 
-        var existingDecisions = Set(workflow.steps
-            .filter { $0.kind == .decision || $0.kind == .approval }
-            .map { normalized($0.title) })
-        let finalTime = workflow.steps.map(\.time).max() ?? 0
-        for decision in response.decisions where (decision.confidence ?? 0) >= 0.65 {
-            let title = cleaned(decision.title, maximumLength: 120)
-            guard !title.isEmpty, !existingDecisions.contains(normalized(title)) else { continue }
-            existingDecisions.insert(normalized(title))
-            let requiresApproval = decision.requiresApproval ?? false
-            workflow.steps.append(WorkflowStep(
-                kind: requiresApproval ? .approval : .decision,
-                title: title,
-                detail: cleaned(decision.detail ?? "Apply this rule at run time", maximumLength: 180),
-                time: min(max(0, decision.time ?? finalTime), finalTime),
-                requiresApproval: requiresApproval,
-                origin: .inferred
-            ))
-        }
-
         if let name = response.name {
             let cleanedName = cleaned(name, maximumLength: 60)
             if !cleanedName.isEmpty { workflow.name = cleanedName }
@@ -157,10 +137,6 @@ enum WorkflowLearner {
             .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
         return String(singleLine.prefix(maximumLength))
-    }
-
-    private static func normalized(_ value: String) -> String {
-        value.lowercased().filter(\.isLetter)
     }
 
     private static func clock(_ time: TimeInterval) -> String {

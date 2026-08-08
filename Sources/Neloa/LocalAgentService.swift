@@ -163,18 +163,21 @@ final class LocalAgentService: ObservableObject {
                 frames = []
             }
             defer { removeTemporaryEvidence(frames) }
-
-            let prompt = try WorkflowLearner.prompt(candidate: candidate, frames: frames)
-            let content = try await qwen.respond(
-                prompt: prompt,
-                imageURLs: frames.map(\.imageURL),
-                instructions: WorkflowLearner.instructions,
-                maximumTokens: 1_250
-            )
-            let response = try WorkflowLearner.decode(content)
-            status = "Learned privately with Qwen visual intelligence"
-            return WorkflowLearner.apply(response, to: candidate)
+            return try await learnWorkflowWithQwen(candidate: candidate, frames: frames)
         } catch {
+            status = "Visual understanding could not finish; kept the captured actions"
+            return candidate
+        }
+    }
+
+    func learnWorkflow(candidate: Workflow, evidenceFrames: [WorkflowEvidenceFrame]) async -> Workflow {
+        guard await ensureQwenReady() else { return candidate }
+        isLearning = true
+        defer { isLearning = false }
+        do {
+            return try await learnWorkflowWithQwen(candidate: candidate, frames: evidenceFrames)
+        } catch {
+            fputs("Neloa Qwen visual-learning error: \(String(describing: error))\n", stderr)
             status = "Visual understanding could not finish; kept the captured actions"
             return candidate
         }
@@ -195,6 +198,7 @@ final class LocalAgentService: ObservableObject {
                 status = "Planned privately with Qwen"
                 return validatedPlan(workflow: workflow, instruction: instruction, response: response)
             } catch {
+                fputs("Neloa Qwen planning error: \(String(describing: error))\n", stderr)
                 status = "Qwen could not finish—trying the on-device fallback"
             }
         }
@@ -232,10 +236,37 @@ final class LocalAgentService: ObservableObject {
             instructions: "You are Neloa's private local run planner. Return only the requested JSON object. Do not include markdown fences.",
             maximumTokens: 700
         )
-        guard let data = extractJSONObject(from: content).data(using: .utf8) else {
+        guard let data = QwenResponseSupport.jsonData(
+            from: content,
+            topLevelKeys: ["summary", "replacements"]
+        ) else {
             throw AgentError.badResponse
         }
         return try JSONDecoder().decode(AgentPlanResponse.self, from: data)
+    }
+
+    private func learnWorkflowWithQwen(
+        candidate: Workflow,
+        frames: [WorkflowEvidenceFrame]
+    ) async throws -> Workflow {
+        let prompt = try WorkflowLearner.prompt(candidate: candidate, frames: frames)
+        let content = try await qwen.respond(
+            prompt: prompt,
+            imageURLs: frames.map(\.imageURL),
+            instructions: WorkflowLearner.instructions,
+            maximumTokens: 1_250
+        )
+        let response: LearnedWorkflowResponse
+        do {
+            response = try WorkflowLearner.decode(content)
+        } catch {
+            if CommandLine.arguments.contains("--qwen-smoke-test") {
+                fputs("Neloa Qwen raw visual-learning response: \(content)\n", stderr)
+            }
+            throw error
+        }
+        status = "Learned privately with Qwen visual intelligence"
+        return WorkflowLearner.apply(response, to: candidate)
     }
 
     #if canImport(FoundationModels)
