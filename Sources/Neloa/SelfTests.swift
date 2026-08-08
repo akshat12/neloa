@@ -352,6 +352,14 @@ enum SelfTests {
         )
         let safelyLearned = WorkflowLearner.apply(hallucinatedDecision, to: workflow)
         try expect(safelyLearned.steps == workflow.steps, "visual learning must ignore model-invented decisions and preserve the captured action graph")
+
+        let generic = LearnedWorkflowResponse(
+            name: nil,
+            annotations: [.init(stepID: click.id.uuidString, title: "Click", detail: nil, confidence: 1)],
+            decisions: []
+        )
+        try expect(!WorkflowLearner.groundsGenericClicks(generic, in: workflow), "a generic Qwen click must trigger visual self-correction")
+        try expect(WorkflowLearner.groundsGenericClicks(response, in: workflow), "a concrete visual click target should pass the grounding gate")
     }
 
     private static func permissionStateCheck() throws {

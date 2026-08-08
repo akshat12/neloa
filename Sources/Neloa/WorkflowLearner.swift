@@ -156,6 +156,21 @@ enum WorkflowLearner {
         return workflow
     }
 
+    static func groundsGenericClicks(_ response: LearnedWorkflowResponse, in candidate: Workflow) -> Bool {
+        let genericClickIDs = Set(candidate.steps.compactMap { step -> String? in
+            guard step.kind == .click, isGenericClickTitle(step.title) else { return nil }
+            return step.id.uuidString.lowercased()
+        })
+        guard !genericClickIDs.isEmpty else { return true }
+
+        let groundedIDs = Set(response.annotations.compactMap { annotation -> String? in
+            guard (annotation.confidence ?? 0) >= 0.55,
+                  !isGenericClickTitle(annotation.title) else { return nil }
+            return annotation.stepID.lowercased()
+        })
+        return genericClickIDs.isSubset(of: groundedIDs)
+    }
+
     private static func cleaned(_ value: String, maximumLength: Int) -> String {
         let singleLine = value
             .replacingOccurrences(of: "\n", with: " ")
@@ -163,6 +178,14 @@ enum WorkflowLearner {
             .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
         return String(singleLine.prefix(maximumLength))
+    }
+
+    private static func isGenericClickTitle(_ title: String) -> Bool {
+        let normalized = title
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "-", with: " ")
+        return normalized == "click" || normalized == "right click"
     }
 
     private static func clock(_ time: TimeInterval) -> String {

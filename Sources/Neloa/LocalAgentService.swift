@@ -250,27 +250,36 @@ final class LocalAgentService: ObservableObject {
         candidate: Workflow,
         frames: [WorkflowEvidenceFrame]
     ) async throws -> Workflow {
-        let prompt = try WorkflowLearner.prompt(candidate: candidate, frames: frames)
-        let content = try await qwen.respond(
-            prompt: prompt,
-            imageURLs: frames.map(\.imageURL),
-            instructions: WorkflowLearner.instructions,
-            maximumTokens: 1_250
-        )
-        let response: LearnedWorkflowResponse
-        do {
-            response = try WorkflowLearner.decode(content)
-            if CommandLine.arguments.contains("--qwen-smoke-test") {
-                fputs("Neloa Qwen visual-learning response: \(content)\n", stderr)
+        let basePrompt = try WorkflowLearner.prompt(candidate: candidate, frames: frames)
+        for attempt in 0..<3 {
+            let correction = attempt == 0 ? "" : """
+
+            Correction attempt \(attempt): the earlier interpretation left at least one captured click generic. For every supplied click whose currentTitle is Click or Right-click, inspect evidenceImage at imageX/imageY and return a concrete target label such as “Click Download report.” A generic Click title or an omitted click annotation is invalid.
+            """
+            let content = try await qwen.respond(
+                prompt: basePrompt + correction,
+                imageURLs: frames.map(\.imageURL),
+                instructions: WorkflowLearner.instructions,
+                maximumTokens: 1_250
+            )
+            do {
+                let response = try WorkflowLearner.decode(content)
+                if CommandLine.arguments.contains("--qwen-smoke-test") {
+                    fputs("Neloa Qwen visual-learning response (attempt \(attempt + 1)): \(content)\n", stderr)
+                }
+                guard frames.isEmpty || WorkflowLearner.groundsGenericClicks(response, in: candidate) else {
+                    continue
+                }
+                status = "Learned privately with Qwen visual intelligence"
+                return WorkflowLearner.apply(response, to: candidate)
+            } catch {
+                if CommandLine.arguments.contains("--qwen-smoke-test") {
+                    fputs("Neloa Qwen raw visual-learning response (attempt \(attempt + 1)): \(content)\n", stderr)
+                }
+                if attempt == 2 { throw error }
             }
-        } catch {
-            if CommandLine.arguments.contains("--qwen-smoke-test") {
-                fputs("Neloa Qwen raw visual-learning response: \(content)\n", stderr)
-            }
-            throw error
         }
-        status = "Learned privately with Qwen visual intelligence"
-        return WorkflowLearner.apply(response, to: candidate)
+        throw QwenRuntimeError.invalidResponse
     }
 
     #if canImport(FoundationModels)
