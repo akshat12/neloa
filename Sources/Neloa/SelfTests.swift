@@ -39,6 +39,10 @@ enum SelfTests {
         try expect(AppAppearance.resolve("light") == .light, "light appearance should round-trip")
         try expect(AppAppearance.resolve("dark") == .dark, "dark appearance should round-trip")
         try expect(AppAppearance.resolve("unexpected") == .system, "unknown appearance should safely follow the system")
+        try expect(AppAppearance.system.colorScheme(system: .light) == .light, "system appearance should follow light macOS")
+        try expect(AppAppearance.system.colorScheme(system: .dark) == .dark, "system appearance should follow dark macOS")
+        try expect(AppAppearance.light.colorScheme(system: .dark) == .light, "light appearance should override dark macOS")
+        try expect(AppAppearance.dark.colorScheme(system: .light) == .dark, "dark appearance should override light macOS")
     }
 
     @MainActor

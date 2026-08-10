@@ -5,7 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject private var agent: LocalAgentService
     @EnvironmentObject private var permissions: PermissionCenter
     @EnvironmentObject private var store: WorkflowStore
-    @AppStorage(AppAppearance.storageKey) private var appearanceRawValue = AppAppearance.system.rawValue
+    @EnvironmentObject private var appearance: AppearanceController
     @State private var confirmDeleteRecordings = false
     @State private var confirmRemoveModel = false
 
@@ -98,9 +98,9 @@ struct SettingsView: View {
     }
 
     private var appearancePicker: some View {
-        Picker("Theme", selection: $appearanceRawValue) {
-            ForEach(AppAppearance.allCases) { appearance in
-                Text(appearance.label).tag(appearance.rawValue)
+        Picker("Theme", selection: $appearance.selection) {
+            ForEach(AppAppearance.allCases) { option in
+                Text(option.label).tag(option)
             }
         }
         .pickerStyle(.segmented)

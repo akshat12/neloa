@@ -13,7 +13,7 @@ final class NeloaAppDelegate: NSObject, NSApplicationDelegate {
 
 struct NeloaApp: App {
     @NSApplicationDelegateAdaptor(NeloaAppDelegate.self) private var appDelegate
-    @AppStorage(AppAppearance.storageKey) private var appearanceRawValue = AppAppearance.system.rawValue
+    @StateObject private var appearance = AppearanceController()
     @StateObject private var store = WorkflowStore()
     @StateObject private var teacher = TeachController()
     @StateObject private var agent = LocalAgentService()
@@ -28,9 +28,10 @@ struct NeloaApp: App {
                 .environmentObject(agent)
                 .environmentObject(runner)
                 .environmentObject(permissions)
+                .environmentObject(appearance)
                 .tint(NeloaPalette.accent)
                 .accentColor(NeloaPalette.accent)
-                .preferredColorScheme(AppAppearance.resolve(appearanceRawValue).colorScheme)
+                .preferredColorScheme(appearance.colorScheme)
                 .frame(minWidth: 1_080, minHeight: 720)
         }
         .windowStyle(.hiddenTitleBar)
@@ -41,9 +42,10 @@ struct NeloaApp: App {
                 .environmentObject(agent)
                 .environmentObject(store)
                 .environmentObject(permissions)
+                .environmentObject(appearance)
                 .tint(NeloaPalette.accent)
                 .accentColor(NeloaPalette.accent)
-                .preferredColorScheme(AppAppearance.resolve(appearanceRawValue).colorScheme)
+                .preferredColorScheme(appearance.colorScheme)
                 .padding(24)
                 .frame(minWidth: 760, minHeight: 620)
         }

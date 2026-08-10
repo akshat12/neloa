@@ -1,4 +1,5 @@
 import AppKit
+import CoreFoundation
 import SwiftUI
 
 enum AppAppearance: String, CaseIterable, Identifiable {
@@ -18,9 +19,9 @@ enum AppAppearance: String, CaseIterable, Identifiable {
         }
     }
 
-    var colorScheme: ColorScheme? {
+    func colorScheme(system: ColorScheme) -> ColorScheme {
         switch self {
-        case .system: nil
+        case .system: system
         case .light: .light
         case .dark: .dark
         }
@@ -28,6 +29,57 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 
     static func resolve(_ rawValue: String) -> AppAppearance {
         AppAppearance(rawValue: rawValue) ?? .system
+    }
+}
+
+@MainActor
+final class AppearanceController: ObservableObject {
+    @Published var selection: AppAppearance {
+        didSet {
+            defaults.set(selection.rawValue, forKey: AppAppearance.storageKey)
+        }
+    }
+    @Published private var systemColorScheme = AppearanceController.currentSystemColorScheme
+
+    var colorScheme: ColorScheme {
+        selection.colorScheme(system: systemColorScheme)
+    }
+
+    private let defaults: UserDefaults
+    private var themeObserver: NSObjectProtocol?
+
+    static var currentSystemColorScheme: ColorScheme {
+        // Read the global preference directly. UserDefaults.standard can expose
+        // Neloa's current forced appearance while the app is running, which makes
+        // Dark look like the system setting and breaks Dark -> System.
+        let style = CFPreferencesCopyValue(
+            "AppleInterfaceStyle" as CFString,
+            kCFPreferencesAnyApplication,
+            kCFPreferencesCurrentUser,
+            kCFPreferencesAnyHost
+        ) as? String
+        return style == "Dark" ? .dark : .light
+    }
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        selection = AppAppearance.resolve(defaults.string(forKey: AppAppearance.storageKey) ?? AppAppearance.system.rawValue)
+        themeObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.systemColorScheme = Self.currentSystemColorScheme
+            }
+        }
+    }
+
+    deinit {
+        if let themeObserver {
+            DistributedNotificationCenter.default().removeObserver(themeObserver)
+        }
     }
 }
 
