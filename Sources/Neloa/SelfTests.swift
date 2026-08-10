@@ -47,6 +47,16 @@ enum SelfTests {
 
     @MainActor
     static func agentSmokeTest() async throws {
+        let reviewMovie = "/System/Library/CoreServices/ControlCenter.app/Contents/Resources/BentoGalleryIntroduction.mov"
+        let reviewPlayback = ReviewPlaybackModel(recordingPath: reviewMovie)
+        for _ in 0..<100 where reviewPlayback.duration <= 0 {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        try expect(
+            reviewPlayback.duration > 1,
+            "review should load the recording duration before playback starts; got \(reviewPlayback.duration)"
+        )
+
         let input = WorkflowStep(kind: .typeText, title: "Type June", time: 0, text: "June")
         let workflow = Workflow(name: "Monthly report", transcript: "", steps: [input])
         let agent = LocalAgentService()

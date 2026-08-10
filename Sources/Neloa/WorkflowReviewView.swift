@@ -70,6 +70,9 @@ final class ReviewPlaybackModel: ObservableObject {
                 self?.playbackDidEnd()
             }
         }
+        Task { [weak self] in
+            await self?.loadDuration()
+        }
     }
 
     deinit {
@@ -128,6 +131,21 @@ final class ReviewPlaybackModel: ObservableObject {
             duration = itemDuration
         }
         isPlaying = (player?.rate ?? 0) != 0
+    }
+
+    private func loadDuration() async {
+        guard let asset = player?.currentItem?.asset else { return }
+        do {
+            let assetDuration = try await asset.load(.duration)
+            let seconds = assetDuration.seconds
+            if seconds.isFinite, seconds > 0 {
+                duration = seconds
+            }
+        } catch {
+            // Playback remains available even when metadata loading fails; the
+            // timeline will keep using its step-based fallback until playback
+            // reports a duration.
+        }
     }
 
     private func playbackDidEnd() {
