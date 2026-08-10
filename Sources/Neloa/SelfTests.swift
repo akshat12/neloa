@@ -54,6 +54,44 @@ enum SelfTests {
         let teacher = TeachController()
         teacher.setScreenCaptureEnabled(false)
         try expect(!teacher.captureScreen && !teacher.captureSystemAudio, "turning off screen capture should also turn off computer audio")
+
+        let completedStep = WorkflowStep(kind: .decision, title: "Prepare values", time: 0)
+        let failedStep = WorkflowStep(kind: .decision, title: "Fail safely", time: 1)
+        let failureRunner = AutomationRunner(countdownSeconds: 0) { step in
+            if step.id == failedStep.id {
+                throw Failure(description: "Simulated replay failure")
+            }
+        }
+        failureRunner.run(RunPlan(
+            instruction: "Test recovery",
+            steps: [completedStep, failedStep],
+            changes: [],
+            summary: "Test recovery"
+        ))
+        for _ in 0..<60 {
+            if case .failed = failureRunner.state { break }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        guard case .failed = failureRunner.state else {
+            throw Failure(description: "the simulated replay should reach the failed state")
+        }
+        try expect(
+            failureRunner.completedStepIDs == [completedStep.id],
+            "failed-run recovery should identify exactly which actions already completed"
+        )
+        failureRunner.reset(preservingCompletedSteps: true)
+        try expect(
+            failureRunner.completedStepIDs == [completedStep.id],
+            "reviewing a restart should preserve the completed-work warning"
+        )
+
+        let failingStore = WorkflowStore(fileURL: URL(fileURLWithPath: "/dev/null/NeloaSelfTests/workflows.json"))
+        failingStore.save(workflow)
+        try expect(
+            failingStore.issue?.canRetry == true,
+            "storage failures should become visible and offer recovery"
+        )
+        failingStore.dismissIssue()
     }
 
     @MainActor

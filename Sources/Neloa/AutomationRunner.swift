@@ -5,6 +5,8 @@ import Foundation
 
 @MainActor
 final class AutomationRunner: ObservableObject {
+    typealias StepExecutor = @MainActor (WorkflowStep) async throws -> Void
+
     enum State: Equatable {
         case idle
         case countdown(Int)
@@ -22,20 +24,29 @@ final class AutomationRunner: ObservableObject {
 
     private var runTask: Task<Void, Never>?
     private var approvalContinuation: CheckedContinuation<Bool, Never>?
+    private let countdownSeconds: Int
+    private let stepExecutor: StepExecutor?
+
+    init(countdownSeconds: Int = 3, stepExecutor: StepExecutor? = nil) {
+        self.countdownSeconds = max(0, countdownSeconds)
+        self.stepExecutor = stepExecutor
+    }
 
     func run(_ plan: RunPlan) {
         stop()
         completedStepIDs = []
-        guard AXIsProcessTrusted() else {
+        guard stepExecutor != nil || AXIsProcessTrusted() else {
             state = .failed("Accessibility permission is required to replay this automation. Open System Settings → Privacy & Security → Accessibility and enable Neloa.")
             return
         }
         runTask = Task { [weak self] in
             guard let self else { return }
-            for value in stride(from: 3, through: 1, by: -1) {
-                guard !Task.isCancelled else { return }
-                self.state = .countdown(value)
-                try? await Task.sleep(for: .seconds(1))
+            if self.countdownSeconds > 0 {
+                for value in stride(from: self.countdownSeconds, through: 1, by: -1) {
+                    guard !Task.isCancelled else { return }
+                    self.state = .countdown(value)
+                    try? await Task.sleep(for: .seconds(1))
+                }
             }
 
             for (index, step) in plan.steps.enumerated() {
@@ -64,7 +75,11 @@ final class AutomationRunner: ObservableObject {
                 }
 
                 do {
-                    try await self.perform(step)
+                    if let stepExecutor = self.stepExecutor {
+                        try await stepExecutor(step)
+                    } else {
+                        try await self.perform(step)
+                    }
                     self.completedStepIDs.insert(step.id)
                 } catch {
                     self.state = .failed(error.localizedDescription)
