@@ -94,6 +94,7 @@ private struct AutomationDetail: View {
                 Button("Run again…") { showingRun = true }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
+                    .tint(NeloaPalette.accent)
             }
             Divider()
             ScrollView {
@@ -168,6 +169,7 @@ private struct AutomationDetail: View {
         .sheet(isPresented: $showingRun) {
             RunView(workflow: workflow)
                 .frame(minWidth: 760, idealWidth: 940, minHeight: 650, idealHeight: 760)
+                .presentationSizing(.fitted)
         }
         .alert("Delete \(workflow.name)?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) { store.delete(workflow) }

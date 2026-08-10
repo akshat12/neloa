@@ -80,24 +80,19 @@ struct RunView: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                ZStack(alignment: .topLeading) {
-                    if instruction.isEmpty {
-                        Text("For example: Use August 2026 and change the amount to $3,000")
-                            .font(.system(size: 16))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 8)
-                            .allowsHitTesting(false)
-                    }
-                    TextEditor(text: $instruction)
-                        .font(.system(size: 16))
-                        .scrollContentBackground(.hidden)
-                        .disabled(isPreparingPlan)
-                        .frame(minHeight: 54, maxHeight: 82)
-                        .accessibilityLabel("What should change this time?")
-                }
+                TextField(
+                    "For example: Use August 2026 and change the amount to $3,000",
+                    text: $instruction,
+                    axis: .vertical
+                )
+                .textFieldStyle(.plain)
+                .font(.system(size: 16))
+                .lineLimit(2...3)
+                .disabled(isPreparingPlan)
+                .frame(minHeight: 54, maxHeight: 82, alignment: .topLeading)
+                .accessibilityLabel("What should change this time?")
                 .padding(.horizontal, 10)
-                .padding(.vertical, 4)
+                .padding(.vertical, 10)
                 .background(.background, in: RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.secondary.opacity(0.2)))
 
@@ -160,6 +155,7 @@ struct RunView: View {
             }
         }
         .padding(24)
+        .tint(NeloaPalette.accent)
         .interactiveDismissDisabled(isRunning)
         .onAppear { runner.reset() }
         .onDisappear {
@@ -191,8 +187,11 @@ struct RunView: View {
     private func runPlan(_ plan: RunPlan) -> some View {
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .top, spacing: 22) {
-                ScrollView {
-                    planOverview(plan, expandsControls: true)
+                VStack(alignment: .leading, spacing: 12) {
+                    ScrollView {
+                        planDetails(plan)
+                    }
+                    stateControls(plan)
                 }
                 .frame(minWidth: 360, idealWidth: 400, maxWidth: 440)
 
@@ -205,7 +204,7 @@ struct RunView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    planOverview(plan, expandsControls: false)
+                    planOverview(plan)
                     Divider()
                     planStepsContent(plan)
                 }
@@ -214,7 +213,15 @@ struct RunView: View {
         }
     }
 
-    private func planOverview(_ plan: RunPlan, expandsControls: Bool) -> some View {
+    private func planOverview(_ plan: RunPlan) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            planDetails(plan)
+            stateControls(plan)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func planDetails(_ plan: RunPlan) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("This run")
                 .font(.headline)
@@ -233,8 +240,6 @@ struct RunView: View {
             }
 
             trustSummary(plan)
-            if expandsControls { Spacer(minLength: 8) }
-            stateControls(plan)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
