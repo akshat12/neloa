@@ -26,6 +26,9 @@ struct AutomationsView: View {
                         .font(.system(size: 14)).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if store.workflows.count == 1, let workflow = store.workflows.first {
+                AutomationDetail(workflow: workflow)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 HSplitView {
                     List(store.workflows, selection: $selectedID) { workflow in
@@ -34,9 +37,12 @@ struct AutomationsView: View {
                             Text(lastRunDescription(for: workflow))
                                 .font(.system(size: 14)).foregroundStyle(.secondary)
                         }
-                        .padding(.vertical, 7).tag(workflow.id)
+                        .padding(.vertical, 7)
+                        .tag(workflow.id)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("\(workflow.name), \(lastRunDescription(for: workflow))")
                     }
-                    .frame(minWidth: 270, idealWidth: 320)
+                    .frame(minWidth: 240, idealWidth: 280, maxWidth: 320)
                     .onAppear { selectedID = selectedID ?? store.workflows.first?.id }
 
                     if let workflow = store.workflows.first(where: { $0.id == selectedID }) ?? store.workflows.first {
@@ -52,7 +58,7 @@ struct AutomationsView: View {
 
     private func lastRunDescription(for workflow: Workflow) -> String {
         guard let run = store.activities.first(where: { $0.workflowID == workflow.id }) else {
-            return "Ready to run · Taught \(workflow.updatedAt.formatted(date: .abbreviated, time: .omitted))"
+            return "Ready to run · Updated \(workflow.updatedAt.formatted(date: .abbreviated, time: .omitted))"
         }
         let status = run.status == .completed ? "Finished" : run.status.rawValue.capitalized
         return "Last ran \(run.finishedAt.formatted(date: .abbreviated, time: .omitted)) · \(status)"
@@ -72,14 +78,22 @@ private struct AutomationDetail: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(workflow.name).font(.title2.bold())
-                    Text("Taught \(workflow.createdAt.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary)
+                    Text("Created \(workflow.createdAt.formatted(date: .abbreviated, time: .shortened)) · Updated \(workflow.updatedAt.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Menu {
-                    Button("Export portable skill…") { exportSkill() }
+                    Button("Export automation…") { exportSkill() }
                     Button("Delete automation", role: .destructive) { confirmDelete = true }
-                } label: { Image(systemName: "ellipsis.circle") }
-                Button("Again, but…") { showingRun = true }.buttonStyle(.borderedProminent)
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .help("More automation actions")
+                Button("Run again…") { showingRun = true }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
             }
             Divider()
             ScrollView {
@@ -89,8 +103,9 @@ private struct AutomationDetail: View {
                     HStack {
                         Label("Flexible each run", systemImage: "slider.horizontal.3")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
                         Spacer()
-                        Text("Say a new value in “Again, but…”")
+                        Text("Say a new value when you run again")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     HStack(spacing: 7) {
@@ -100,6 +115,7 @@ private struct AutomationDetail: View {
                                 .lineLimit(1)
                                 .padding(.horizontal, 10).padding(.vertical, 6)
                                 .background(Color.accentColor.opacity(0.09), in: Capsule())
+                                .accessibilityLabel("\(inputName(step, index: index)), current value \(step.text?.isEmpty == false ? step.text! : "not set")")
                         }
                     }
                 }
@@ -138,21 +154,27 @@ private struct AutomationDetail: View {
             DisclosureGroup("How it works · \(workflow.steps.count) steps", isExpanded: $showHowItWorks) {
                 LazyVStack(spacing: 9) {
                     ForEach(Array(workflow.steps.enumerated()), id: \.element.id) { index, step in
-                        StepRow(number: index + 1, step: step)
+                        StepRow(number: index + 1, total: workflow.steps.count, step: step)
                     }
                 }
                 .padding(.top, 10)
             }
             .font(.system(size: 15, weight: .semibold))
+            .accessibilityLabel("How it works, \(workflow.steps.count) steps")
                 }
             }
         }
         .padding(.leading, 20)
-        .sheet(isPresented: $showingRun) { RunView(workflow: workflow).frame(minWidth: 760, minHeight: 650) }
+        .sheet(isPresented: $showingRun) {
+            RunView(workflow: workflow)
+                .frame(minWidth: 760, idealWidth: 940, minHeight: 650, idealHeight: 760)
+        }
         .alert("Delete \(workflow.name)?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) { store.delete(workflow) }
             Button("Cancel", role: .cancel) {}
-        } message: { Text("The saved workflow will be removed.") }
+        } message: {
+            Text("This permanently removes the automation and its saved teaching recordings from this Mac. This cannot be undone.")
+        }
         .alert("Export", isPresented: Binding(
             get: { exportMessage != nil },
             set: { if !$0 { exportMessage = nil } }
@@ -181,7 +203,9 @@ private struct AutomationDetail: View {
 
     private func detailCard<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: icon).font(.headline)
+            Label(title, systemImage: icon)
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             content()
         }
         .padding(14)
@@ -197,7 +221,7 @@ private struct AutomationDetail: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try SkillExporter.markdown(for: workflow).write(to: url, atomically: true, encoding: .utf8)
-            exportMessage = "A portable skill was saved to \(url.lastPathComponent)."
+            exportMessage = "The automation was exported to \(url.lastPathComponent)."
         } catch {
             exportMessage = "The skill could not be exported: \(error.localizedDescription)"
         }
