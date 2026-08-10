@@ -230,6 +230,10 @@ final class LocalAgentService: ObservableObject {
                 status = "Planned privately with Qwen"
                 return validatedPlan(workflow: workflow, instruction: instruction, response: response)
             } catch {
+                if error is CancellationError || Task.isCancelled {
+                    status = "Planning cancelled"
+                    return RunPlanner.plan(workflow: workflow, instruction: "")
+                }
                 fputs("Neloa Qwen planning error: \(String(describing: error))\n", stderr)
                 status = "Qwen could not finish—trying the on-device fallback"
             }

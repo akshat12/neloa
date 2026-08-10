@@ -18,12 +18,14 @@ final class AutomationRunner: ObservableObject {
 
     @Published private(set) var state: State = .idle
     @Published private(set) var currentStepID: UUID?
+    @Published private(set) var completedStepIDs: Set<UUID> = []
 
     private var runTask: Task<Void, Never>?
     private var approvalContinuation: CheckedContinuation<Bool, Never>?
 
     func run(_ plan: RunPlan) {
         stop()
+        completedStepIDs = []
         guard AXIsProcessTrusted() else {
             state = .failed("Accessibility permission is required to replay this automation. Open System Settings → Privacy & Security → Accessibility and enable Neloa.")
             return
@@ -63,6 +65,7 @@ final class AutomationRunner: ObservableObject {
 
                 do {
                     try await self.perform(step)
+                    self.completedStepIDs.insert(step.id)
                 } catch {
                     self.state = .failed(error.localizedDescription)
                     return
@@ -92,9 +95,10 @@ final class AutomationRunner: ObservableObject {
         if state != .idle { state = .stopped }
     }
 
-    func reset() {
+    func reset(preservingCompletedSteps: Bool = false) {
         stop()
         currentStepID = nil
+        if !preservingCompletedSteps { completedStepIDs = [] }
         state = .idle
     }
 

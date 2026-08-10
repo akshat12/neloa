@@ -26,6 +26,7 @@ enum SelfTests {
         try screenPermissionBranchCheck()
         try appTourStructureCheck()
         try reviewFixtureLaunchCheck()
+        try runPresentationCheck()
         try reviewTimelineSelectionCheck()
         try workflowInstructionCheck()
         try agentResponseSafetyCheck()
@@ -447,6 +448,31 @@ enum SelfTests {
         try expect(
             defaults.object(forKey: "NeloaUITestReview") == nil,
             "startup should remove the stale persistent review fixture preference"
+        )
+    }
+
+    private static func runPresentationCheck() throws {
+        try expect(!RunPresentation.canPreview("   \n"), "blank rerun requests should not create an unchanged preview")
+        try expect(RunPresentation.canPreview("Use August"), "a concrete rerun request should enable preview")
+
+        let first = WorkflowStep(kind: .typeText, title: "Enter month", time: 1, text: "July", application: "Safari")
+        let second = WorkflowStep(kind: .typeText, title: "Enter amount", time: 2, text: "$2,500", application: "Numbers")
+        let plan = RunPlan(
+            instruction: "Use August and $3,000",
+            steps: [first, second],
+            changes: [
+                PlannedChange(stepID: first.id, before: "July", after: "August", reason: "Use August"),
+                PlannedChange(stepID: second.id, before: "$2,500", after: "$3,000", reason: "Use $3,000")
+            ],
+            summary: "User requested explicit replacements"
+        )
+        try expect(
+            RunPresentation.summary(for: plan) == "For this run, Neloa will use August and $3,000.",
+            "the preview should use direct human copy instead of repeating model reasoning"
+        )
+        try expect(
+            RunPresentation.apps(in: [first, second, first]) == ["Numbers", "Safari"],
+            "the trust summary should show a sorted, deduplicated app list"
         )
     }
 

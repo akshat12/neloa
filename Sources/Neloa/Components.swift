@@ -88,13 +88,26 @@ struct FeatureToggle: View {
 
 struct StepRow: View {
     let number: Int
+    var total: Int?
     let step: WorkflowStep
     var isCurrent = false
+    var isCompleted = false
+
+    init(number: Int, total: Int? = nil, step: WorkflowStep, isCurrent: Bool = false, isCompleted: Bool = false) {
+        self.number = number
+        self.total = total
+        self.step = step
+        self.isCurrent = isCurrent
+        self.isCompleted = isCompleted
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Group {
-                if step.isUserInstruction {
+                if isCompleted {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 13, weight: .bold))
+                } else if step.isUserInstruction {
                     Image(systemName: "text.bubble.fill")
                         .font(.system(size: 14, weight: .bold))
                 } else {
@@ -119,6 +132,15 @@ struct StepRow: View {
         .padding(14)
         .background(.background, in: RoundedRectangle(cornerRadius: 13))
         .overlay(RoundedRectangle(cornerRadius: 13).stroke(isCurrent ? stepColor : Color.secondary.opacity(0.16)))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityDescription)
+        .accessibilityValue(isCurrent ? "Current step" : (isCompleted ? "Completed" : ""))
+    }
+
+    private var accessibilityDescription: String {
+        let position = total.map { "Step \(number) of \($0)" } ?? "Step \(number)"
+        let detail = step.detail.isEmpty ? "" : ", \(step.detail)"
+        return "\(position), \(step.displayKindLabel), \(step.title)\(detail)"
     }
 
     private var stepColor: Color {
