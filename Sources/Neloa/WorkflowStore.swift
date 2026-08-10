@@ -1,13 +1,23 @@
 import Foundation
 import Combine
 
+struct WorkflowStoreIssue: Identifiable, Equatable {
+    let id = UUID()
+    let title: String
+    let message: String
+    let details: String
+    let canRetry: Bool
+}
+
 @MainActor
 final class WorkflowStore: ObservableObject {
     @Published private(set) var workflows: [Workflow] = []
     @Published private(set) var activities: [AutomationRunReceipt] = []
     @Published var lastError: String?
+    @Published private(set) var issue: WorkflowStoreIssue?
 
     private let fileURL: URL
+    private var retryAction: (() -> Void)?
 
     init(fileURL: URL? = nil) {
         if let fileURL {
@@ -16,7 +26,14 @@ final class WorkflowStore: ObservableObject {
             do {
                 try BrandMigration.migrateApplicationSupportIfNeeded()
             } catch {
-                lastError = "Your saved Humana data could not be moved to Neloa: \(error.localizedDescription)"
+                let message = "Your saved Humana data could not be moved to Neloa."
+                lastError = message
+                issue = WorkflowStoreIssue(
+                    title: "Saved data needs attention",
+                    message: message,
+                    details: error.localizedDescription,
+                    canRetry: false
+                )
             }
             self.fileURL = BrandMigration.applicationSupportDirectory.appendingPathComponent("workflows.json")
         }
@@ -45,7 +62,12 @@ final class WorkflowStore: ObservableObject {
             do {
                 try FileManager.default.removeItem(at: recordings)
             } catch {
-                lastError = "The automation was removed, but its recordings could not be deleted: \(error.localizedDescription)"
+                report(
+                    title: "Recordings weren’t removed",
+                    message: "The automation was removed, but its local recordings are still on this Mac.",
+                    error: error,
+                    retry: { [weak self] in self?.removeRecordings(for: workflow) }
+                )
             }
         }
         persist()
@@ -74,8 +96,25 @@ final class WorkflowStore: ObservableObject {
             }
             persist()
         } catch {
-            lastError = "Your recordings could not be deleted: \(error.localizedDescription)"
+            report(
+                title: "Recordings weren’t deleted",
+                message: "Neloa could not delete all teaching recordings.",
+                error: error,
+                retry: { [weak self] in self?.deleteAllRecordings() }
+            )
         }
+    }
+
+    func retryLastOperation() {
+        let retry = retryAction
+        dismissIssue()
+        retry?()
+    }
+
+    func dismissIssue() {
+        issue = nil
+        lastError = nil
+        retryAction = nil
     }
 
     private func load() {
@@ -84,7 +123,12 @@ final class WorkflowStore: ObservableObject {
             workflows = try JSONDecoder.neloa.decode([Workflow].self, from: Data(contentsOf: fileURL))
             repairLegacyAssetPaths()
         } catch {
-            lastError = "Your saved automations could not be opened: \(error.localizedDescription)"
+            report(
+                title: "Automations couldn’t be opened",
+                message: "Neloa could not read your saved automations.",
+                error: error,
+                retry: { [weak self] in self?.load() }
+            )
         }
     }
 
@@ -93,7 +137,12 @@ final class WorkflowStore: ObservableObject {
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try JSONEncoder.neloa.encode(workflows).write(to: fileURL, options: .atomic)
         } catch {
-            lastError = "Your automations could not be saved: \(error.localizedDescription)"
+            report(
+                title: "Changes weren’t saved",
+                message: "Neloa could not save your automation changes.",
+                error: error,
+                retry: { [weak self] in self?.persist() }
+            )
         }
     }
 
@@ -106,7 +155,12 @@ final class WorkflowStore: ObservableObject {
         do {
             activities = try JSONDecoder.neloa.decode([AutomationRunReceipt].self, from: Data(contentsOf: activityURL))
         } catch {
-            lastError = "Your activity history could not be opened: \(error.localizedDescription)"
+            report(
+                title: "Activity couldn’t be opened",
+                message: "Neloa could not read your local run history.",
+                error: error,
+                retry: { [weak self] in self?.loadActivity() }
+            )
         }
     }
 
@@ -115,7 +169,12 @@ final class WorkflowStore: ObservableObject {
             try FileManager.default.createDirectory(at: activityURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try JSONEncoder.neloa.encode(activities).write(to: activityURL, options: .atomic)
         } catch {
-            lastError = "Your activity history could not be saved: \(error.localizedDescription)"
+            report(
+                title: "Run receipt wasn’t saved",
+                message: "The automation finished, but Neloa could not save its local activity receipt.",
+                error: error,
+                retry: { [weak self] in self?.persistActivity() }
+            )
         }
     }
 
@@ -135,9 +194,64 @@ final class WorkflowStore: ObservableObject {
             try FileManager.default.copyItem(at: source, to: destination)
             return destination.path
         } catch {
-            lastError = "The workflow was saved, but its recording could not be preserved: \(error.localizedDescription)"
+            report(
+                title: "Recording wasn’t preserved",
+                message: "The automation was saved, but its teaching recording could not be copied into Neloa’s library.",
+                error: error,
+                retry: { [weak self] in self?.retryPreservingAsset(at: path, for: workflowID) }
+            )
             return path
         }
+    }
+
+    private func removeRecordings(for workflow: Workflow) {
+        let recordings = fileURL.deletingLastPathComponent().appendingPathComponent("Recordings", isDirectory: true)
+            .appendingPathComponent(workflow.id.uuidString, isDirectory: true)
+        guard FileManager.default.fileExists(atPath: recordings.path) else {
+            dismissIssue()
+            return
+        }
+        do {
+            try FileManager.default.removeItem(at: recordings)
+            dismissIssue()
+        } catch {
+            report(
+                title: "Recordings weren’t removed",
+                message: "The automation was removed, but its local recordings are still on this Mac.",
+                error: error,
+                retry: { [weak self] in self?.removeRecordings(for: workflow) }
+            )
+        }
+    }
+
+    private func retryPreservingAsset(at path: String, for workflowID: UUID) {
+        guard let index = workflows.firstIndex(where: { $0.id == workflowID }) else {
+            dismissIssue()
+            return
+        }
+        let preservedPath = preserveAsset(at: path, for: workflowID)
+        if workflows[index].recordingPath == path { workflows[index].recordingPath = preservedPath }
+        if workflows[index].narrationPath == path { workflows[index].narrationPath = preservedPath }
+        if preservedPath != path {
+            dismissIssue()
+            persist()
+        }
+    }
+
+    private func report(
+        title: String,
+        message: String,
+        error: Error,
+        retry: (() -> Void)?
+    ) {
+        lastError = message
+        issue = WorkflowStoreIssue(
+            title: title,
+            message: message,
+            details: error.localizedDescription,
+            canRetry: retry != nil
+        )
+        retryAction = retry
     }
 
     private func repairLegacyAssetPaths() {

@@ -39,6 +39,7 @@ struct RootView: View {
     @State private var showTour = false
     @State private var tourStepIndex = 0
     @State private var scheduledInitialTour = false
+    @State private var showStoreIssueDetails = false
 
     var body: some View {
         NavigationSplitView {
@@ -101,6 +102,30 @@ struct RootView: View {
                     )
                     .zIndex(100)
                 }
+            }
+        }
+        .overlay(alignment: .top) {
+            if let issue = store.issue {
+                StoreIssueBanner(
+                    issue: issue,
+                    retry: store.retryLastOperation,
+                    showDetails: { showStoreIssueDetails = true },
+                    dismiss: store.dismissIssue
+                )
+                .padding(.horizontal, 18)
+                .padding(.top, 12)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(120)
+            }
+        }
+        .alert(store.issue?.title ?? "Neloa needs attention", isPresented: $showStoreIssueDetails) {
+            if store.issue?.canRetry == true {
+                Button("Try again") { store.retryLastOperation() }
+            }
+            Button("Dismiss", role: .cancel) { store.dismissIssue() }
+        } message: {
+            if let issue = store.issue {
+                Text("\(issue.message)\n\nDetails: \(issue.details)")
             }
         }
         .sheet(isPresented: $showOnboarding) {
@@ -187,6 +212,47 @@ struct RootView: View {
 
     private func markTourComplete() {
         UserDefaults.standard.set(true, forKey: "hasCompletedAppTour")
+    }
+}
+
+private struct StoreIssueBanner: View {
+    let issue: WorkflowStoreIssue
+    let retry: () -> Void
+    let showDetails: () -> Void
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.red)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(issue.title)
+                    .font(.system(size: 14, weight: .semibold))
+                Text(issue.message)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 10)
+            if issue.canRetry {
+                Button("Try again", action: retry)
+                    .buttonStyle(.borderedProminent)
+            }
+            Button("Details", action: showDetails)
+                .buttonStyle(.bordered)
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help("Dismiss")
+            .accessibilityLabel("Dismiss error")
+        }
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.red.opacity(0.32)))
+        .shadow(color: .black.opacity(0.12), radius: 16, y: 5)
+        .accessibilityElement(children: .contain)
     }
 }
 
