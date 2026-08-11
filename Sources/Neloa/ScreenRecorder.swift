@@ -21,7 +21,7 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
     private var capturesSystemAudio = false
     private(set) var captureFrame: CGRect?
 
-    func start(includeSystemAudio: Bool) async throws -> URL {
+    func start(includeSystemAudio: Bool, preferredBundleIdentifier: String? = nil) async throws -> URL {
         let preflightGranted = CGPreflightScreenCaptureAccess()
         let requestGranted = preflightGranted ? false : CGRequestScreenCaptureAccess()
         guard Self.hasScreenCaptureAccess(preflightGranted: preflightGranted, requestGranted: requestGranted) else {
@@ -29,7 +29,10 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
         }
 
         do {
-            return try await startAuthorizedCapture(includeSystemAudio: includeSystemAudio)
+            return try await startAuthorizedCapture(
+                includeSystemAudio: includeSystemAudio,
+                preferredBundleIdentifier: preferredBundleIdentifier
+            )
         } catch {
             if Self.isScreenPermissionError(error) || !CGPreflightScreenCaptureAccess() {
                 throw RecordingError.screenPermissionRequired
@@ -38,10 +41,14 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
         }
     }
 
-    private func startAuthorizedCapture(includeSystemAudio: Bool) async throws -> URL {
+    private func startAuthorizedCapture(
+        includeSystemAudio: Bool,
+        preferredBundleIdentifier: String?
+    ) async throws -> URL {
 
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        guard let display = content.displays.first else {
+        guard let display = preferredDisplay(in: content, bundleIdentifier: preferredBundleIdentifier)
+            ?? content.displays.first else {
             throw RecordingError.noDisplay
         }
 
@@ -156,23 +163,16 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
             let appWindows = content.windows.filter {
                 $0.owningApplication?.processID == application.processIdentifier && $0.isOnScreen
             }
-            guard let targetWindow = appWindows.max(by: { windowArea($0.frame) < windowArea($1.frame) }),
+            let frontmostID = Self.frontmostWindowID(processID: application.processIdentifier)
+            let targetWindow = frontmostID.flatMap { id in appWindows.first(where: { $0.windowID == id }) }
+                ?? appWindows.max(by: { windowArea($0.frame) < windowArea($1.frame) })
+            guard let targetWindow,
                   let display = Self.bestDisplay(for: targetWindow.frame, among: content.displays),
                   display.displayID != activeDisplayID else { return }
 
             let excludedApplications = content.applications.filter { PrivacyShield.excludes($0.bundleIdentifier) }
             let filter = SCContentFilter(display: display, excludingApplications: excludedApplications, exceptingWindows: [])
             try await stream.updateContentFilter(filter)
-
-            let configuration = SCStreamConfiguration()
-            configuration.width = display.width
-            configuration.height = display.height
-            configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30)
-            configuration.queueDepth = 6
-            configuration.showsCursor = true
-            configuration.capturesAudio = capturesSystemAudio
-            configuration.excludesCurrentProcessAudio = true
-            try await stream.updateConfiguration(configuration)
 
             activeDisplayID = display.displayID
             captureFrame = display.frame
@@ -189,9 +189,40 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
         }.flatMap { intersectionArea(windowFrame, displayFrames[$0]) > 0 ? $0 : nil }
     }
 
+    nonisolated private static func frontmostWindowID(processID: pid_t) -> CGWindowID? {
+        guard let windows = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[CFString: Any]] else { return nil }
+        for window in windows {
+            guard (window[kCGWindowOwnerPID] as? NSNumber)?.int32Value == processID,
+                  (window[kCGWindowLayer] as? NSNumber)?.intValue == 0,
+                  let number = window[kCGWindowNumber] as? NSNumber else { continue }
+            return CGWindowID(number.uint32Value)
+        }
+        return nil
+    }
+
     private static func bestDisplay(for windowFrame: CGRect, among displays: [SCDisplay]) -> SCDisplay? {
         guard let index = bestDisplayIndex(for: windowFrame, displayFrames: displays.map(\.frame)) else { return nil }
         return displays[index]
+    }
+
+    private func preferredDisplay(
+        in content: SCShareableContent,
+        bundleIdentifier: String?
+    ) -> SCDisplay? {
+        guard let bundleIdentifier,
+              let application = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first else {
+            return nil
+        }
+        let windows = content.windows.filter {
+            $0.owningApplication?.processID == application.processIdentifier && $0.isOnScreen
+        }
+        let frontmostID = Self.frontmostWindowID(processID: application.processIdentifier)
+        let target = frontmostID.flatMap { id in windows.first(where: { $0.windowID == id }) }
+            ?? windows.max(by: { windowArea($0.frame) < windowArea($1.frame) })
+        return target.flatMap { Self.bestDisplay(for: $0.frame, among: content.displays) }
     }
 
     nonisolated private static func intersectionArea(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {

@@ -24,6 +24,7 @@ enum SelfTests {
         try recordingErrorCopyCheck()
         try displaySelectionCheck()
         try captureOptionCheck()
+        try teachingTargetCheck()
         try screenPermissionBranchCheck()
         try appTourStructureCheck()
         try reviewFixtureLaunchCheck()
@@ -32,6 +33,8 @@ enum SelfTests {
         try workflowInstructionCheck()
         try agentResponseSafetyCheck()
         try staleEvidenceCleanupCheck()
+        try denseEvidenceSamplingCheck()
+        try recoveryEvidenceRoutingCheck()
         try qwenResponseRepairCheck()
     }
 
@@ -183,6 +186,38 @@ enum SelfTests {
         let pairPlan = await agent.makePlan(workflow: drafted, instruction: "Use Z as the label and put 7 in the cell next to it")
         let changedValues = Set(pairPlan.changes.map(\.after))
         try expect(changedValues == Set(["Z", "7"]), "Qwen should customize both spreadsheet fields in one run; got \(changedValues)")
+    }
+
+    @MainActor
+    static func qwenRecordingTest(recordingPath: String) async throws {
+        let url = URL(fileURLWithPath: recordingPath)
+        try expect(FileManager.default.fileExists(atPath: url.path), "recording test input must exist")
+        let agent = LocalAgentService()
+        let candidate = Workflow(name: "Recorded workflow", transcript: "", steps: [])
+        let frames = try await WorkflowEvidenceExtractor.extract(
+            recordingURL: url,
+            steps: [],
+            captureFrame: CGRect(x: 0, y: 0, width: 1_920, height: 1_080)
+        )
+        for (index, frame) in frames.enumerated() {
+            let focus = frame.focusReason ?? "overview"
+            let selection = WorkflowLearner.selectedSpreadsheetImagePoint(at: frame.imageURL)
+            fputs(
+                "Evidence \(index + 1): t=\(frame.time), size=\(frame.imageWidth ?? 0)x\(frame.imageHeight ?? 0), focus=\(focus), selection=\(String(describing: selection)), path=\(frame.imageURL.path), OCR=\(frame.recognizedText)\n",
+                stderr
+            )
+        }
+        let learned = await agent.learnWorkflow(
+            candidate: candidate,
+            evidenceFrames: frames
+        )
+        let actions = learned.steps.filter { [.click, .typeText, .keyPress].contains($0.kind) }
+        let actionDescriptions = actions.map { step in
+            "\(step.kind.rawValue):\(step.text ?? step.title)"
+        }
+        fputs("Neloa learned recording actions: \(actionDescriptions)\n", stderr)
+        try expect(actions.contains(where: { $0.kind == .typeText && $0.text == "X" }), "Qwen should recover the demonstrated X input")
+        try expect(actions.contains(where: { $0.kind == .typeText && $0.text == "2" }), "Qwen should recover the demonstrated 2 input")
     }
 
     @MainActor
@@ -352,6 +387,61 @@ enum SelfTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         WorkflowEvidenceExtractor.purgeStaleTemporaryEvidence(olderThan: 0)
         try expect(!FileManager.default.fileExists(atPath: directory.path), "stale temporary screenshots should be removed")
+    }
+
+    private static func denseEvidenceSamplingCheck() throws {
+        let times = WorkflowEvidenceExtractor.candidateSampleTimes(
+            steps: [],
+            duration: 18,
+            maximumCount: 30
+        )
+        try expect(
+            times.count > WorkflowEvidenceExtractor.maximumFrameCount,
+            "visual learning should scan more frames than it sends to Qwen"
+        )
+        try expect(
+            times.first == 0 && (times.last ?? 0) > 17,
+            "dense evidence scanning should cover the whole recording"
+        )
+        let largestGap = zip(times, times.dropFirst()).map { $1 - $0 }.max() ?? .infinity
+        try expect(largestGap < 1.1, "dense evidence scanning should catch brief visual edits")
+    }
+
+    private static func recoveryEvidenceRoutingCheck() throws {
+        let root = FileManager.default.temporaryDirectory
+        let context = WorkflowEvidenceFrame(time: 0, imageURL: root.appendingPathComponent("context.png"), recognizedText: ["Testing Spreadsheet"])
+        let noise = WorkflowEvidenceFrame(time: 1, imageURL: root.appendingPathComponent("noise.png"), recognizedText: ["Share"], focusReason: "visual change")
+        let firstCell = WorkflowEvidenceFrame(time: 2, imageURL: root.appendingPathComponent("a.png"), recognizedText: ["A15", "X"], focusReason: "visual change")
+        let secondCell = WorkflowEvidenceFrame(time: 3, imageURL: root.appendingPathComponent("b.png"), recognizedText: ["B15", "2"], focusReason: "visual change")
+        let routed = WorkflowEvidenceExtractor.prioritizedRecoveryFrames([context, noise, firstCell, secondCell])
+        try expect(routed.count == 2, "spreadsheet recovery should send only grounded cell close-ups")
+        try expect(routed.last?.recognizedText.contains("B15") == true, "the last recovery image should retain the latest edited cell")
+
+        let firstResponse = LearnedWorkflowResponse(
+            name: "Fill spreadsheet row",
+            application: "Google Chrome",
+            annotations: [],
+            decisions: [],
+            proposedActions: [LearnedWorkflowResponse.ProposedAction(
+                kind: "typeText", title: "Enter X in cell A15", detail: "X",
+                time: 0, image: 1, x: 50, y: 200, text: "X", confidence: 0.95
+            )]
+        )
+        let secondResponse = LearnedWorkflowResponse(
+            name: "Fill spreadsheet row",
+            application: "Google Chrome",
+            annotations: [],
+            decisions: [],
+            proposedActions: [LearnedWorkflowResponse.ProposedAction(
+                kind: "typeText", title: "Enter 2 in cell B15", detail: "2",
+                time: 0, image: 1, x: 120, y: 200, text: "2", confidence: 0.95
+            )]
+        )
+        let merged = WorkflowLearner.mergingRecoveryResponses([
+            (firstResponse, 0, 2), (secondResponse, 1, 3)
+        ])
+        try expect(merged.proposedActions?.map(\.text) == ["X", "2"], "per-frame recovery should preserve both demonstrated values")
+        try expect(merged.proposedActions?.map(\.image) == [1, 2], "merged recovery actions should retain their evidence image")
     }
 
     private static func qwenResponseRepairCheck() throws {
@@ -662,6 +752,14 @@ enum SelfTests {
         try expect(!TeachController.resolvedSystemAudio(screenEnabled: false, requested: true), "computer audio must be off without screen capture")
         try expect(TeachController.resolvedSystemAudio(screenEnabled: true, requested: true), "computer audio may be enabled with screen capture")
         try expect(!TeachController.resolvedSystemAudio(screenEnabled: true, requested: false), "computer audio should respect an explicit off choice")
+    }
+
+    private static func teachingTargetCheck() throws {
+        try expect(
+            TeachController.resolvedTeachingTarget("com.google.Chrome") == "com.google.Chrome",
+            "teaching setup should preserve the selected target app"
+        )
+        try expect(TeachController.resolvedTeachingTarget("") == nil, "the manual app-switch choice should clear the target app")
     }
 
     private static func screenPermissionBranchCheck() throws {

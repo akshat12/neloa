@@ -98,6 +98,21 @@ enum NeloaMain {
                 }
             }
             dispatchMain()
+        } else if CommandLine.arguments.contains("--qwen-recording-test") {
+            Task { @MainActor in
+                do {
+                    guard let path = ProcessInfo.processInfo.environment["NELOA_RECORDING_PATH"] else {
+                        throw SelfTests.Failure(description: "NELOA_RECORDING_PATH is required")
+                    }
+                    try await SelfTests.qwenRecordingTest(recordingPath: path)
+                    print("Neloa Qwen recording test passed")
+                    Foundation.exit(0)
+                } catch {
+                    fputs("Neloa Qwen recording test failed: \(error)\n", stderr)
+                    Foundation.exit(1)
+                }
+            }
+            dispatchMain()
         } else {
             BrandMigration.migrateUserDefaults()
             NeloaApp.main()

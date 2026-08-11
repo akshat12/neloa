@@ -285,33 +285,59 @@ final class LocalAgentService: ObservableObject {
         candidate: Workflow,
         frames: [WorkflowEvidenceFrame]
     ) async throws -> Workflow {
-        let prompt = try WorkflowLearner.prompt(candidate: candidate, frames: frames)
         let hasCapturedReplayActions = candidate.steps.contains {
             [.click, .typeText, .keyPress].contains($0.kind)
         }
-        let content = try await qwen.respond(
-            prompt: prompt,
-            imageURLs: frames.map(\.imageURL),
-            instructions: WorkflowLearner.instructions,
-            maximumTokens: hasCapturedReplayActions ? 600 : 850
-        )
-        do {
-            let response = try WorkflowLearner.decode(content)
-            if isQwenSmokeTest {
-                fputs("Neloa Qwen visual-learning response: \(content)\n", stderr)
+        let modelFrames = hasCapturedReplayActions
+            ? frames
+            : WorkflowEvidenceExtractor.prioritizedRecoveryFrames(frames)
+        let usesGroundedPerFrameRecovery = !hasCapturedReplayActions
+            && modelFrames.count > 1
+            && modelFrames.count < frames.count
+        let content: String
+        let response: LearnedWorkflowResponse
+        if usesGroundedPerFrameRecovery {
+            var recovered: [(response: LearnedWorkflowResponse, frameIndex: Int, time: TimeInterval)] = []
+            var rawResponses: [String] = []
+            for (index, frame) in modelFrames.enumerated() {
+                let frameContent = try await qwen.respond(
+                    prompt: WorkflowLearner.singleFrameRecoveryPrompt(candidate: candidate, frame: frame),
+                    imageURLs: [frame.imageURL],
+                    instructions: WorkflowLearner.instructions,
+                    maximumTokens: 360
+                )
+                rawResponses.append(frameContent)
+                if let decoded = try? WorkflowLearner.decode(frameContent),
+                   let grounded = WorkflowLearner.groundedSingleFrameResponse(decoded, frame: frame) {
+                    recovered.append((grounded, index, frame.time))
+                } else if let grounded = WorkflowLearner.groundedRecoveryResponse(
+                    from: frameContent,
+                    frame: frame
+                ) {
+                    recovered.append((grounded, index, frame.time))
+                }
             }
-            let learned = WorkflowLearner.apply(response, to: candidate, frames: frames)
-            let visualDraftCount = learned.steps.filter { $0.origin == .visual && $0.kind != .openApp }.count
-            status = visualDraftCount > 0
-                ? "Qwen drafted \(visualDraftCount) actions from the recording for your review"
-                : "Learned privately with Qwen visual intelligence"
-            return learned
-        } catch {
-            if isQwenSmokeTest {
-                fputs("Neloa Qwen raw visual-learning response: \(content)\n", stderr)
-            }
-            throw error
+            response = WorkflowLearner.mergingRecoveryResponses(recovered)
+            content = rawResponses.joined(separator: "\n--- next evidence frame ---\n")
+        } else {
+            let prompt = try WorkflowLearner.prompt(candidate: candidate, frames: modelFrames)
+            content = try await qwen.respond(
+                prompt: prompt,
+                imageURLs: modelFrames.map(\.imageURL),
+                instructions: WorkflowLearner.instructions,
+                maximumTokens: hasCapturedReplayActions ? 600 : 850
+            )
+            response = try WorkflowLearner.decode(content)
         }
+        if isQwenSmokeTest {
+            fputs("Neloa Qwen visual-learning response: \(content)\n", stderr)
+        }
+        let learned = WorkflowLearner.apply(response, to: candidate, frames: modelFrames)
+        let visualDraftCount = learned.steps.filter { $0.origin == .visual && $0.kind != .openApp }.count
+        status = visualDraftCount > 0
+            ? "Qwen drafted \(visualDraftCount) actions from the recording for your review"
+            : "Learned privately with Qwen visual intelligence"
+        return learned
     }
 
     #if canImport(FoundationModels)
@@ -359,7 +385,9 @@ final class LocalAgentService: ObservableObject {
     }
 
     private var isQwenSmokeTest: Bool {
-        CommandLine.arguments.contains("--qwen-smoke-test") || CommandLine.arguments.contains("--qwen-8bit-smoke-test")
+        CommandLine.arguments.contains("--qwen-smoke-test")
+            || CommandLine.arguments.contains("--qwen-8bit-smoke-test")
+            || CommandLine.arguments.contains("--qwen-recording-test")
     }
 
     enum AgentError: Error { case badResponse }

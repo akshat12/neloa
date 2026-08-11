@@ -11,10 +11,24 @@ struct WorkflowEvidenceFrame: Sendable {
     var imageHeight: Int? = nil
     var captureFrame: CGRect? = nil
     var focusStepID: UUID? = nil
+    var focusReason: String? = nil
 }
 
 enum WorkflowEvidenceExtractor {
     static let maximumFrameCount = 8
+    private static let maximumCandidateFrameCount = 36
+
+    private struct GeneratedFrame {
+        var time: TimeInterval
+        var image: CGImage
+    }
+
+    private struct VisualChange {
+        var previousIndex: Int
+        var currentIndex: Int
+        var score: Double
+        var bounds: CGRect?
+    }
 
     static func purgeStaleTemporaryEvidence(olderThan age: TimeInterval = 60 * 60) {
         let fileManager = FileManager.default
@@ -108,6 +122,34 @@ enum WorkflowEvidenceExtractor {
         return (eventTimes + selectedUniform).sorted()
     }
 
+    /// Scan more frames than the model ultimately receives so a brief edit is
+    /// not lost between eight uniformly spaced screenshots.
+    static func candidateSampleTimes(
+        steps: [WorkflowStep],
+        duration: TimeInterval,
+        maximumCount: Int = maximumCandidateFrameCount
+    ) -> [TimeInterval] {
+        guard maximumCount > 0, duration.isFinite, duration > 0.05 else {
+            return sampleTimes(steps: steps, duration: duration, maximumCount: maximumCount)
+        }
+        let usableEnd = max(0, duration - 0.08)
+        let desiredCount = min(
+            maximumCount,
+            max(maximumFrameCount, Int(ceil(usableEnd / 0.75)) + 1)
+        )
+        guard desiredCount > 1 else { return [0] }
+
+        var times = (0..<desiredCount).map { index in
+            min(usableEnd, Double(index) / Double(desiredCount - 1) * usableEnd)
+        }
+        times.append(contentsOf: sampleTimes(steps: steps, maximumCount: maximumFrameCount))
+        return times.sorted().reduce(into: []) { result, time in
+            if result.last.map({ abs($0 - time) >= 0.12 }) ?? true {
+                result.append(time)
+            }
+        }
+    }
+
     static func focusedClickFrames(
         candidate: Workflow,
         frames: [WorkflowEvidenceFrame]
@@ -115,6 +157,19 @@ enum WorkflowEvidenceExtractor {
         try await Task.detached(priority: .userInitiated) {
             try makeFocusedClickFrames(candidate: candidate, frames: frames)
         }.value
+    }
+
+    static func prioritizedRecoveryFrames(_ frames: [WorkflowEvidenceFrame]) -> [WorkflowEvidenceFrame] {
+        let cellPattern = #"\b[A-Z]{1,3}[0-9]+\b"#
+        let groundedCloseUps = frames.filter { frame in
+            guard frame.focusReason != nil else { return false }
+            let text = frame.recognizedText.joined(separator: " ")
+            let imageExists = FileManager.default.fileExists(atPath: frame.imageURL.path)
+            return text.range(of: cellPattern, options: .regularExpression) != nil
+                && (!imageExists || WorkflowLearner.selectedSpreadsheetImagePoint(at: frame.imageURL) != nil)
+        }
+        guard groundedCloseUps.count >= 2 else { return frames }
+        return Array(groundedCloseUps.suffix(4))
     }
 
     private static func makeFocusedClickFrames(
@@ -208,7 +263,7 @@ enum WorkflowEvidenceExtractor {
         do {
             let asset = AVURLAsset(url: recordingURL)
             let duration = try await asset.load(.duration).seconds
-            let times = sampleTimes(steps: steps, duration: duration)
+            let times = candidateSampleTimes(steps: steps, duration: duration)
             guard !times.isEmpty else {
                 try? FileManager.default.removeItem(at: temporaryDirectory)
                 return []
@@ -220,31 +275,268 @@ enum WorkflowEvidenceExtractor {
             generator.requestedTimeToleranceAfter = CMTime(seconds: 0.12, preferredTimescale: 600)
 
             let requestedTimes = times.map { CMTime(seconds: $0, preferredTimescale: 600) }
-            var frames: [WorkflowEvidenceFrame] = []
+            var generated: [GeneratedFrame] = []
             for await result in generator.images(for: requestedTimes) {
                 guard case .success(requestedTime: let requestedTime, let image, actualTime: let actualTime) = result else {
                     continue
                 }
-                let imageURL = temporaryDirectory.appendingPathComponent("frame-\(frames.count + 1).png")
-                try pngData(for: image).write(to: imageURL, options: .atomic)
-                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: imageURL.path)
-                frames.append(WorkflowEvidenceFrame(
+                generated.append(GeneratedFrame(
                     time: actualTime.seconds.isFinite ? actualTime.seconds : requestedTime.seconds,
-                    imageURL: imageURL,
-                    recognizedText: recognizedText(in: image),
-                    imageWidth: image.width,
-                    imageHeight: image.height,
-                    captureFrame: captureFrame
+                    image: image
                 ))
             }
-            if frames.isEmpty {
+            generated.sort { $0.time < $1.time }
+            guard !generated.isEmpty else {
                 try? FileManager.default.removeItem(at: temporaryDirectory)
+                return []
             }
-            return frames.sorted { $0.time < $1.time }
+
+            let changes = rankedVisualChanges(in: generated)
+            let overviewIndices = overviewFrameIndices(
+                frameCount: generated.count,
+                changes: changes,
+                maximumCount: maximumFrameCount / 2
+            )
+            var frames: [WorkflowEvidenceFrame] = []
+            for index in overviewIndices {
+                let source = generated[index]
+                frames.append(try writeEvidenceFrame(
+                    image: source.image,
+                    time: source.time,
+                    captureFrame: captureFrame,
+                    focusReason: nil,
+                    directory: temporaryDirectory,
+                    ordinal: frames.count + 1
+                ))
+            }
+
+            let focusBudget = maximumFrameCount - frames.count
+            if focusBudget > 0 {
+                frames.append(contentsOf: try makeVisualChangeFrames(
+                    from: generated,
+                    changes: changes,
+                    captureFrame: captureFrame,
+                    directory: temporaryDirectory,
+                    maximumCount: focusBudget,
+                    startingOrdinal: frames.count + 1
+                ))
+            }
+            // Put global context first and close-ups last. Small VLMs heavily
+            // weight the final images; timestamps still preserve demonstrated
+            // order while the actionable cell/field evidence remains salient.
+            return frames
         } catch {
             try? FileManager.default.removeItem(at: temporaryDirectory)
             throw error
         }
+    }
+
+    private static func overviewFrameIndices(
+        frameCount: Int,
+        changes: [VisualChange],
+        maximumCount: Int
+    ) -> [Int] {
+        guard frameCount > 0, maximumCount > 0 else { return [] }
+        var indices: [Int] = [0]
+        if frameCount > 1 { indices.append(frameCount - 1) }
+        for change in changes {
+            for index in [change.previousIndex, change.currentIndex] where !indices.contains(index) {
+                indices.append(index)
+                if indices.count == maximumCount { return indices.sorted() }
+            }
+        }
+        if indices.count < maximumCount {
+            for position in 0..<maximumCount {
+                let fraction = Double(position) / Double(max(maximumCount - 1, 1))
+                let index = Int((fraction * Double(frameCount - 1)).rounded())
+                if !indices.contains(index) { indices.append(index) }
+                if indices.count == maximumCount { break }
+            }
+        }
+        return Array(indices.prefix(maximumCount)).sorted()
+    }
+
+    private static func rankedVisualChanges(in frames: [GeneratedFrame]) -> [VisualChange] {
+        guard frames.count > 1 else { return [] }
+        let width = 96
+        let height = 54
+        let thumbnails = frames.map { luminanceThumbnail(for: $0.image, width: width, height: height) }
+        return (1..<frames.count).map { index in
+            visualChange(
+                previous: thumbnails[index - 1],
+                current: thumbnails[index],
+                width: width,
+                height: height,
+                previousIndex: index - 1,
+                currentIndex: index
+            )
+        }.sorted { $0.score > $1.score }
+    }
+
+    private static func visualChange(
+        previous: [UInt8],
+        current: [UInt8],
+        width: Int,
+        height: Int,
+        previousIndex: Int,
+        currentIndex: Int
+    ) -> VisualChange {
+        guard previous.count == current.count, previous.count == width * height else {
+            return VisualChange(previousIndex: previousIndex, currentIndex: currentIndex, score: 0, bounds: nil)
+        }
+        var total = 0
+        var minX = width
+        var minY = height
+        var maxX = -1
+        var maxY = -1
+        for offset in previous.indices {
+            let delta = abs(Int(previous[offset]) - Int(current[offset]))
+            total += delta
+            guard delta >= 14 else { continue }
+            let x = offset % width
+            let y = offset / width
+            minX = min(minX, x)
+            minY = min(minY, y)
+            maxX = max(maxX, x)
+            maxY = max(maxY, y)
+        }
+        let bounds = maxX >= minX && maxY >= minY
+            ? CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
+            : nil
+        return VisualChange(
+            previousIndex: previousIndex,
+            currentIndex: currentIndex,
+            score: Double(total) / Double(previous.count),
+            bounds: bounds
+        )
+    }
+
+    private static func luminanceThumbnail(for image: CGImage, width: Int, height: Int) -> [UInt8] {
+        var rgba = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(
+            data: &rgba,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return [UInt8](repeating: 0, count: width * height) }
+        context.interpolationQuality = .low
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return stride(from: 0, to: rgba.count, by: 4).map { offset in
+            let red = Int(rgba[offset])
+            let green = Int(rgba[offset + 1])
+            let blue = Int(rgba[offset + 2])
+            return UInt8((red * 54 + green * 183 + blue * 19) / 256)
+        }
+    }
+
+    private static func makeVisualChangeFrames(
+        from frames: [GeneratedFrame],
+        changes: [VisualChange],
+        captureFrame: CGRect?,
+        directory: URL,
+        maximumCount: Int,
+        startingOrdinal: Int
+    ) throws -> [WorkflowEvidenceFrame] {
+        guard maximumCount > 0 else { return [] }
+        var output: [WorkflowEvidenceFrame] = []
+        var usedTimes: [TimeInterval] = []
+        for change in changes {
+            guard let bounds = change.bounds,
+                  change.score > 0.08,
+                  bounds.width * bounds.height < 96 * 54 * 0.55 else { continue }
+            let current = frames[change.currentIndex]
+            let previous = frames[change.previousIndex]
+            let crop = expandedCropRect(
+                thumbnailBounds: bounds,
+                imageWidth: current.image.width,
+                imageHeight: current.image.height
+            )
+            guard crop.width > 0, crop.height > 0,
+                  !usedTimes.contains(where: { abs($0 - current.time) < 0.35 }) else { continue }
+
+            for source in [previous, current] {
+                guard let cropped = source.image.cropping(to: crop) else { continue }
+                output.append(try writeEvidenceFrame(
+                    image: cropped,
+                    time: source.time,
+                    captureFrame: mappedCaptureFrame(
+                        crop: crop,
+                        sourceWidth: source.image.width,
+                        sourceHeight: source.image.height,
+                        captureFrame: captureFrame
+                    ),
+                    focusReason: "close-up around a visual change; compare with the adjacent before/after image",
+                    directory: directory,
+                    ordinal: startingOrdinal + output.count
+                ))
+                if output.count == maximumCount { return output }
+            }
+            usedTimes.append(current.time)
+        }
+        return output
+    }
+
+    private static func expandedCropRect(
+        thumbnailBounds: CGRect,
+        imageWidth: Int,
+        imageHeight: Int
+    ) -> CGRect {
+        let scaleX = CGFloat(imageWidth) / 96
+        let scaleY = CGFloat(imageHeight) / 54
+        let raw = CGRect(
+            x: thumbnailBounds.minX * scaleX,
+            y: thumbnailBounds.minY * scaleY,
+            width: thumbnailBounds.width * scaleX,
+            height: thumbnailBounds.height * scaleY
+        )
+        let desiredWidth = max(raw.width + 160, min(CGFloat(imageWidth), 640))
+        let desiredHeight = max(raw.height + 120, min(CGFloat(imageHeight), 360))
+        let x = min(max(0, raw.midX - desiredWidth / 2), CGFloat(imageWidth) - desiredWidth)
+        let y = min(max(0, raw.midY - desiredHeight / 2), CGFloat(imageHeight) - desiredHeight)
+        return CGRect(x: x, y: y, width: desiredWidth, height: desiredHeight).integral
+    }
+
+    private static func mappedCaptureFrame(
+        crop: CGRect,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        captureFrame: CGRect?
+    ) -> CGRect? {
+        guard let captureFrame, sourceWidth > 0, sourceHeight > 0 else { return captureFrame }
+        let scaleX = captureFrame.width / CGFloat(sourceWidth)
+        let scaleY = captureFrame.height / CGFloat(sourceHeight)
+        let originYFromTop = CGFloat(sourceHeight) - crop.maxY
+        return CGRect(
+            x: captureFrame.minX + crop.minX * scaleX,
+            y: captureFrame.minY + originYFromTop * scaleY,
+            width: crop.width * scaleX,
+            height: crop.height * scaleY
+        )
+    }
+
+    private static func writeEvidenceFrame(
+        image: CGImage,
+        time: TimeInterval,
+        captureFrame: CGRect?,
+        focusReason: String?,
+        directory: URL,
+        ordinal: Int
+    ) throws -> WorkflowEvidenceFrame {
+        let imageURL = directory.appendingPathComponent("frame-\(ordinal).png")
+        try pngData(for: image).write(to: imageURL, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: imageURL.path)
+        return WorkflowEvidenceFrame(
+            time: time,
+            imageURL: imageURL,
+            recognizedText: recognizedText(in: image),
+            imageWidth: image.width,
+            imageHeight: image.height,
+            captureFrame: captureFrame,
+            focusReason: focusReason
+        )
     }
 
     private static func pngData(for image: CGImage) throws -> Data {

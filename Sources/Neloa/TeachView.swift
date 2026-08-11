@@ -48,20 +48,38 @@ struct TeachView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(spacing: 0) {
                         TeachSetupStep(number: 1, title: "What should Neloa observe?") {
-                            HStack(spacing: 9) {
-                                TeachOptionToggle(
-                                    icon: "rectangle.on.rectangle",
-                                    title: "Screen",
-                                    isOn: captureScreenBinding,
-                                    permissionStatus: permissions.screen,
-                                    permissionHelp: "Screen Recording permission is required to record the apps you demonstrate. Grant it in System Settings → Privacy & Security → Screen & System Audio Recording."
-                                )
-                                TeachIncludedOption(
-                                    icon: "hand.tap",
-                                    title: "Clicks & Typing",
-                                    permissionStatus: permissions.accessibility,
-                                    permissionHelp: "Accessibility permission is required to capture clicks and typing and replay approved actions. Grant it in System Settings → Privacy & Security → Accessibility."
-                                )
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(spacing: 9) {
+                                    TeachOptionToggle(
+                                        icon: "rectangle.on.rectangle",
+                                        title: "Screen",
+                                        isOn: captureScreenBinding,
+                                        permissionStatus: permissions.screen,
+                                        permissionHelp: "Screen Recording permission is required to record the apps you demonstrate. Grant it in System Settings → Privacy & Security → Screen & System Audio Recording."
+                                    )
+                                    TeachIncludedOption(
+                                        icon: "hand.tap",
+                                        title: "Clicks & Typing",
+                                        permissionStatus: permissions.accessibility,
+                                        permissionHelp: "Accessibility permission is required to capture clicks and typing and replay approved actions. Grant it in System Settings → Privacy & Security → Accessibility."
+                                    )
+                                }
+
+                                HStack(spacing: 9) {
+                                    Label("App to teach", systemImage: "macwindow")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                    Picker("App to teach", selection: teachingTargetBinding) {
+                                        Text("I’ll switch apps myself").tag("")
+                                        ForEach(teachingTargets, id: \.bundleIdentifier) { application in
+                                            Text(application.localizedName ?? application.bundleIdentifier ?? "Application")
+                                                .tag(application.bundleIdentifier ?? "")
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .frame(maxWidth: 270)
+                                    .help("Neloa can bring this app forward when recording begins. You can still switch between other apps while teaching.")
+                                }
                             }
                         }
 
@@ -243,6 +261,26 @@ struct TeachView: View {
             get: { teacher.captureSystemAudio },
             set: { teacher.setSystemAudioCaptureEnabled($0) }
         )
+    }
+
+    private var teachingTargetBinding: Binding<String> {
+        Binding(
+            get: { teacher.targetApplicationBundleIdentifier ?? "" },
+            set: { teacher.setTeachingTarget($0) }
+        )
+    }
+
+    private var teachingTargets: [NSRunningApplication] {
+        NSWorkspace.shared.runningApplications
+            .filter {
+                $0.activationPolicy == .regular
+                    && $0.bundleIdentifier != Bundle.main.bundleIdentifier
+                    && !PrivacyShield.excludes($0.bundleIdentifier)
+                    && $0.localizedName?.isEmpty == false
+            }
+            .sorted {
+                ($0.localizedName ?? "").localizedCaseInsensitiveCompare($1.localizedName ?? "") == .orderedAscending
+            }
     }
 
     private var voicePermissionStatus: PermissionCenter.Status {
@@ -489,10 +527,12 @@ private struct RecordingView: View {
             if let message = controller.message {
                 HStack {
                     Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
-                    Spacer()
-                    Button("Open Privacy Settings") {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                            NSWorkspace.shared.open(url)
+                    if interactions.permissionMissing {
+                        Spacer()
+                        Button("Open Privacy Settings") {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                                NSWorkspace.shared.open(url)
+                            }
                         }
                     }
                 }

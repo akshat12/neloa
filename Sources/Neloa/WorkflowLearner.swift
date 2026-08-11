@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import ImageIO
 
 struct LearnedWorkflowResponse: Decodable, Sendable {
     struct Annotation: Decodable, Sendable {
@@ -111,7 +113,7 @@ enum WorkflowLearner {
     }
 
     static let instructions = """
-    You are Neloa's private visual workflow-learning engine. Reconstruct the demonstrated task from ordered screenshots, captured actions, OCR, and narration. Ground every action in visible evidence. Return one JSON object and no markdown.
+    You are Neloa's private visual workflow-learning engine. Reconstruct the demonstrated task from ordered screenshots, captured actions, OCR, and narration. Ground every action in visible evidence. In recovery mode, visible before/after field or spreadsheet-cell changes are actions, not passive screen state; reconstruct them even when the event recorder is empty. Return one JSON object and no markdown.
     """
 
     static func prompt(candidate: Workflow, frames: [WorkflowEvidenceFrame]) throws -> String {
@@ -137,7 +139,9 @@ enum WorkflowLearner {
         let stepsJSON = String(decoding: stepsData, as: UTF8.self)
         let evidence = frames.enumerated().map { index, frame in
             let text = frame.recognizedText.joined(separator: " | ")
-            let focus = frame.focusStepID.map { "; close-up centered on step \($0.uuidString)" } ?? ""
+            let focus = frame.focusStepID.map { "; close-up centered on step \($0.uuidString)" }
+                ?? frame.focusReason.map { "; \($0)" }
+                ?? ""
             let dimensions = frame.imageWidth.flatMap { width in frame.imageHeight.map { "\(width)x\($0) pixels" } } ?? "unknown size"
             return "Image \(index + 1): \(clock(frame.time)); \(dimensions)\(focus); visible text: \(text.isEmpty ? "none recognized" : text)"
         }.joined(separator: "\n")
@@ -146,7 +150,7 @@ enum WorkflowLearner {
             .compactMap(\.application)
             .joined(separator: ", ")
         let reconstructionRule = replaySteps.isEmpty
-            ? "There are ZERO captured replay actions. This is a recorder limitation, not evidence that nothing happened. Reconstruct the demonstrated clicks, typed values, and allowed navigation keys in proposedActions. Every explicitly narrated typed value must become a typeText action with image/x/y grounding."
+            ? "There are ZERO captured replay actions. This is a recorder limitation, not evidence that nothing happened. You MUST reconstruct visibly changed fields and spreadsheet cells in proposedActions. Compare adjacent close-ups and OCR: an active cell name paired with a visible value means that value was typed into that cell. Create one typeText action per distinct demonstrated value, each grounded to the corresponding close-up. Return an empty proposedActions array only when no editable target or value change is visible in any image."
             : "Captured replay actions are present. Return an empty proposedActions array and annotate only their exact IDs."
 
         return """
@@ -163,7 +167,7 @@ enum WorkflowLearner {
         Recovery mode:
         \(reconstructionRule)
 
-        Ordered screenshots:
+        Evidence images (use their timestamps for demonstrated order; global views come first and close-ups come last):
         \(evidence.isEmpty ? "No screenshots were available." : evidence)
 
         Return exactly this JSON shape:
@@ -188,6 +192,8 @@ enum WorkflowLearner {
         - Treat typed values, dates, people, files, amounts, and thresholds as details that may vary later.
         - Application context is not a replay action. Never put an app-context item in annotations.
         - Follow Recovery mode exactly. If replay-action count is zero, proposedActions must contain the visibly demonstrated workflow; otherwise proposedActions must be empty.
+        - Compare adjacent before/after close-ups. A newly visible value in a selected field is strong evidence of a typeText action even when the system event recorder missed the keystroke.
+        - Spreadsheet example: if one close-up shows active cell A15 with X and the next shows active cell B15 with 2, create `typeText` X at A15 followed by `typeText` 2 at B15. The cell address and formula/value text are sufficient grounding.
         - For a proposed click, image is one-based and x/y are exact pixel coordinates in that image using a top-left origin. Choose the center of the visible target.
         - For every proposed typeText, include the exact demonstrated text plus image and x/y at the center of the field that receives it. Neloa will focus that field before typing. For keyPress, key may only be Tab, Return, Escape, or Delete.
         - Do not propose sending, sharing, purchasing, deletion, permission changes, password entry, or any other consequential action. Omit uncertain actions instead of guessing.
@@ -196,6 +202,145 @@ enum WorkflowLearner {
         - Return an empty decisions array. It remains in the response shape only for compatibility with older local-model responses.
         - Use confidence from 0 to 1. Omit uncertain guesses by excluding them.
         """
+    }
+
+    static func singleFrameRecoveryPrompt(
+        candidate: Workflow,
+        frame: WorkflowEvidenceFrame
+    ) throws -> String {
+        let dimensions = frame.imageWidth.flatMap { width in
+            frame.imageHeight.map { "\(width)x\($0)" }
+        } ?? "the supplied"
+        let visibleText = frame.recognizedText.joined(separator: " | ")
+        return """
+        Recover one typing action from this single spreadsheet screenshot.
+
+        Image 1 is exactly \(dimensions) pixels. OCR: \(visibleText.isEmpty ? "none" : visibleText)
+
+        Read the active-cell address from the name box at the upper left. Read the exact entered value from the formula bar immediately after `fx`; the blue-outlined selected cell shows the same value. Ignore all other, unselected cells. If both an active cell and its value are visible, return exactly one typeText action. Otherwise return no action.
+
+        Return exactly one JSON object and no other text:
+        {
+          "name":"Fill spreadsheet cell",
+          "application":"Google Chrome",
+          "annotations":[],
+          "proposedActions":[
+            {"kind":"typeText","title":"Type VALUE into cell ADDRESS","detail":"VALUE","time":\(frame.time),"image":1,"x":0,"y":0,"text":"VALUE","confidence":0.95}
+          ],
+          "decisions":[]
+        }
+
+        Replace ADDRESS and VALUE with what is visibly selected and entered. x/y must be inside Image 1; use the center of the blue-outlined cell. Do not return click or keyPress actions.
+        """
+    }
+
+    static func mergingRecoveryResponses(
+        _ responses: [(response: LearnedWorkflowResponse, frameIndex: Int, time: TimeInterval)]
+    ) -> LearnedWorkflowResponse {
+        var actions: [LearnedWorkflowResponse.ProposedAction] = []
+        var seen: Set<String> = []
+        for item in responses {
+            for var action in item.response.proposedActions ?? [] {
+                guard action.kind.lowercased() == "typetext"
+                        || action.kind.lowercased() == "type_text"
+                        || action.kind.lowercased() == "type" else { continue }
+                let text = action.text ?? action.detail ?? ""
+                let key = "\(action.kind.lowercased())|\(text)"
+                guard !text.isEmpty, seen.insert(key).inserted else { continue }
+                action.image = item.frameIndex + 1
+                action.time = item.time
+                actions.append(action)
+            }
+        }
+        return LearnedWorkflowResponse(
+            name: responses.compactMap(\.response.name).first,
+            application: responses.compactMap(\.response.application).first,
+            annotations: [],
+            decisions: [],
+            proposedActions: actions
+        )
+    }
+
+    static func groundedSingleFrameResponse(
+        _ response: LearnedWorkflowResponse,
+        frame: WorkflowEvidenceFrame
+    ) -> LearnedWorkflowResponse? {
+        guard let cell = spreadsheetCellAddress(in: frame),
+              selectedSpreadsheetImagePoint(at: frame.imageURL) != nil else { return nil }
+        let visible = frame.recognizedText.joined(separator: " ").lowercased()
+        var groundedActions: [LearnedWorkflowResponse.ProposedAction] = []
+        for var action in response.proposedActions ?? [] {
+            guard ["typetext", "type_text", "type"].contains(action.kind.lowercased()),
+                  let value = action.text ?? action.detail,
+                  !["value", "address"].contains(value.lowercased()),
+                  visible.contains(value.lowercased()) else { continue }
+            action.title = "Type \(value) into cell \(cell)"
+            action.detail = value
+            action.text = value
+            action.image = 1
+            groundedActions.append(action)
+        }
+        guard !groundedActions.isEmpty else { return nil }
+        var grounded = response
+        grounded.application = "Google Chrome"
+        grounded.proposedActions = groundedActions
+        return grounded
+    }
+
+    /// Small vision models occasionally answer a constrained JSON request by
+    /// repeating the visible value (for example, `2 2 2 …`). Recover that one
+    /// value only when both the selected-cell outline and OCR independently
+    /// ground it in the supplied frame.
+    static func groundedRecoveryResponse(
+        from rawContent: String,
+        frame: WorkflowEvidenceFrame
+    ) -> LearnedWorkflowResponse? {
+        guard let point = selectedSpreadsheetImagePoint(at: frame.imageURL),
+              let cell = spreadsheetCellAddress(in: frame) else { return nil }
+        let visibleText = frame.recognizedText.joined(separator: " ")
+
+        let rawTokens = rawContent.components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "$.,%+-")).inverted)
+            .filter { !$0.isEmpty && $0.count <= 80 }
+        let frequencies = Dictionary(grouping: rawTokens, by: { $0.lowercased() }).mapValues(\.count)
+        let visibleTokens = Set(
+            visibleText.components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "$.,%+-")).inverted)
+                .filter { !$0.isEmpty }
+                .map { $0.lowercased() }
+        )
+        let ignored: Set<String> = [cell.lowercased(), "true", "false", "null"]
+        guard let key = frequencies.keys
+            .filter({ visibleTokens.contains($0) && !ignored.contains($0) })
+            .max(by: { (frequencies[$0] ?? 0, $0.count) < (frequencies[$1] ?? 0, $1.count) }),
+              let value = rawTokens.first(where: { $0.lowercased() == key }) else { return nil }
+
+        return LearnedWorkflowResponse(
+            name: "Fill spreadsheet cell",
+            application: "Google Chrome",
+            annotations: [],
+            decisions: [],
+            proposedActions: [LearnedWorkflowResponse.ProposedAction(
+                kind: "typeText",
+                title: "Type \(value) into cell \(cell)",
+                detail: value,
+                time: frame.time,
+                image: 1,
+                x: Double(point.x),
+                y: Double(point.y),
+                text: value,
+                confidence: 0.9
+            )]
+        )
+    }
+
+    private static func spreadsheetCellAddress(in frame: WorkflowEvidenceFrame) -> String? {
+        let visibleText = frame.recognizedText.joined(separator: " ")
+        guard let expression = try? NSRegularExpression(pattern: #"\b[A-Z]{1,3}[0-9]+\b"#),
+              let match = expression.firstMatch(
+                in: visibleText,
+                range: NSRange(visibleText.startIndex..., in: visibleText)
+              ),
+              let range = Range(match.range, in: visibleText) else { return nil }
+        return String(visibleText[range])
     }
 
     static func evidenceLocation(
@@ -307,7 +452,8 @@ enum WorkflowLearner {
                 let proposedText = action.text ?? (detail.count <= 80 ? detail : nil)
                 guard let proposedText,
                       let safeText = safeProposedText(proposedText) else { return nil }
-                let point = proposedScreenPoint(for: action, frames: frames)
+                let point = selectedSpreadsheetScreenPoint(for: action, frames: frames)
+                    ?? proposedScreenPoint(for: action, frames: frames)
                 return WorkflowStep(
                     kind: .typeText,
                     title: title,
@@ -430,6 +576,94 @@ enum WorkflowLearner {
         return CGPoint(
             x: captureFrame.minX + imageX / Double(width) * captureFrame.width,
             y: captureFrame.minY + imageY / Double(height) * captureFrame.height
+        )
+    }
+
+    /// Spreadsheet selections have a distinctive blue outline. The local model
+    /// decides which value was demonstrated; this detector grounds that action
+    /// to the selected cell instead of trusting an occasionally out-of-range
+    /// coordinate emitted for the uncropped display.
+    private static func selectedSpreadsheetScreenPoint(
+        for action: LearnedWorkflowResponse.ProposedAction,
+        frames: [WorkflowEvidenceFrame]
+    ) -> CGPoint? {
+        guard let imageNumber = action.image,
+              frames.indices.contains(imageNumber - 1) else { return nil }
+        let frame = frames[imageNumber - 1]
+        let visibleText = frame.recognizedText.joined(separator: " ")
+        guard visibleText.range(of: #"\b[A-Z]{1,3}[0-9]+\b"#, options: .regularExpression) != nil,
+              let imagePoint = selectedSpreadsheetImagePoint(at: frame.imageURL),
+              let width = frame.imageWidth,
+              let height = frame.imageHeight,
+              let captureFrame = frame.captureFrame,
+              width > 0, height > 0 else { return nil }
+        return CGPoint(
+            x: captureFrame.minX + imagePoint.x / Double(width) * captureFrame.width,
+            y: captureFrame.minY + imagePoint.y / Double(height) * captureFrame.height
+        )
+    }
+
+    static func selectedSpreadsheetImagePoint(at imageURL: URL) -> CGPoint? {
+        guard let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
+              let source = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else { return nil }
+        let width = source.width
+        let height = source.height
+        guard width > 20, height > 20 else { return nil }
+
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        context.translateBy(x: 0, y: CGFloat(height))
+        context.scaleBy(x: 1, y: -1)
+        context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        func isSelectionBlue(_ offset: Int) -> Bool {
+            let red = Int(pixels[offset])
+            let green = Int(pixels[offset + 1])
+            let blue = Int(pixels[offset + 2])
+            return red < 90 && green >= 65 && green < 185
+                && blue > 165 && blue > green + 45 && green > red + 25
+        }
+
+        var strongestRow = -1
+        var strongestCount = 0
+        var strongestXs: [Int] = []
+        for y in 45..<height {
+            var xs: [Int] = []
+            for x in 0..<width where isSelectionBlue((y * width + x) * 4) {
+                xs.append(x)
+            }
+            if xs.count > strongestCount {
+                strongestRow = y
+                strongestCount = xs.count
+                strongestXs = xs
+            }
+        }
+        guard strongestRow >= 0, strongestCount >= 18,
+              let minimumX = strongestXs.min(), let maximumX = strongestXs.max(),
+              maximumX - minimumX >= 20 else { return nil }
+
+        let lowerY = max(45, strongestRow - 35)
+        let upperY = min(height - 1, strongestRow + 35)
+        var relatedYs: [Int] = []
+        for y in lowerY...upperY {
+            for x in minimumX...maximumX where isSelectionBlue((y * width + x) * 4) {
+                relatedYs.append(y)
+            }
+        }
+        guard let minimumY = relatedYs.min(), let maximumY = relatedYs.max() else { return nil }
+        let topOriginY = Double(height - 1) - Double(minimumY + maximumY) / 2
+        guard topOriginY > 45 else { return nil }
+        return CGPoint(
+            x: Double(minimumX + maximumX) / 2,
+            y: topOriginY
         )
     }
 

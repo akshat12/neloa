@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 @MainActor
@@ -9,6 +10,7 @@ final class TeachController: ObservableObject {
     @Published private(set) var captureScreen = true
     @Published private(set) var captureMicrophone = true
     @Published private(set) var captureSystemAudio = true
+    @Published var targetApplicationBundleIdentifier: String?
     @Published var draft: Workflow?
     @Published var message: String?
     @Published private(set) var requiredPermission: RequiredPermission?
@@ -61,7 +63,10 @@ final class TeachController: ObservableObject {
         requiredPermission = nil
         do {
             if captureScreen {
-                screenURL = try await screen.start(includeSystemAudio: captureSystemAudio)
+                screenURL = try await screen.start(
+                    includeSystemAudio: captureSystemAudio,
+                    preferredBundleIdentifier: targetApplicationBundleIdentifier
+                )
             }
             if captureMicrophone {
                 narrationURL = try await voice.start()
@@ -73,6 +78,7 @@ final class TeachController: ObservableObject {
                     : "Voice recording will continue, but Accessibility is needed to capture clicks, typing, and replay actions."
             }
             phase = .recording
+            await activateTeachingTargetIfNeeded()
         } catch {
             if screen.isRecording { _ = await screen.stop() }
             if voice.isListening { voice.stop() }
@@ -136,6 +142,24 @@ final class TeachController: ObservableObject {
 
     func setSystemAudioCaptureEnabled(_ isEnabled: Bool) {
         captureSystemAudio = Self.resolvedSystemAudio(screenEnabled: captureScreen, requested: isEnabled)
+    }
+
+    func setTeachingTarget(_ bundleIdentifier: String?) {
+        targetApplicationBundleIdentifier = Self.resolvedTeachingTarget(bundleIdentifier)
+    }
+
+    nonisolated static func resolvedTeachingTarget(_ bundleIdentifier: String?) -> String? {
+        guard let bundleIdentifier, !bundleIdentifier.isEmpty else { return nil }
+        return bundleIdentifier
+    }
+
+    private func activateTeachingTargetIfNeeded() async {
+        guard let bundleIdentifier = targetApplicationBundleIdentifier,
+              let application = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first,
+              !PrivacyShield.excludes(bundleIdentifier) else { return }
+        if !application.activate(options: [.activateAllWindows]) {
+            message = "Recording started, but macOS could not bring the selected app forward. Switch to it to continue teaching."
+        }
     }
 
     nonisolated static func resolvedSystemAudio(screenEnabled: Bool, requested: Bool) -> Bool {
