@@ -4,6 +4,7 @@ enum WorkflowCompiler {
     static func compile(events: [CaptureEvent], transcript: String, name: String = "Untitled automation") -> Workflow {
         var steps: [WorkflowStep] = []
         var lastApp: String?
+        var previousClick: CaptureEvent?
 
         for event in events.sorted(by: { $0.time < $1.time }) {
             if let app = event.application, app != lastApp {
@@ -22,6 +23,14 @@ enum WorkflowCompiler {
             case .appSwitch:
                 continue
             case .click, .rightClick:
+                if let previousClick,
+                   previousClick.kind == event.kind,
+                   previousClick.application == event.application,
+                   event.time - previousClick.time < 0.14,
+                   abs((previousClick.x ?? 0) - (event.x ?? 0)) < 2,
+                   abs((previousClick.y ?? 0) - (event.y ?? 0)) < 2 {
+                    continue
+                }
                 steps.append(WorkflowStep(
                     kind: .click,
                     title: event.kind == .rightClick ? "Right-click" : "Click",
@@ -32,6 +41,7 @@ enum WorkflowCompiler {
                     application: event.application,
                     bundleIdentifier: event.bundleIdentifier
                 ))
+                previousClick = event
             case .text:
                 guard let text = event.text, !text.isEmpty else { continue }
                 if let index = steps.indices.last,

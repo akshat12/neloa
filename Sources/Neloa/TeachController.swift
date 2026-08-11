@@ -68,7 +68,9 @@ final class TeachController: ObservableObject {
             }
             interactions.start()
             if interactions.permissionMissing {
-                message = "Screen and voice are recording, but Accessibility is needed to learn clicks, typing, and replay actions."
+                message = captureScreen
+                    ? "Screen recording will continue, but Accessibility is needed to capture clicks and typing precisely. Qwen can still draft actions from the video."
+                    : "Voice recording will continue, but Accessibility is needed to capture clicks, typing, and replay actions."
             }
             phase = .recording
         } catch {
@@ -98,6 +100,12 @@ final class TeachController: ObservableObject {
             recordingURL: screenURL,
             captureFrame: screen.captureFrame
         )
+        if captureScreen,
+           draft?.steps.contains(where: { [.click, .typeText, .keyPress].contains($0.kind) }) != true {
+            message = "Qwen could not ground any repeatable actions in this recording. Play it back to confirm the correct app was visible, then teach the task again."
+        } else {
+            message = nil
+        }
         phase = .review
     }
 

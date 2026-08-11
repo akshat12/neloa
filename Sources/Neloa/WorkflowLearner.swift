@@ -255,7 +255,7 @@ enum WorkflowLearner {
 
         if let name = response.name {
             let cleanedName = cleaned(name, maximumLength: 60)
-            if !cleanedName.isEmpty { workflow.name = cleanedName }
+            if !cleanedName.isEmpty, !isPlaceholderName(cleanedName) { workflow.name = cleanedName }
         }
         workflow.steps.sort { lhs, rhs in
             if lhs.time == rhs.time { return lhs.kind == .approval && rhs.kind != .approval }
@@ -339,6 +339,7 @@ enum WorkflowLearner {
 
         guard !proposedSteps.isEmpty else { return }
         proposedSteps.sort { $0.time < $1.time }
+        proposedSteps = repairingSpreadsheetNavigation(in: proposedSteps)
         if let application,
            !workflow.steps.contains(where: { $0.kind == .openApp }) {
             proposedSteps.insert(WorkflowStep(
@@ -352,6 +353,56 @@ enum WorkflowLearner {
             ), at: 0)
         }
         workflow.steps.append(contentsOf: proposedSteps)
+    }
+
+    private static func repairingSpreadsheetNavigation(in steps: [WorkflowStep]) -> [WorkflowStep] {
+        var repaired: [WorkflowStep] = []
+        var previousInput: WorkflowStep?
+        for var step in steps {
+            defer {
+                if step.kind == .typeText { previousInput = step }
+            }
+            guard step.kind == .typeText,
+                  let previousInput,
+                  let previousX = previousInput.x,
+                  let previousY = previousInput.y,
+                  let x = step.x,
+                  let y = step.y,
+                  hypot(previousX - x, previousY - y) < 36,
+                  clearlyNamesNextSpreadsheetCell(previousInput.title, step.title) else {
+                repaired.append(step)
+                continue
+            }
+
+            repaired.append(WorkflowStep(
+                kind: .keyPress,
+                title: "Move to the next cell",
+                detail: "Use the adjacent spreadsheet cell",
+                time: max(previousInput.time, step.time - 0.08),
+                keyCode: 48,
+                application: step.application,
+                bundleIdentifier: step.bundleIdentifier,
+                origin: .visual
+            ))
+            step.x = nil
+            step.y = nil
+            repaired.append(step)
+        }
+        return repaired
+    }
+
+    private static func clearlyNamesNextSpreadsheetCell(_ previous: String, _ current: String) -> Bool {
+        let currentLower = current.lowercased()
+        if currentLower.contains("next cell") || currentLower.contains("adjacent cell") { return true }
+        let pattern = #"(?i)\bcell\s+([A-Z]+[0-9]+)\b"#
+        guard let expression = try? NSRegularExpression(pattern: pattern) else { return false }
+        func reference(in value: String) -> String? {
+            guard let match = expression.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)),
+                  let range = Range(match.range(at: 1), in: value) else { return nil }
+            return String(value[range]).uppercased()
+        }
+        guard let first = reference(in: previous), let second = reference(in: current) else { return false }
+        return first != second
     }
 
     private static func safeProposedText(_ text: String) -> String? {
@@ -445,6 +496,11 @@ enum WorkflowLearner {
             .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
         return String(singleLine.prefix(maximumLength))
+    }
+
+    private static func isPlaceholderName(_ value: String) -> Bool {
+        let normalized = value.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        return ["workflow name", "automation name", "short verb-first workflow name", "my automation"].contains(normalized)
     }
 
     private static func isGenericClickTitle(_ title: String) -> Bool {

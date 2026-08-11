@@ -164,7 +164,7 @@ enum SelfTests {
         }
         let videoOnly = Workflow(
             name: "My automation",
-            transcript: "In Google Chrome, enter X in the left spreadsheet cell, then enter 2 in the cell next to it.",
+            transcript: "",
             steps: [WorkflowStep(
                 kind: .openApp,
                 title: "Open Google Chrome",
@@ -529,6 +529,28 @@ enum SelfTests {
         try expect(videoDraft.steps.filter { $0.origin == .visual }.count == 5, "video-drafted actions should remain visibly attributable to Qwen")
         try expect(videoDraft.steps[1].x == 600 && videoDraft.steps[1].y == 250, "Qwen image coordinates should map back to global replay coordinates")
         try expect(videoDraft.steps[2].text == "X" && videoDraft.steps[4].text == "2", "video-drafted typed values should remain customizable")
+
+        let overlappingSpreadsheetResponse = LearnedWorkflowResponse(
+            name: "Fill spreadsheet row",
+            application: "Google Chrome",
+            annotations: [],
+            decisions: [],
+            proposedActions: [
+                .init(kind: "typeText", title: "Type X in cell A1", time: 1, image: 1, x: 50, y: 50, text: "X", confidence: 0.98),
+                .init(kind: "typeText", title: "Type 2 in cell B1", time: 2, image: 1, x: 50, y: 50, text: "2", confidence: 0.98)
+            ]
+        )
+        let repairedSpreadsheet = WorkflowLearner.apply(
+            overlappingSpreadsheetResponse,
+            to: Workflow(name: "My automation", transcript: "", steps: []),
+            frames: [videoFrame]
+        )
+        try expect(
+            repairedSpreadsheet.steps.map(\.kind) == [.openApp, .typeText, .keyPress, .typeText]
+                && repairedSpreadsheet.steps[2].keyCode == 48
+                && repairedSpreadsheet.steps[3].x == nil,
+            "overlapping visual coordinates for distinct spreadsheet cells should become safe adjacent-cell navigation"
+        )
 
         let lowConfidence = LearnedWorkflowResponse(
             name: nil,

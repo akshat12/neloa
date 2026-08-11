@@ -23,9 +23,10 @@ final class InteractionRecorder: ObservableObject {
         beginObservingApplications()
         captureApplicationSwitch(NSWorkspace.shared.frontmostApplication)
 
-        let prompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        let options = [prompt: true] as CFDictionary
-        guard AXIsProcessTrustedWithOptions(options) else {
+        // Permission is requested explicitly from setup/settings. Triggering the
+        // macOS authorization alert after screen recording begins contaminates
+        // the demonstration and steals focus from the taught app.
+        guard AXIsProcessTrusted() else {
             permissionMissing = true
             return
         }
@@ -120,7 +121,9 @@ final class InteractionRecorder: ObservableObject {
             guard !IsSecureEventInputEnabled() else { return }
             let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
             let text = unicodeText(from: event)
-            let isPrintable = !text.isEmpty && !event.flags.contains(.maskCommand) && keyCode != 36 && keyCode != 48 && keyCode != 51 && keyCode != 53
+            let isPrintable = isSafePrintableText(text)
+                && !event.flags.contains(.maskCommand)
+                && keyCode != 36 && keyCode != 48 && keyCode != 51 && keyCode != 53
             events.append(CaptureEvent(
                 time: elapsed,
                 kind: isPrintable ? .text : .keyPress,
@@ -141,5 +144,11 @@ final class InteractionRecorder: ObservableObject {
         event.keyboardGetUnicodeString(maxStringLength: characters.count, actualStringLength: &count, unicodeString: &characters)
         guard count > 0 else { return "" }
         return String(utf16CodeUnits: characters, count: count)
+    }
+
+    private func isSafePrintableText(_ text: String) -> Bool {
+        !text.isEmpty && text.unicodeScalars.allSatisfy {
+            !CharacterSet.controlCharacters.contains($0)
+        }
     }
 }

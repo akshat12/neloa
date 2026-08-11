@@ -282,7 +282,7 @@ struct TeachView: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(teacher.draft?.steps.isEmpty != false)
+                    .disabled(teacher.draft?.steps.contains(where: { [.click, .typeText, .keyPress].contains($0.kind) }) != true)
                 }
             }
         }

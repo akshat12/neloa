@@ -14,6 +14,7 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
     private var timer: Timer?
     private var startedAt: Date?
     private var outputURL: URL?
+    private var recordingDidFinish = false
     private(set) var captureFrame: CGRect?
 
     func start(includeSystemAudio: Bool) async throws -> URL {
@@ -73,6 +74,7 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
         self.stream = stream
         self.recordingOutput = output
         self.outputURL = url
+        self.recordingDidFinish = false
         self.startedAt = Date()
         self.isRecording = true
         self.timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
@@ -102,6 +104,12 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
         } catch {
             errorMessage = error.localizedDescription
         }
+        // stopCapture can return before SCRecordingOutput finalizes the MP4.
+        // Visual learning opens it immediately, so give the delegate a short,
+        // bounded window to make the asset readable first.
+        for _ in 0..<50 where !recordingDidFinish {
+            try? await Task.sleep(for: .milliseconds(40))
+        }
         stream = nil
         recordingOutput = nil
         isRecording = false
@@ -111,10 +119,15 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
     nonisolated func recordingOutputDidStartRecording(_ recordingOutput: SCRecordingOutput) {}
 
     nonisolated func recordingOutput(_ recordingOutput: SCRecordingOutput, didFailWithError error: any Error) {
-        Task { @MainActor in self.errorMessage = error.localizedDescription }
+        Task { @MainActor in
+            self.errorMessage = error.localizedDescription
+            self.recordingDidFinish = true
+        }
     }
 
-    nonisolated func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {}
+    nonisolated func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {
+        Task { @MainActor in self.recordingDidFinish = true }
+    }
 
     nonisolated func stream(_ stream: SCStream, didStopWithError error: any Error) {
         Task { @MainActor in
