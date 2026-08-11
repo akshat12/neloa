@@ -77,6 +77,14 @@ Workflow recordings and definitions are saved in the current user's Application 
 
 Local builds use a dedicated development identity when one is installed. That identity is only for development; never distribute a build signed with it.
 
+## Responsible use and disclaimer
+
+Neloa is experimental automation software and can make mistakes or take unintended actions. Review its proposed workflow and run preview, supervise execution, keep appropriate backups, and avoid using it for safety-critical or irreversible tasks.
+
+You are responsible for using Neloa lawfully and only on systems, accounts, and data you are authorized to access. The maintainers do not authorize, encourage, or accept responsibility for unlawful, unauthorized, abusive, or harmful use.
+
+Neloa is provided **“AS IS,” without warranties or conditions of any kind**. To the maximum extent permitted by applicable law, its authors and contributors are not liable for losses, damages, data loss, legal consequences, or other issues arising from its use. Read the full [responsible-use disclaimer](DISCLAIMER.md) and the warranty and liability terms in Sections 7 and 8 of the [Apache License 2.0](LICENSE).
+
 ## Building on Neloa
 
 Forks and derivative work are welcome under the Apache License 2.0. If you build something based on Neloa, please message the maintainer and tell us what you are making—we would genuinely like to hear about it and explore ways to work together. This is a friendly request, not a condition of the open-source license.
@@ -85,4 +93,4 @@ The Neloa name, logo, app icon, and visual identity are reserved for the officia
 
 ## License
 
-Neloa is licensed under the [Apache License 2.0](LICENSE). Distributed copies and derivative works must preserve the applicable license, copyright, and attribution notices described in [NOTICE](NOTICE).
+Neloa is licensed under the [Apache License 2.0](LICENSE). Distributed copies and derivative works must preserve the applicable license, copyright, and attribution notices described in [NOTICE](NOTICE). Packaged apps include the license, notice, and [responsible-use disclaimer](DISCLAIMER.md) in their Resources directory.

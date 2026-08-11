@@ -62,6 +62,9 @@ if [ -n "${NELOA_BUILD_NUMBER:-}" ]; then
     /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NELOA_BUILD_NUMBER" "$APP_DIR/Contents/Info.plist"
 fi
 cp "$PROJECT_DIR/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
+cp "$PROJECT_DIR/LICENSE" "$APP_DIR/Contents/Resources/LICENSE.txt"
+cp "$PROJECT_DIR/NOTICE" "$APP_DIR/Contents/Resources/NOTICE.txt"
+cp "$PROJECT_DIR/DISCLAIMER.md" "$APP_DIR/Contents/Resources/DISCLAIMER.md"
 cp "$EXECUTABLE_PATH" "$APP_DIR/Contents/MacOS/Neloa"
 chmod 755 "$APP_DIR/Contents/MacOS/Neloa"
 
