@@ -67,6 +67,47 @@ enum WorkflowEvidenceExtractor {
         }
     }
 
+    static func sampleTimes(
+        steps: [WorkflowStep],
+        duration: TimeInterval,
+        maximumCount: Int = maximumFrameCount
+    ) -> [TimeInterval] {
+        guard maximumCount > 0 else { return [] }
+        let eventTimes = sampleTimes(steps: steps, maximumCount: maximumCount)
+        guard duration.isFinite, duration > 0.05 else { return eventTimes }
+        if maximumCount == 1 { return [eventTimes.first ?? 0] }
+
+        // A recording remains useful evidence even when the system event tap did
+        // not observe an action (for example, input produced by an accessibility
+        // client). Fill the remaining visual budget across the whole recording.
+        // Event-adjacent frames still win when native events are available.
+        let usableEnd = max(0, duration - 0.08)
+        let uniformCount = max(maximumCount, 2)
+        let uniformTimes = (0..<uniformCount).map { index in
+            let fraction = Double(index) / Double(uniformCount - 1)
+            return min(usableEnd, max(0, fraction * usableEnd))
+        }
+
+        guard eventTimes.count < maximumCount else { return eventTimes }
+        let candidates = uniformTimes.filter { time in
+            !eventTimes.contains(where: { abs($0 - time) < 0.28 })
+        }
+        let remaining = maximumCount - eventTimes.count
+        let selectedUniform: [TimeInterval]
+        if candidates.count <= remaining {
+            selectedUniform = candidates
+        } else if remaining == 1 {
+            selectedUniform = [candidates[candidates.count / 2]]
+        } else {
+            selectedUniform = (0..<remaining).map { position in
+                let fraction = Double(position) / Double(remaining - 1)
+                let index = Int((fraction * Double(candidates.count - 1)).rounded())
+                return candidates[index]
+            }
+        }
+        return (eventTimes + selectedUniform).sorted()
+    }
+
     static func focusedClickFrames(
         candidate: Workflow,
         frames: [WorkflowEvidenceFrame]
@@ -156,9 +197,6 @@ enum WorkflowEvidenceExtractor {
         steps: [WorkflowStep],
         captureFrame: CGRect?
     ) async throws -> [WorkflowEvidenceFrame] {
-        let times = sampleTimes(steps: steps)
-        guard !times.isEmpty else { return [] }
-
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("NeloaEvidence-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(
@@ -169,6 +207,12 @@ enum WorkflowEvidenceExtractor {
 
         do {
             let asset = AVURLAsset(url: recordingURL)
+            let duration = try await asset.load(.duration).seconds
+            let times = sampleTimes(steps: steps, duration: duration)
+            guard !times.isEmpty else {
+                try? FileManager.default.removeItem(at: temporaryDirectory)
+                return []
+            }
             let generator = AVAssetImageGenerator(asset: asset)
             generator.appliesPreferredTrackTransform = true
             generator.maximumSize = CGSize(width: 1_280, height: 1_280)
@@ -196,7 +240,7 @@ enum WorkflowEvidenceExtractor {
             if frames.isEmpty {
                 try? FileManager.default.removeItem(at: temporaryDirectory)
             }
-            return frames
+            return frames.sorted { $0.time < $1.time }
         } catch {
             try? FileManager.default.removeItem(at: temporaryDirectory)
             throw error

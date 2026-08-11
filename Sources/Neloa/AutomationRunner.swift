@@ -146,6 +146,13 @@ final class AutomationRunner: ObservableObject {
             CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
         case .typeText:
             guard let text = step.text else { return }
+            if let x = step.x, let y = step.y {
+                let point = CGPoint(x: x, y: y)
+                CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+                CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+                CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+                try? await Task.sleep(for: .milliseconds(120))
+            }
             let utf16 = Array(text.utf16)
             let down = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true)
             down?.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: utf16)

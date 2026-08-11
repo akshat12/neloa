@@ -12,11 +12,16 @@ final class InteractionRecorder: ObservableObject {
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var applicationObserver: NSObjectProtocol?
     private var startedAt = Date()
 
     func start() {
         events = []
         startedAt = Date()
+        permissionMissing = false
+        isRecording = true
+        beginObservingApplications()
+        captureApplicationSwitch(NSWorkspace.shared.frontmostApplication)
 
         let prompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         let options = [prompt: true] as CFDictionary
@@ -54,7 +59,6 @@ final class InteractionRecorder: ObservableObject {
         runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
         CGEvent.tapEnable(tap: eventTap, enable: true)
-        isRecording = true
     }
 
     func stop() -> [CaptureEvent] {
@@ -62,8 +66,35 @@ final class InteractionRecorder: ObservableObject {
         if let runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes) }
         self.eventTap = nil
         self.runLoopSource = nil
+        if let applicationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(applicationObserver)
+        }
+        applicationObserver = nil
         isRecording = false
         return events
+    }
+
+    private func beginObservingApplications() {
+        applicationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+            Task { @MainActor in self?.captureApplicationSwitch(application) }
+        }
+    }
+
+    private func captureApplicationSwitch(_ application: NSRunningApplication?) {
+        guard isRecording,
+              !PrivacyShield.excludes(application?.bundleIdentifier),
+              events.last?.bundleIdentifier != application?.bundleIdentifier else { return }
+        events.append(CaptureEvent(
+            time: Date().timeIntervalSince(startedAt),
+            kind: .appSwitch,
+            application: application?.localizedName,
+            bundleIdentifier: application?.bundleIdentifier
+        ))
     }
 
     private func capture(type: CGEventType, event: CGEvent) {

@@ -18,6 +18,24 @@ struct AgentPlanResponse: Codable, Sendable {
 }
 
 enum RunPlanner {
+    private struct PromptInput: Encodable {
+        var order: Int
+        var stepID: String
+        var title: String
+        var detail: String
+        var currentText: String
+        var application: String?
+
+        enum CodingKeys: String, CodingKey {
+            case order
+            case stepID = "step_id"
+            case title
+            case detail
+            case currentText = "current_text"
+            case application
+        }
+    }
+
     static func plan(workflow: Workflow, instruction: String, agentResponse: AgentPlanResponse? = nil) -> RunPlan {
         let cleanInstruction = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanInstruction.isEmpty, cleanInstruction.lowercased() != "run it the same way" else {
@@ -28,8 +46,10 @@ enum RunPlanner {
         var changes: [PlannedChange] = []
 
         if let agentResponse {
+            var replacedStepIDs: Set<UUID> = []
             for replacement in agentResponse.replacements {
                 guard let id = UUID(uuidString: replacement.stepID),
+                      replacedStepIDs.insert(id).inserted,
                       let index = steps.firstIndex(where: { $0.id == id }),
                       let before = steps[index].text,
                       steps[index].kind == .typeText else { continue }
@@ -74,17 +94,27 @@ enum RunPlanner {
     }
 
     static func prompt(workflow: Workflow, instruction: String) -> String {
-        let inputs = workflow.steps.filter { $0.kind == .typeText }.map {
-            "{\"step_id\":\"\($0.id.uuidString)\",\"current_text\":\"\(jsonEscape($0.text ?? ""))\"}"
-        }.joined(separator: ",")
+        let promptInputs = workflow.steps.enumerated().compactMap { index, step -> PromptInput? in
+            guard step.kind == .typeText else { return nil }
+            return PromptInput(
+                order: index + 1,
+                stepID: step.id.uuidString,
+                title: step.title,
+                detail: step.detail,
+                currentText: step.text ?? "",
+                application: step.application
+            )
+        }
+        let inputData = (try? JSONEncoder().encode(promptInputs)) ?? Data("[]".utf8)
+        let inputs = String(decoding: inputData, as: UTF8.self)
         let savedInstructions = workflow.steps.filter(\.isUserInstruction).map {
             "- \(WorkflowInstructionSupport.promptDescription(for: $0, in: workflow))"
         }.joined(separator: "\n")
         return """
-        You customize a saved desktop automation for one run. Change only typed input values explicitly requested by the user. Never add clicks, sending, purchasing, deletion, or other side effects. Explicit saved user instructions take priority over inferred workflow details and must not be silently discarded. Return only JSON matching {"summary":"...","replacements":[{"step_id":"...","text":"...","reason":"..."}]}. If the request cannot be satisfied only by replacing typed values, return an empty replacements array and explain why in summary.
+        You customize a saved desktop automation for one run. Change only typed input values explicitly requested by the user. A request may contain several values; map every requested value to the matching typed-input role using title, detail, current text, and demonstrated order. Never add clicks, sending, purchasing, deletion, or other side effects. Explicit saved user instructions take priority over inferred workflow details and must not be silently discarded. Return only JSON matching {"summary":"...","replacements":[{"step_id":"...","text":"...","reason":"..."}]}. Use each exact step_id at most once. If the request cannot be satisfied only by replacing typed values, return an empty replacements array and explain why in summary.
 
         Workflow: \(workflow.name)
-        Typed inputs: [\(inputs)]
+        Typed inputs: \(inputs)
         Explicit saved user instructions:
         \(savedInstructions.isEmpty ? "- None" : savedInstructions)
         User instruction: \(instruction)
@@ -143,7 +173,4 @@ enum RunPlanner {
         return disallowed ? nil : text
     }
 
-    private static func jsonEscape(_ value: String) -> String {
-        value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-    }
 }

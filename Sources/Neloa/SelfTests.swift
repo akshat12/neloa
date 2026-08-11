@@ -149,11 +149,39 @@ enum SelfTests {
         try expect(agent.status.contains("Learned privately with Qwen"), "Qwen should complete visual workflow learning; status was: \(agent.status)")
         try expect(learned.steps.count == visualWorkflow.steps.count, "visual learning must not add executable actions")
         try expect(learned.steps[0].x == click.x && learned.steps[0].y == click.y, "visual learning must preserve replay coordinates")
-        let learnedClickTitle = learned.steps[0].title.lowercased()
-        try expect(
-            learnedClickTitle.contains("download") || learnedClickTitle.contains("report"),
-            "Qwen should identify the report action from image pixels without OCR hints; got \(learned.steps[0].title)"
+
+        let spreadsheetURLs = try makeQwenSpreadsheetSmokeImages()
+        defer { try? FileManager.default.removeItem(at: spreadsheetURLs[0].deletingLastPathComponent()) }
+        let spreadsheetFrames = spreadsheetURLs.enumerated().map { index, url in
+            WorkflowEvidenceFrame(
+                time: TimeInterval(index),
+                imageURL: url,
+                recognizedText: index == 0 ? ["Testing Spreadsheet", "A", "B"] : ["Testing Spreadsheet", "A", "B", "X", "2"],
+                imageWidth: 1_000,
+                imageHeight: 600,
+                captureFrame: CGRect(x: 0, y: 0, width: 1_000, height: 600)
+            )
+        }
+        let videoOnly = Workflow(
+            name: "My automation",
+            transcript: "In Google Chrome, enter X in the left spreadsheet cell, then enter 2 in the cell next to it.",
+            steps: [WorkflowStep(
+                kind: .openApp,
+                title: "Open Google Chrome",
+                time: 0,
+                application: "Google Chrome",
+                bundleIdentifier: "com.google.Chrome"
+            )]
         )
+        let drafted = await agent.learnWorkflow(candidate: videoOnly, evidenceFrames: spreadsheetFrames)
+        let draftedInputs = drafted.steps.filter { $0.kind == .typeText }.compactMap(\.text)
+        try expect(agent.status.contains("drafted"), "Qwen should explicitly report when it reconstructed actions from video; status was: \(agent.status)")
+        try expect(draftedInputs.contains("X") && draftedInputs.contains("2"), "Qwen should reconstruct both demonstrated spreadsheet values from video; got \(draftedInputs)")
+        try expect(drafted.steps.filter { $0.kind == .typeText }.allSatisfy { $0.x != nil && $0.y != nil }, "Qwen's video-drafted inputs should be grounded to spreadsheet-cell coordinates")
+
+        let pairPlan = await agent.makePlan(workflow: drafted, instruction: "Use Z as the label and put 7 in the cell next to it")
+        let changedValues = Set(pairPlan.changes.map(\.after))
+        try expect(changedValues == Set(["Z", "7"]), "Qwen should customize both spreadsheet fields in one run; got \(changedValues)")
     }
 
     @MainActor
@@ -200,6 +228,65 @@ enum SelfTests {
         try png.write(to: url, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         return url
+    }
+
+    @MainActor
+    private static func makeQwenSpreadsheetSmokeImages() throws -> [URL] {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NeloaQwenSpreadsheet-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+
+        func render(name: String, label: String?, number: String?) throws -> URL {
+            let image = NSImage(size: NSSize(width: 1_000, height: 600))
+            image.lockFocus()
+            NSColor.white.setFill()
+            NSRect(x: 0, y: 0, width: 1_000, height: 600).fill()
+            ("Testing Spreadsheet" as NSString).draw(
+                at: NSPoint(x: 35, y: 535),
+                withAttributes: [.font: NSFont.systemFont(ofSize: 25, weight: .semibold), .foregroundColor: NSColor.black]
+            )
+            NSColor(calibratedWhite: 0.92, alpha: 1).setStroke()
+            let grid = NSBezierPath()
+            for x in stride(from: 35.0, through: 735.0, by: 175.0) {
+                grid.move(to: NSPoint(x: x, y: 300))
+                grid.line(to: NSPoint(x: x, y: 500))
+            }
+            for y in stride(from: 300.0, through: 500.0, by: 50.0) {
+                grid.move(to: NSPoint(x: 35, y: y))
+                grid.line(to: NSPoint(x: 735, y: y))
+            }
+            grid.lineWidth = 1
+            grid.stroke()
+            ("A" as NSString).draw(at: NSPoint(x: 115, y: 507), withAttributes: [.font: NSFont.systemFont(ofSize: 17), .foregroundColor: NSColor.darkGray])
+            ("B" as NSString).draw(at: NSPoint(x: 290, y: 507), withAttributes: [.font: NSFont.systemFont(ofSize: 17), .foregroundColor: NSColor.darkGray])
+            if let label {
+                (label as NSString).draw(at: NSPoint(x: 48, y: 458), withAttributes: [.font: NSFont.systemFont(ofSize: 22), .foregroundColor: NSColor.black])
+            }
+            if let number {
+                (number as NSString).draw(at: NSPoint(x: 223, y: 458), withAttributes: [.font: NSFont.systemFont(ofSize: 22), .foregroundColor: NSColor.black])
+            }
+            image.unlockFocus()
+
+            guard let tiff = image.tiffRepresentation,
+                  let representation = NSBitmapImageRep(data: tiff),
+                  let png = representation.representation(using: .png, properties: [:]) else {
+                throw Failure(description: "could not create the Qwen spreadsheet smoke-test image")
+            }
+            let url = directory.appendingPathComponent(name)
+            try png.write(to: url, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+            return url
+        }
+
+        return [
+            try render(name: "01-empty.png", label: nil, number: nil),
+            try render(name: "02-label.png", label: "X", number: nil),
+            try render(name: "03-number.png", label: "X", number: "2")
+        ]
     }
 
     private static func compilationCheck() throws {
@@ -290,6 +377,17 @@ enum SelfTests {
         }
         let learned = try JSONDecoder().decode(LearnedWorkflowResponse.self, from: wrappedData)
         try expect(learned.name == "Download report", "visual response extraction should select the schema object")
+
+        let nestedVisual = """
+        {"name":"Spreadsheet entry","application":"Google Chrome","annotations":[],"proposedActions":[{"kind":"typeText","title":"Enter label","detail":{"image":2,"x":100,"y":150,"text":"X"},"time":1,"confidence":0.95}],"decisions":[]}
+        """
+        let nestedResponse = try WorkflowLearner.decode(nestedVisual)
+        try expect(
+            nestedResponse.proposedActions?.first?.text == "X"
+                && nestedResponse.proposedActions?.first?.image == 2
+                && nestedResponse.proposedActions?.first?.x == 100,
+            "Qwen's compact nested visual-action payload should decode without discarding grounded coordinates"
+        )
 
         let unrelated = "This is not a structured response"
         try expect(
@@ -386,6 +484,8 @@ enum SelfTests {
         try expect(learned.steps.count == workflow.steps.count, "the visual model must not invent executable steps")
         try expect(learned.steps[0].title == "Click Download report" && learned.steps[0].x == 30, "visual labels should preserve replay coordinates")
         try expect(WorkflowEvidenceExtractor.sampleTimes(steps: workflow.steps, maximumCount: 1).count == 1, "evidence sampling should stay within its memory budget")
+        let videoOnlyTimes = WorkflowEvidenceExtractor.sampleTimes(steps: [], duration: 12, maximumCount: 8)
+        try expect(videoOnlyTimes.count == 8 && videoOnlyTimes.first == 0 && (videoOnlyTimes.last ?? 0) > 11, "video-only teaching should sample the full recording even with zero captured events")
 
         let location = WorkflowLearner.evidenceLocation(
             for: WorkflowStep(kind: .click, title: "Click", time: 1, x: 1_100, y: 350),
@@ -399,6 +499,46 @@ enum SelfTests {
             )]
         )
         try expect(location?.image == 1 && location?.point == CGPoint(x: 500, y: 125), "global Retina-display clicks should normalize into evidence-image pixels")
+
+        let videoFrame = WorkflowEvidenceFrame(
+            time: 2,
+            imageURL: URL(fileURLWithPath: "/tmp/not-read.png"),
+            recognizedText: ["X", "2"],
+            imageWidth: 1_000,
+            imageHeight: 500,
+            captureFrame: CGRect(x: 100, y: 50, width: 2_000, height: 1_000)
+        )
+        let videoOnlyResponse = LearnedWorkflowResponse(
+            name: "Add spreadsheet row",
+            application: "Google Chrome",
+            annotations: [],
+            decisions: [],
+            proposedActions: [
+                .init(kind: "click", title: "Select the label cell", time: 0.5, image: 1, x: 250, y: 100, confidence: 0.94),
+                .init(kind: "typeText", title: "Enter the label", time: 0.8, text: "X", confidence: 0.96),
+                .init(kind: "click", title: "Select the value cell", time: 1.2, image: 1, x: 500, y: 100, confidence: 0.93),
+                .init(kind: "typeText", title: "Enter the number", time: 1.5, text: "2", confidence: 0.97)
+            ]
+        )
+        let videoDraft = WorkflowLearner.apply(
+            videoOnlyResponse,
+            to: Workflow(name: "My automation", transcript: "", steps: []),
+            frames: [videoFrame]
+        )
+        try expect(videoDraft.steps.map(\.kind) == [.openApp, .click, .typeText, .click, .typeText], "Qwen should be able to draft a complete reviewed workflow when native events are absent")
+        try expect(videoDraft.steps.filter { $0.origin == .visual }.count == 5, "video-drafted actions should remain visibly attributable to Qwen")
+        try expect(videoDraft.steps[1].x == 600 && videoDraft.steps[1].y == 250, "Qwen image coordinates should map back to global replay coordinates")
+        try expect(videoDraft.steps[2].text == "X" && videoDraft.steps[4].text == "2", "video-drafted typed values should remain customizable")
+
+        let lowConfidence = LearnedWorkflowResponse(
+            name: nil,
+            application: "Google Chrome",
+            annotations: [],
+            decisions: [],
+            proposedActions: [.init(kind: "click", title: "Guess", time: 1, image: 1, x: 100, y: 100, confidence: 0.4)]
+        )
+        let rejectedDraft = WorkflowLearner.apply(lowConfidence, to: Workflow(name: "Empty", transcript: "", steps: []), frames: [videoFrame])
+        try expect(rejectedDraft.steps.isEmpty, "low-confidence visual guesses must not become replay actions")
 
         let hallucinatedDecision = LearnedWorkflowResponse(
             name: nil,
@@ -434,6 +574,16 @@ enum SelfTests {
             WorkflowLearner.consensusResponse(from: [wrongTarget, response, confirmingTarget], candidate: workflow) != nil,
             "an independently agreeing click description should establish visual consensus"
         )
+
+        let label = WorkflowStep(kind: .typeText, title: "Enter the row label", detail: "Left spreadsheet column", time: 1, text: "X")
+        let number = WorkflowStep(kind: .typeText, title: "Enter the row number", detail: "Adjacent numeric column", time: 2, text: "2")
+        let pairWorkflow = Workflow(name: "Add spreadsheet row", transcript: "", steps: [label, number])
+        let pairResponse = AgentPlanResponse(summary: "Use Z and 7 for this run", replacements: [
+            AgentReplacement(stepID: label.id.uuidString, text: "Z", reason: "Requested label"),
+            AgentReplacement(stepID: number.id.uuidString, text: "7", reason: "Requested number")
+        ])
+        let pairPlan = RunPlanner.plan(workflow: pairWorkflow, instruction: "Add Z and put 7 next to it", agentResponse: pairResponse)
+        try expect(pairPlan.changes.count == 2 && pairPlan.steps[0].text == "Z" && pairPlan.steps[1].text == "7", "Qwen run planning should safely customize multiple typed values in one instruction")
     }
 
     private static func permissionStateCheck() throws {

@@ -285,48 +285,33 @@ final class LocalAgentService: ObservableObject {
         candidate: Workflow,
         frames: [WorkflowEvidenceFrame]
     ) async throws -> Workflow {
-        let needsConsensus = !frames.isEmpty && WorkflowLearner.needsClickConsensus(candidate)
-        let maximumAttempts = needsConsensus ? 3 : 1
-        let focusedFrames = needsConsensus
-            ? (try? await WorkflowEvidenceExtractor.focusedClickFrames(candidate: candidate, frames: frames)) ?? []
-            : []
-        defer { removeTemporaryEvidence(focusedFrames) }
-        var responses: [LearnedWorkflowResponse] = []
-        for attempt in 0..<maximumAttempts {
-            let attemptFrames = attempt > 0 && !focusedFrames.isEmpty ? focusedFrames : frames
-            let basePrompt = try WorkflowLearner.prompt(candidate: candidate, frames: attemptFrames)
-            let correction = attempt == 0 ? "" : """
-
-            Independent visual verification pass \(attempt + 1): ignore earlier answers. For every supplied click whose currentTitle is Click or Right-click, inspect evidenceImage at imageX/imageY and return the exact visible target. A generic Click title, an omitted click annotation, or a nearby target that is not at the supplied coordinates is invalid.
-            """
-            let content = try await qwen.respond(
-                prompt: basePrompt + correction,
-                imageURLs: attemptFrames.map(\.imageURL),
-                instructions: WorkflowLearner.instructions,
-                maximumTokens: 1_250
-            )
-            do {
-                let response = try WorkflowLearner.decode(content)
-                if isQwenSmokeTest {
-                    fputs("Neloa Qwen visual-learning response (attempt \(attempt + 1)): \(content)\n", stderr)
-                }
-                if !needsConsensus {
-                    status = "Learned privately with Qwen visual intelligence"
-                    return WorkflowLearner.apply(response, to: candidate)
-                }
-                responses.append(response)
-                if let consensus = WorkflowLearner.consensusResponse(from: responses, candidate: candidate) {
-                    status = "Learned privately with Qwen visual intelligence"
-                    return WorkflowLearner.apply(consensus, to: candidate)
-                }
-            } catch {
-                if isQwenSmokeTest {
-                    fputs("Neloa Qwen raw visual-learning response (attempt \(attempt + 1)): \(content)\n", stderr)
-                }
-                if attempt == maximumAttempts - 1 { throw error }
-            }
+        let prompt = try WorkflowLearner.prompt(candidate: candidate, frames: frames)
+        let hasCapturedReplayActions = candidate.steps.contains {
+            [.click, .typeText, .keyPress].contains($0.kind)
         }
-        throw QwenRuntimeError.invalidResponse
+        let content = try await qwen.respond(
+            prompt: prompt,
+            imageURLs: frames.map(\.imageURL),
+            instructions: WorkflowLearner.instructions,
+            maximumTokens: hasCapturedReplayActions ? 600 : 850
+        )
+        do {
+            let response = try WorkflowLearner.decode(content)
+            if isQwenSmokeTest {
+                fputs("Neloa Qwen visual-learning response: \(content)\n", stderr)
+            }
+            let learned = WorkflowLearner.apply(response, to: candidate, frames: frames)
+            let visualDraftCount = learned.steps.filter { $0.origin == .visual && $0.kind != .openApp }.count
+            status = visualDraftCount > 0
+                ? "Qwen drafted \(visualDraftCount) actions from the recording for your review"
+                : "Learned privately with Qwen visual intelligence"
+            return learned
+        } catch {
+            if isQwenSmokeTest {
+                fputs("Neloa Qwen raw visual-learning response: \(content)\n", stderr)
+            }
+            throw error
+        }
     }
 
     #if canImport(FoundationModels)
@@ -350,15 +335,13 @@ final class LocalAgentService: ObservableObject {
 
     private func validatedPlan(workflow: Workflow, instruction: String, response: AgentPlanResponse) -> RunPlan {
         let grounded = RunPlanner.plan(workflow: workflow, instruction: instruction)
-        if !grounded.changes.isEmpty {
-            var verified = grounded
-            verified.summary = "\(String(response.summary.prefix(180))) Verified against your requested value."
-            return verified
-        }
-
         let agentPlan = RunPlanner.plan(workflow: workflow, instruction: instruction, agentResponse: response)
+        // Qwen is still confined to known typeText step IDs by RunPlanner, so a
+        // multi-field response is safe to prefer over the one-value parser.
+        // The deterministic parser remains the fallback when the model cannot
+        // produce a valid grounded replacement.
         guard agentPlan.changes.isEmpty else { return agentPlan }
-        return agentPlan
+        return grounded
     }
 
     private func removeTemporaryEvidence(_ frames: [WorkflowEvidenceFrame]) {

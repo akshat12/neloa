@@ -45,6 +45,7 @@ enum WorkflowStepKind: String, Codable, CaseIterable, Sendable {
 
 enum WorkflowStepOrigin: String, Codable, Sendable {
     case inferred
+    case visual
     case user
 }
 
@@ -93,7 +94,9 @@ struct WorkflowStep: Identifiable, Codable, Equatable, Sendable {
     var isUserInstruction: Bool { origin == .user }
 
     var displayKindLabel: String {
-        isUserInstruction ? "Your instruction" : kind.label
+        if isUserInstruction { return "Your instruction" }
+        if origin == .visual { return "\(kind.label) · Visual draft" }
+        return kind.label
     }
 }
 

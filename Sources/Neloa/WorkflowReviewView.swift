@@ -184,6 +184,24 @@ struct WorkflowReviewView: View {
                     .foregroundStyle(.secondary)
             }
 
+            if visualDraftCount > 0 {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "eye.circle.fill")
+                        .foregroundStyle(Color.accentColor)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Qwen reconstructed \(visualDraftCount) action\(visualDraftCount == 1 ? "" : "s") from the video")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("Check the targets and values below before saving. Every visually inferred action is labeled Visual draft.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(11)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.accentColor.opacity(0.07), in: RoundedRectangle(cornerRadius: 11))
+                .accessibilityElement(children: .combine)
+            }
+
             HSplitView {
                 VStack(alignment: .leading, spacing: 12) {
                     videoSurface
@@ -267,6 +285,10 @@ struct WorkflowReviewView: View {
         let actionCount = workflow.steps.count - instructionCount
         guard instructionCount > 0 else { return "\(actionCount) salient actions" }
         return "\(actionCount) actions · \(instructionCount) instruction\(instructionCount == 1 ? "" : "s")"
+    }
+
+    private var visualDraftCount: Int {
+        workflow.steps.filter { $0.origin == .visual && $0.kind != .openApp }.count
     }
 
     @ViewBuilder

@@ -128,16 +128,28 @@ actor QwenRuntime {
         }
         guard let container else { throw QwenRuntimeError.modelNotLoaded }
         Memory.cacheLimit = 64 * 1_024 * 1_024
+        let contextWindow: Int
+        switch imageURLs.count {
+        case 0: contextWindow = 4_096
+        case 1...3: contextWindow = 8_192
+        default: contextWindow = 12_288
+        }
         let session = ChatSession(
             container,
             instructions: instructions,
             generateParameters: GenerateParameters(
                 maxTokens: maximumTokens,
-                maxKVSize: 2_048,
+                // A single desktop screenshot consumes far more context than a
+                // text prompt. 2K was enough for one image but truncated real
+                // before/after sequences, producing repetitive invalid output.
+                // A dynamically sized, 8-bit KV cache keeps text planning lean
+                // while leaving enough room for the complete visual sequence on
+                // the 16 GB baseline Mac.
+                maxKVSize: contextWindow,
                 kvBits: 8,
-                temperature: 0,
+                temperature: 0.15,
                 topP: 0.9,
-                repetitionPenalty: 1.05
+                repetitionPenalty: 1.12
             )
         )
         return try await session.respond(
