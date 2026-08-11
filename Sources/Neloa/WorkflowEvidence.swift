@@ -214,11 +214,9 @@ enum WorkflowEvidenceExtractor {
                     max(0, location.point.y - cropHeight / 2),
                     CGFloat(sourceImage.height) - cropHeight
                 )
-                // CGImage cropping uses a bottom-left origin; captured CGEvent
-                // coordinates and the model prompt use a top-left origin.
                 let cropRect = CGRect(
                     x: originX,
-                    y: CGFloat(sourceImage.height) - originYFromTop - cropHeight,
+                    y: originYFromTop,
                     width: cropWidth,
                     height: cropHeight
                 ).integral
@@ -383,12 +381,12 @@ enum WorkflowEvidenceExtractor {
                 CGFloat(source.image.width) - cropWidth
             )
             let originYFromTop = min(
-                max(0, selection.point.y - cropHeight * 0.76),
+                max(0, selection.point.y - cropHeight * 0.90),
                 CGFloat(source.image.height) - cropHeight
             )
             let crop = CGRect(
                 x: originX,
-                y: CGFloat(source.image.height) - originYFromTop - cropHeight,
+                y: originYFromTop,
                 width: cropWidth,
                 height: cropHeight
             ).integral
@@ -578,7 +576,7 @@ enum WorkflowEvidenceExtractor {
         return CGRect(x: x, y: y, width: desiredWidth, height: desiredHeight).integral
     }
 
-    private static func mappedCaptureFrame(
+    static func mappedCaptureFrame(
         crop: CGRect,
         sourceWidth: Int,
         sourceHeight: Int,
@@ -587,10 +585,9 @@ enum WorkflowEvidenceExtractor {
         guard let captureFrame, sourceWidth > 0, sourceHeight > 0 else { return captureFrame }
         let scaleX = captureFrame.width / CGFloat(sourceWidth)
         let scaleY = captureFrame.height / CGFloat(sourceHeight)
-        let originYFromTop = CGFloat(sourceHeight) - crop.maxY
         return CGRect(
             x: captureFrame.minX + crop.minX * scaleX,
-            y: captureFrame.minY + originYFromTop * scaleY,
+            y: captureFrame.minY + crop.minY * scaleY,
             width: crop.width * scaleX,
             height: crop.height * scaleY
         )

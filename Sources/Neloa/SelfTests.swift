@@ -35,6 +35,7 @@ enum SelfTests {
         try staleEvidenceCleanupCheck()
         try denseEvidenceSamplingCheck()
         try recoveryEvidenceRoutingCheck()
+        try evidenceCoordinateMappingCheck()
         try qwenResponseRepairCheck()
     }
 
@@ -442,6 +443,16 @@ enum SelfTests {
         ])
         try expect(merged.proposedActions?.map(\.text) == ["X", "2"], "per-frame recovery should preserve both demonstrated values")
         try expect(merged.proposedActions?.map(\.image) == [1, 2], "merged recovery actions should retain their evidence image")
+    }
+
+    private static func evidenceCoordinateMappingCheck() throws {
+        let mapped = WorkflowEvidenceExtractor.mappedCaptureFrame(
+            crop: CGRect(x: 10, y: 20, width: 100, height: 50),
+            sourceWidth: 200,
+            sourceHeight: 100,
+            captureFrame: CGRect(x: 1_000, y: 500, width: 400, height: 200)
+        )
+        try expect(mapped == CGRect(x: 1_020, y: 540, width: 200, height: 100), "evidence crops must preserve top-origin screen coordinates")
     }
 
     private static func qwenResponseRepairCheck() throws {

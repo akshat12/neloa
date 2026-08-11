@@ -274,10 +274,13 @@ enum WorkflowLearner {
         var groundedActions: [LearnedWorkflowResponse.ProposedAction] = []
         for var action in response.proposedActions ?? [] {
             guard ["typetext", "type_text", "type"].contains(action.kind.lowercased()),
-                  let value = action.text ?? action.detail,
+                  var value = action.text ?? action.detail,
                   !["value", "address"].contains(value.lowercased()),
                   visible.contains(value.lowercased()),
                   formulaValue == nil || formulaValue == value.lowercased() else { continue }
+            if value.count == 1, value.allSatisfy(\.isLetter) {
+                value = value.uppercased()
+            }
             action.title = "Type \(value) into cell \(cell)"
             action.detail = value
             action.text = value
