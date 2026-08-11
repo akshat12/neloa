@@ -598,6 +598,7 @@ private struct ReviewActionCard: View {
     let isSelected: Bool
 
     var body: some View {
+        let cardShape = RoundedRectangle(cornerRadius: 11, style: .continuous)
         HStack(alignment: .top, spacing: 11) {
             Group {
                 if step.isUserInstruction {
@@ -635,11 +636,21 @@ private struct ReviewActionCard: View {
         }
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isSelected ? markerColor.opacity(0.09) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 11))
-        .overlay(
-            RoundedRectangle(cornerRadius: 11)
-                .stroke(isSelected ? markerColor : Color.secondary.opacity(0.14), lineWidth: isSelected ? 2 : 1)
-        )
+        .background {
+            cardShape.fill(
+                isSelected
+                    ? markerColor.opacity(0.09)
+                    : Color(nsColor: .controlBackgroundColor)
+            )
+        }
+        .overlay {
+            cardShape.strokeBorder(
+                isSelected ? markerColor : Color.secondary.opacity(0.14),
+                lineWidth: isSelected ? 1.5 : 1,
+                antialiased: true
+            )
+        }
+        .contentShape(cardShape)
     }
 
     private var markerColor: Color {
