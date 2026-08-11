@@ -160,6 +160,12 @@ enum WorkflowEvidenceExtractor {
     }
 
     static func prioritizedRecoveryFrames(_ frames: [WorkflowEvidenceFrame]) -> [WorkflowEvidenceFrame] {
+        let settledSelections = frames.filter {
+            $0.focusReason?.contains("settled selected spreadsheet cell") == true
+        }
+        if settledSelections.count >= 2 {
+            return Array(settledSelections.suffix(4))
+        }
         let cellPattern = #"\b[A-Z]{1,3}[0-9]+\b"#
         let groundedCloseUps = frames.filter { frame in
             guard frame.focusReason != nil else { return false }
@@ -312,14 +318,25 @@ enum WorkflowEvidenceExtractor {
 
             let focusBudget = maximumFrameCount - frames.count
             if focusBudget > 0 {
-                frames.append(contentsOf: try makeVisualChangeFrames(
+                let spreadsheetFrames = try makeSpreadsheetSelectionFrames(
                     from: generated,
-                    changes: changes,
                     captureFrame: captureFrame,
                     directory: temporaryDirectory,
                     maximumCount: focusBudget,
                     startingOrdinal: frames.count + 1
+                )
+                frames.append(contentsOf: spreadsheetFrames)
+                let remainingFocusBudget = maximumFrameCount - frames.count
+                if remainingFocusBudget > 0 {
+                    frames.append(contentsOf: try makeVisualChangeFrames(
+                    from: generated,
+                    changes: changes,
+                    captureFrame: captureFrame,
+                    directory: temporaryDirectory,
+                    maximumCount: remainingFocusBudget,
+                    startingOrdinal: frames.count + 1
                 ))
+                }
             }
             // Put global context first and close-ups last. Small VLMs heavily
             // weight the final images; timestamps still preserve demonstrated
@@ -329,6 +346,68 @@ enum WorkflowEvidenceExtractor {
             try? FileManager.default.removeItem(at: temporaryDirectory)
             throw error
         }
+    }
+
+    private static func makeSpreadsheetSelectionFrames(
+        from frames: [GeneratedFrame],
+        captureFrame: CGRect?,
+        directory: URL,
+        maximumCount: Int,
+        startingOrdinal: Int
+    ) throws -> [WorkflowEvidenceFrame] {
+        guard maximumCount > 0 else { return [] }
+        var settledSelections: [(frame: GeneratedFrame, point: CGPoint)] = []
+        var active: (frame: GeneratedFrame, point: CGPoint)?
+        for frame in frames {
+            guard let point = WorkflowLearner.selectedSpreadsheetImagePoint(in: frame.image) else { continue }
+            if let current = active, hypot(current.point.x - point.x, current.point.y - point.y) < 8 {
+                // Keep replacing the segment with its latest frame so typed text
+                // has time to appear before focus moves to the next cell.
+                active = (frame, point)
+            } else {
+                if let active { settledSelections.append(active) }
+                active = (frame, point)
+            }
+        }
+        if let active { settledSelections.append(active) }
+        // The first segment is the selection that was already present when
+        // recording began. Later settled selections are demonstrated edits.
+        let demonstrated = Array(settledSelections.dropFirst().suffix(maximumCount))
+        var output: [WorkflowEvidenceFrame] = []
+        for selection in demonstrated {
+            let source = selection.frame
+            let cropWidth = min(CGFloat(source.image.width), 640)
+            let cropHeight = min(CGFloat(source.image.height), 374)
+            let originX = min(
+                max(0, selection.point.x - cropWidth / 2),
+                CGFloat(source.image.width) - cropWidth
+            )
+            let originYFromTop = min(
+                max(0, selection.point.y - cropHeight * 0.76),
+                CGFloat(source.image.height) - cropHeight
+            )
+            let crop = CGRect(
+                x: originX,
+                y: CGFloat(source.image.height) - originYFromTop - cropHeight,
+                width: cropWidth,
+                height: cropHeight
+            ).integral
+            guard let cropped = source.image.cropping(to: crop) else { continue }
+            output.append(try writeEvidenceFrame(
+                image: cropped,
+                time: source.time,
+                captureFrame: mappedCaptureFrame(
+                    crop: crop,
+                    sourceWidth: source.image.width,
+                    sourceHeight: source.image.height,
+                    captureFrame: captureFrame
+                ),
+                focusReason: "settled selected spreadsheet cell after an edit",
+                directory: directory,
+                ordinal: startingOrdinal + output.count
+            ))
+        }
+        return output
     }
 
     private static func overviewFrameIndices(

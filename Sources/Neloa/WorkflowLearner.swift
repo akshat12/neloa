@@ -212,10 +212,12 @@ enum WorkflowLearner {
             frame.imageHeight.map { "\(width)x\($0)" }
         } ?? "the supplied"
         let visibleText = frame.recognizedText.joined(separator: " | ")
+        let formulaValue = spreadsheetFormulaBarValue(in: frame) ?? "not recognized"
         return """
         Recover one typing action from this single spreadsheet screenshot.
 
         Image 1 is exactly \(dimensions) pixels. OCR: \(visibleText.isEmpty ? "none" : visibleText)
+        Vision's formula-bar candidate is: \(formulaValue). Verify that candidate against the screenshot.
 
         Read the active-cell address from the name box at the upper left. Read the exact entered value from the formula bar immediately after `fx`; the blue-outlined selected cell shows the same value. Ignore all other, unselected cells. If both an active cell and its value are visible, return exactly one typeText action. Otherwise return no action.
 
@@ -268,12 +270,14 @@ enum WorkflowLearner {
         guard let cell = spreadsheetCellAddress(in: frame),
               selectedSpreadsheetImagePoint(at: frame.imageURL) != nil else { return nil }
         let visible = frame.recognizedText.joined(separator: " ").lowercased()
+        let formulaValue = spreadsheetFormulaBarValue(in: frame)?.lowercased()
         var groundedActions: [LearnedWorkflowResponse.ProposedAction] = []
         for var action in response.proposedActions ?? [] {
             guard ["typetext", "type_text", "type"].contains(action.kind.lowercased()),
                   let value = action.text ?? action.detail,
                   !["value", "address"].contains(value.lowercased()),
-                  visible.contains(value.lowercased()) else { continue }
+                  visible.contains(value.lowercased()),
+                  formulaValue == nil || formulaValue == value.lowercased() else { continue }
             action.title = "Type \(value) into cell \(cell)"
             action.detail = value
             action.text = value
@@ -298,6 +302,29 @@ enum WorkflowLearner {
         guard let point = selectedSpreadsheetImagePoint(at: frame.imageURL),
               let cell = spreadsheetCellAddress(in: frame) else { return nil }
         let visibleText = frame.recognizedText.joined(separator: " ")
+
+        if var value = spreadsheetFormulaBarValue(in: frame) {
+            if value.count == 1, value.allSatisfy(\.isLetter) {
+                value = value.uppercased()
+            }
+            return LearnedWorkflowResponse(
+                name: "Fill spreadsheet cell",
+                application: "Google Chrome",
+                annotations: [],
+                decisions: [],
+                proposedActions: [LearnedWorkflowResponse.ProposedAction(
+                    kind: "typeText",
+                    title: "Type \(value) into cell \(cell)",
+                    detail: value,
+                    time: frame.time,
+                    image: 1,
+                    x: Double(point.x),
+                    y: Double(point.y),
+                    text: value,
+                    confidence: 0.9
+                )]
+            )
+        }
 
         let rawTokens = rawContent.components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "$.,%+-")).inverted)
             .filter { !$0.isEmpty && $0.count <= 80 }
@@ -341,6 +368,23 @@ enum WorkflowLearner {
               ),
               let range = Range(match.range, in: visibleText) else { return nil }
         return String(visibleText[range])
+    }
+
+    private static func spreadsheetFormulaBarValue(in frame: WorkflowEvidenceFrame) -> String? {
+        for observation in frame.recognizedText {
+            let trimmed = observation.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let expression = try? NSRegularExpression(
+                pattern: #"(?i)^[^a-z0-9]{0,2}(?:f|\$)?x\s+(.+)$"#
+            ),
+            let match = expression.firstMatch(
+                in: trimmed,
+                range: NSRange(trimmed.startIndex..., in: trimmed)
+            ),
+            let valueRange = Range(match.range(at: 1), in: trimmed) else { continue }
+            let value = trimmed[valueRange].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty, value.count <= 80 { return value }
+        }
+        return nil
     }
 
     static func evidenceLocation(
@@ -606,6 +650,10 @@ enum WorkflowLearner {
     static func selectedSpreadsheetImagePoint(at imageURL: URL) -> CGPoint? {
         guard let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
               let source = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else { return nil }
+        return selectedSpreadsheetImagePoint(in: source)
+    }
+
+    static func selectedSpreadsheetImagePoint(in source: CGImage) -> CGPoint? {
         let width = source.width
         let height = source.height
         guard width > 20, height > 20 else { return nil }
@@ -635,7 +683,8 @@ enum WorkflowLearner {
         var strongestRow = -1
         var strongestCount = 0
         var strongestXs: [Int] = []
-        for y in 45..<height {
+        let minimumTopOriginY = max(100.0, Double(height) * 0.30)
+        for y in 0..<height where Double(height - 1 - y) > minimumTopOriginY {
             var xs: [Int] = []
             for x in 0..<width where isSelectionBlue((y * width + x) * 4) {
                 xs.append(x)
@@ -650,7 +699,7 @@ enum WorkflowLearner {
               let minimumX = strongestXs.min(), let maximumX = strongestXs.max(),
               maximumX - minimumX >= 20 else { return nil }
 
-        let lowerY = max(45, strongestRow - 35)
+        let lowerY = max(0, strongestRow - 35)
         let upperY = min(height - 1, strongestRow + 35)
         var relatedYs: [Int] = []
         for y in lowerY...upperY {
@@ -660,7 +709,7 @@ enum WorkflowLearner {
         }
         guard let minimumY = relatedYs.min(), let maximumY = relatedYs.max() else { return nil }
         let topOriginY = Double(height - 1) - Double(minimumY + maximumY) / 2
-        guard topOriginY > 45 else { return nil }
+        guard topOriginY > minimumTopOriginY else { return nil }
         return CGPoint(
             x: Double(minimumX + maximumX) / 2,
             y: topOriginY
