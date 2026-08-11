@@ -23,6 +23,7 @@ enum SelfTests {
         try appearanceCheck()
         try recordingErrorCopyCheck()
         try displaySelectionCheck()
+        try clickTargetMetadataCheck()
         try captureOptionCheck()
         try teachingTargetCheck()
         try screenPermissionBranchCheck()
@@ -757,6 +758,47 @@ enum SelfTests {
             ) == nil,
             "offscreen windows should not retarget screen recording"
         )
+    }
+
+    private static func clickTargetMetadataCheck() throws {
+        let candidates = [
+            InteractionRecorder.WindowCandidate(
+                frame: CGRect(x: 100, y: 100, width: 500, height: 400),
+                layer: 0,
+                processID: 101
+            ),
+            InteractionRecorder.WindowCandidate(
+                frame: CGRect(x: 0, y: 0, width: 1200, height: 900),
+                layer: 0,
+                processID: 202
+            )
+        ]
+        try expect(
+            InteractionRecorder.topmostOwner(at: CGPoint(x: 250, y: 250), among: candidates) == 101,
+            "click metadata should use the topmost window under the pointer instead of the previously active app"
+        )
+        try expect(
+            InteractionRecorder.topmostOwner(at: CGPoint(x: 900, y: 700), among: candidates) == 202,
+            "click metadata should fall through to the next visible window"
+        )
+        try expect(
+            InteractionRecorder.topmostOwner(at: CGPoint(x: 1300, y: 900), among: candidates) == nil,
+            "click metadata should not invent an app when the pointer is outside known windows"
+        )
+
+        let event = CaptureEvent(
+            time: 1,
+            kind: .click,
+            x: 250,
+            y: 250,
+            application: "Google Chrome",
+            bundleIdentifier: "com.google.Chrome",
+            displayID: 42
+        )
+        let workflow = WorkflowCompiler.compile(events: [event], transcript: "")
+        try expect(workflow.steps.last?.bundleIdentifier == "com.google.Chrome", "compiled clicks should retain app identity")
+        try expect(workflow.steps.last?.displayID == 42, "compiled clicks should retain monitor identity")
+        try expect(workflow.steps.last?.displayKindLabel.contains("Google Chrome") == true, "review cards should show clicked app metadata")
     }
 
     private static func captureOptionCheck() throws {

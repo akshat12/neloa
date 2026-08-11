@@ -19,6 +19,7 @@ struct CaptureEvent: Codable, Equatable, Sendable {
     var flags: UInt64?
     var application: String?
     var bundleIdentifier: String?
+    var displayID: CGDirectDisplayID?
 }
 
 enum WorkflowStepKind: String, Codable, CaseIterable, Sendable {
@@ -86,6 +87,7 @@ struct WorkflowStep: Identifiable, Codable, Equatable, Sendable {
     var flags: UInt64?
     var application: String?
     var bundleIdentifier: String?
+    var displayID: CGDirectDisplayID?
     var requiresApproval = false
     var origin: WorkflowStepOrigin?
     var instructionScope: WorkflowInstructionScope?
@@ -94,9 +96,16 @@ struct WorkflowStep: Identifiable, Codable, Equatable, Sendable {
     var isUserInstruction: Bool { origin == .user }
 
     var displayKindLabel: String {
-        if isUserInstruction { return "Your instruction" }
-        if origin == .visual { return "\(kind.label) · Visual draft" }
-        return kind.label
+        let base: String
+        if isUserInstruction {
+            base = "Your instruction"
+        } else if origin == .visual {
+            base = "\(kind.label) · Visual draft"
+        } else {
+            base = kind.label
+        }
+        guard !isUserInstruction, let application, !application.isEmpty else { return base }
+        return "\(base) · \(application)"
     }
 }
 

@@ -6,6 +6,12 @@ import Foundation
 
 @MainActor
 final class InteractionRecorder: ObservableObject {
+    struct WindowCandidate: Equatable {
+        let frame: CGRect
+        let layer: Int
+        let processID: pid_t
+    }
+
     @Published private(set) var events: [CaptureEvent] = []
     @Published private(set) var isRecording = false
     @Published var permissionMissing = false
@@ -101,23 +107,25 @@ final class InteractionRecorder: ObservableObject {
     private func capture(type: CGEventType, event: CGEvent) {
         guard isRecording else { return }
         let active = NSWorkspace.shared.frontmostApplication
-        guard !PrivacyShield.excludes(active?.bundleIdentifier) else { return }
 
         let elapsed = Date().timeIntervalSince(startedAt)
-        let app = active?.localizedName
 
         switch type {
         case .leftMouseDown, .rightMouseDown:
             let location = event.location
+            let clickedApplication = application(at: location) ?? active
+            guard !PrivacyShield.excludes(clickedApplication?.bundleIdentifier) else { return }
             events.append(CaptureEvent(
                 time: elapsed,
                 kind: type == .rightMouseDown ? .rightClick : .click,
                 x: location.x,
                 y: location.y,
-                application: app,
-                bundleIdentifier: active?.bundleIdentifier
+                application: clickedApplication?.localizedName,
+                bundleIdentifier: clickedApplication?.bundleIdentifier,
+                displayID: Self.displayID(at: location)
             ))
         case .keyDown:
+            guard !PrivacyShield.excludes(active?.bundleIdentifier) else { return }
             guard !IsSecureEventInputEnabled() else { return }
             let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
             let text = unicodeText(from: event)
@@ -130,12 +138,68 @@ final class InteractionRecorder: ObservableObject {
                 text: isPrintable ? text : nil,
                 keyCode: isPrintable ? nil : keyCode,
                 flags: event.flags.rawValue,
-                application: app,
+                application: active?.localizedName,
                 bundleIdentifier: active?.bundleIdentifier
             ))
         default:
             break
         }
+    }
+
+    private func application(at point: CGPoint) -> NSRunningApplication? {
+        let systemWideElement = AXUIElementCreateSystemWide()
+        var clickedElement: AXUIElement?
+        if AXUIElementCopyElementAtPosition(
+            systemWideElement,
+            Float(point.x),
+            Float(point.y),
+            &clickedElement
+        ) == .success,
+           let clickedElement {
+            var processID: pid_t = 0
+            if AXUIElementGetPid(clickedElement, &processID) == .success,
+               let application = NSRunningApplication(processIdentifier: processID) {
+                return application
+            }
+        }
+
+        // Accessibility is the most precise source because it resolves the UI
+        // element at the click point. Keep the window stack as a safe fallback
+        // for apps that expose an incomplete accessibility hierarchy.
+        guard let windowInfo = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[CFString: Any]] else { return nil }
+
+        let candidates = windowInfo.compactMap { window -> WindowCandidate? in
+            guard let layer = (window[kCGWindowLayer] as? NSNumber)?.intValue,
+                  let processID = (window[kCGWindowOwnerPID] as? NSNumber)?.int32Value,
+                  let bounds = window[kCGWindowBounds] as? [String: Any],
+                  let x = (bounds["X"] as? NSNumber)?.doubleValue,
+                  let y = (bounds["Y"] as? NSNumber)?.doubleValue,
+                  let width = (bounds["Width"] as? NSNumber)?.doubleValue,
+                  let height = (bounds["Height"] as? NSNumber)?.doubleValue else { return nil }
+            return WindowCandidate(
+                frame: CGRect(x: x, y: y, width: width, height: height),
+                layer: layer,
+                processID: processID
+            )
+        }
+        guard let processID = Self.topmostOwner(at: point, among: candidates) else { return nil }
+        return NSRunningApplication(processIdentifier: processID)
+    }
+
+    nonisolated static func topmostOwner(at point: CGPoint, among candidates: [WindowCandidate]) -> pid_t? {
+        candidates.first(where: {
+            $0.layer == 0 && $0.frame.width > 1 && $0.frame.height > 1 && $0.frame.contains(point)
+        })?.processID
+    }
+
+    nonisolated static func displayID(at point: CGPoint) -> CGDirectDisplayID? {
+        var displayID = CGDirectDisplayID()
+        var count: UInt32 = 0
+        guard CGGetDisplaysWithPoint(point, 1, &displayID, &count) == .success, count > 0 else { return nil }
+        return displayID
     }
 
     private func unicodeText(from event: CGEvent) -> String {

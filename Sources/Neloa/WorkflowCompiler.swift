@@ -14,7 +14,8 @@ enum WorkflowCompiler {
                     detail: "Bring \(app) to the front",
                     time: event.time,
                     application: app,
-                    bundleIdentifier: event.bundleIdentifier
+                    bundleIdentifier: event.bundleIdentifier,
+                    displayID: event.displayID
                 ))
                 lastApp = app
             }
@@ -25,7 +26,7 @@ enum WorkflowCompiler {
             case .click, .rightClick:
                 if let previousClick,
                    previousClick.kind == event.kind,
-                   previousClick.application == event.application,
+                   previousClick.bundleIdentifier == event.bundleIdentifier,
                    event.time - previousClick.time < 0.14,
                    abs((previousClick.x ?? 0) - (event.x ?? 0)) < 2,
                    abs((previousClick.y ?? 0) - (event.y ?? 0)) < 2 {
@@ -39,7 +40,8 @@ enum WorkflowCompiler {
                     x: event.x,
                     y: event.y,
                     application: event.application,
-                    bundleIdentifier: event.bundleIdentifier
+                    bundleIdentifier: event.bundleIdentifier,
+                    displayID: event.displayID
                 ))
                 previousClick = event
             case .text:
