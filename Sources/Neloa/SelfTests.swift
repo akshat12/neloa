@@ -22,6 +22,7 @@ enum SelfTests {
         try permissionStateCheck()
         try appearanceCheck()
         try recordingErrorCopyCheck()
+        try displaySelectionCheck()
         try captureOptionCheck()
         try screenPermissionBranchCheck()
         try appTourStructureCheck()
@@ -627,6 +628,34 @@ enum SelfTests {
         let message = ScreenRecorder.RecordingError.screenPermissionRequired.localizedDescription
         try expect(message == "Neloa needs Screen Recording permission to see this workflow.", "screen recording denial should use actionable product language")
         try expect(!message.localizedCaseInsensitiveContains("TCC"), "screen recording denial should not expose macOS implementation jargon")
+    }
+
+    private static func displaySelectionCheck() throws {
+        let displays = [
+            CGRect(x: 0, y: 0, width: 1440, height: 900),
+            CGRect(x: 1440, y: 0, width: 1920, height: 1080)
+        ]
+        try expect(
+            ScreenRecorder.bestDisplayIndex(
+                for: CGRect(x: 1500, y: 80, width: 1000, height: 700),
+                displayFrames: displays
+            ) == 1,
+            "screen recording should follow the display containing the activated app"
+        )
+        try expect(
+            ScreenRecorder.bestDisplayIndex(
+                for: CGRect(x: 1300, y: 100, width: 600, height: 600),
+                displayFrames: displays
+            ) == 1,
+            "screen recording should choose the display with the largest window overlap"
+        )
+        try expect(
+            ScreenRecorder.bestDisplayIndex(
+                for: CGRect(x: -900, y: -900, width: 200, height: 200),
+                displayFrames: displays
+            ) == nil,
+            "offscreen windows should not retarget screen recording"
+        )
     }
 
     private static func captureOptionCheck() throws {

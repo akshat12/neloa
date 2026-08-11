@@ -1,4 +1,5 @@
 import AVFoundation
+import AppKit
 import CoreGraphics
 import Foundation
 import ScreenCaptureKit
@@ -15,6 +16,9 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
     private var startedAt: Date?
     private var outputURL: URL?
     private var recordingDidFinish = false
+    private var applicationObserver: NSObjectProtocol?
+    private var activeDisplayID: CGDirectDisplayID?
+    private var capturesSystemAudio = false
     private(set) var captureFrame: CGRect?
 
     func start(includeSystemAudio: Bool) async throws -> URL {
@@ -75,8 +79,11 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
         self.recordingOutput = output
         self.outputURL = url
         self.recordingDidFinish = false
+        self.activeDisplayID = display.displayID
+        self.capturesSystemAudio = includeSystemAudio
         self.startedAt = Date()
         self.isRecording = true
+        beginFollowingActiveApplication()
         self.timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, let startedAt = self.startedAt else { return }
@@ -97,6 +104,7 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
     }
 
     func stop() async -> URL? {
+        stopFollowingActiveApplication()
         timer?.invalidate()
         timer = nil
         do {
@@ -114,6 +122,85 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
         recordingOutput = nil
         isRecording = false
         return outputURL
+    }
+
+    /// A teaching session often starts with Neloa on one display and the app
+    /// being taught on another. Follow the activated app so the movie contains
+    /// the screen where the user is actually demonstrating the task.
+    private func beginFollowingActiveApplication() {
+        applicationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  !PrivacyShield.excludes(application.bundleIdentifier) else { return }
+            Task { @MainActor [weak self] in
+                await self?.follow(application)
+            }
+        }
+    }
+
+    private func stopFollowingActiveApplication() {
+        if let applicationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(applicationObserver)
+        }
+        applicationObserver = nil
+    }
+
+    private func follow(_ application: NSRunningApplication) async {
+        guard let stream else { return }
+
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            let appWindows = content.windows.filter {
+                $0.owningApplication?.processID == application.processIdentifier && $0.isOnScreen
+            }
+            guard let targetWindow = appWindows.max(by: { windowArea($0.frame) < windowArea($1.frame) }),
+                  let display = Self.bestDisplay(for: targetWindow.frame, among: content.displays),
+                  display.displayID != activeDisplayID else { return }
+
+            let excludedApplications = content.applications.filter { PrivacyShield.excludes($0.bundleIdentifier) }
+            let filter = SCContentFilter(display: display, excludingApplications: excludedApplications, exceptingWindows: [])
+            try await stream.updateContentFilter(filter)
+
+            let configuration = SCStreamConfiguration()
+            configuration.width = display.width
+            configuration.height = display.height
+            configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30)
+            configuration.queueDepth = 6
+            configuration.showsCursor = true
+            configuration.capturesAudio = capturesSystemAudio
+            configuration.excludesCurrentProcessAudio = true
+            try await stream.updateConfiguration(configuration)
+
+            activeDisplayID = display.displayID
+            captureFrame = display.frame
+        } catch {
+            // Keep recording the previous display if a transient workspace
+            // change cannot be resolved. The session remains usable.
+            errorMessage = "Neloa could not follow the active window: \(error.localizedDescription)"
+        }
+    }
+
+    nonisolated static func bestDisplayIndex(for windowFrame: CGRect, displayFrames: [CGRect]) -> Int? {
+        displayFrames.indices.max {
+            intersectionArea(windowFrame, displayFrames[$0]) < intersectionArea(windowFrame, displayFrames[$1])
+        }.flatMap { intersectionArea(windowFrame, displayFrames[$0]) > 0 ? $0 : nil }
+    }
+
+    private static func bestDisplay(for windowFrame: CGRect, among displays: [SCDisplay]) -> SCDisplay? {
+        guard let index = bestDisplayIndex(for: windowFrame, displayFrames: displays.map(\.frame)) else { return nil }
+        return displays[index]
+    }
+
+    nonisolated private static func intersectionArea(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {
+        let intersection = lhs.intersection(rhs)
+        return intersection.isNull ? 0 : intersection.width * intersection.height
+    }
+
+    nonisolated private func windowArea(_ frame: CGRect) -> CGFloat {
+        frame.width * frame.height
     }
 
     nonisolated func recordingOutputDidStartRecording(_ recordingOutput: SCRecordingOutput) {}
