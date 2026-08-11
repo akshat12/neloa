@@ -66,6 +66,22 @@ struct TeachView: View {
                                 }
 
                                 HStack(spacing: 9) {
+                                    Label("Screen to record", systemImage: "display")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                    Picker("Screen to record", selection: screenCaptureTargetBinding) {
+                                        Text("Follow active app").tag(ScreenCaptureTarget.followActiveApplication)
+                                        ForEach(recordingDisplays) { display in
+                                            Text(display.label).tag(ScreenCaptureTarget.display(display.id))
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .frame(maxWidth: 310)
+                                    .disabled(!teacher.captureScreen)
+                                    .help("Neloa records the entire selected monitor. Follow active app switches monitors when you move between apps.")
+                                }
+
+                                HStack(spacing: 9) {
                                     Label("App to teach", systemImage: "macwindow")
                                         .font(.system(size: 13, weight: .medium))
                                         .foregroundStyle(.secondary)
@@ -268,6 +284,17 @@ struct TeachView: View {
             get: { teacher.targetApplicationBundleIdentifier ?? "" },
             set: { teacher.setTeachingTarget($0) }
         )
+    }
+
+    private var screenCaptureTargetBinding: Binding<ScreenCaptureTarget> {
+        Binding(
+            get: { teacher.screenCaptureTarget },
+            set: { teacher.setScreenCaptureTarget($0) }
+        )
+    }
+
+    private var recordingDisplays: [RecordingDisplayOption] {
+        RecordingDisplayOption.connected
     }
 
     private var teachingTargets: [NSRunningApplication] {
@@ -519,6 +546,10 @@ private struct RecordingView: View {
                     .foregroundStyle(voice.isListening ? .green : .secondary)
                 Text(voice.transcript.isEmpty ? "Your explanation will appear here…" : voice.transcript)
                     .font(.system(size: 16)).frame(maxWidth: .infinity, alignment: .leading)
+                if screen.isRecording {
+                    Label(screen.activeDisplayName, systemImage: "display")
+                        .foregroundStyle(.secondary)
+                }
                 Label("\(interactions.events.count) actions", systemImage: "cursorarrow.click")
                     .foregroundStyle(.secondary)
             }

@@ -4,10 +4,43 @@ import CoreGraphics
 import Foundation
 import ScreenCaptureKit
 
+enum ScreenCaptureTarget: Hashable {
+    case followActiveApplication
+    case display(CGDirectDisplayID)
+}
+
+struct RecordingDisplayOption: Identifiable, Hashable {
+    let id: CGDirectDisplayID
+    let name: String
+    let pixelWidth: Int
+    let pixelHeight: Int
+
+    var label: String {
+        "\(name) · \(pixelWidth) × \(pixelHeight)"
+    }
+
+    @MainActor
+    static var connected: [RecordingDisplayOption] {
+        NSScreen.screens.compactMap { screen in
+            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+                return nil
+            }
+            let displayID = CGDirectDisplayID(number.uint32Value)
+            return RecordingDisplayOption(
+                id: displayID,
+                name: screen.localizedName,
+                pixelWidth: CGDisplayPixelsWide(displayID),
+                pixelHeight: CGDisplayPixelsHigh(displayID)
+            )
+        }
+    }
+}
+
 @MainActor
 final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegate, SCStreamDelegate {
     @Published private(set) var isRecording = false
     @Published private(set) var elapsed: TimeInterval = 0
+    @Published private(set) var activeDisplayName = ""
     @Published var errorMessage: String?
 
     private var stream: SCStream?
@@ -21,7 +54,11 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
     private var capturesSystemAudio = false
     private(set) var captureFrame: CGRect?
 
-    func start(includeSystemAudio: Bool, preferredBundleIdentifier: String? = nil) async throws -> URL {
+    func start(
+        includeSystemAudio: Bool,
+        preferredBundleIdentifier: String? = nil,
+        captureTarget: ScreenCaptureTarget = .followActiveApplication
+    ) async throws -> URL {
         let preflightGranted = CGPreflightScreenCaptureAccess()
         let requestGranted = preflightGranted ? false : CGRequestScreenCaptureAccess()
         guard Self.hasScreenCaptureAccess(preflightGranted: preflightGranted, requestGranted: requestGranted) else {
@@ -31,7 +68,8 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
         do {
             return try await startAuthorizedCapture(
                 includeSystemAudio: includeSystemAudio,
-                preferredBundleIdentifier: preferredBundleIdentifier
+                preferredBundleIdentifier: preferredBundleIdentifier,
+                captureTarget: captureTarget
             )
         } catch {
             if Self.isScreenPermissionError(error) || !CGPreflightScreenCaptureAccess() {
@@ -43,13 +81,24 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
 
     private func startAuthorizedCapture(
         includeSystemAudio: Bool,
-        preferredBundleIdentifier: String?
+        preferredBundleIdentifier: String?,
+        captureTarget: ScreenCaptureTarget
     ) async throws -> URL {
 
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        guard let display = preferredDisplay(in: content, bundleIdentifier: preferredBundleIdentifier)
-            ?? content.displays.first else {
-            throw RecordingError.noDisplay
+        let display: SCDisplay
+        switch captureTarget {
+        case .followActiveApplication:
+            guard let resolved = preferredDisplay(in: content, bundleIdentifier: preferredBundleIdentifier)
+                ?? content.displays.first else {
+                throw RecordingError.noDisplay
+            }
+            display = resolved
+        case .display(let displayID):
+            guard let resolved = content.displays.first(where: { $0.displayID == displayID }) else {
+                throw RecordingError.selectedDisplayUnavailable
+            }
+            display = resolved
         }
 
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Neloa-Captures", isDirectory: true)
@@ -87,10 +136,13 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
         self.outputURL = url
         self.recordingDidFinish = false
         self.activeDisplayID = display.displayID
+        self.activeDisplayName = Self.displayName(for: display.displayID)
         self.capturesSystemAudio = includeSystemAudio
         self.startedAt = Date()
         self.isRecording = true
-        beginFollowingActiveApplication()
+        if captureTarget == .followActiveApplication {
+            beginFollowingActiveApplication()
+        }
         self.timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, let startedAt = self.startedAt else { return }
@@ -175,6 +227,7 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
             try await stream.updateContentFilter(filter)
 
             activeDisplayID = display.displayID
+            activeDisplayName = Self.displayName(for: display.displayID)
             captureFrame = display.frame
         } catch {
             // Keep recording the previous display if a transient workspace
@@ -206,6 +259,10 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
     private static func bestDisplay(for windowFrame: CGRect, among displays: [SCDisplay]) -> SCDisplay? {
         guard let index = bestDisplayIndex(for: windowFrame, displayFrames: displays.map(\.frame)) else { return nil }
         return displays[index]
+    }
+
+    private static func displayName(for displayID: CGDirectDisplayID) -> String {
+        RecordingDisplayOption.connected.first(where: { $0.id == displayID })?.name ?? "Selected display"
     }
 
     private func preferredDisplay(
@@ -257,6 +314,7 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
     enum RecordingError: LocalizedError, Equatable {
         case screenPermissionRequired
         case noDisplay
+        case selectedDisplayUnavailable
 
         var errorDescription: String? {
             switch self {
@@ -264,6 +322,8 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
                 "Neloa needs Screen Recording permission to see this workflow."
             case .noDisplay:
                 "Neloa could not find a display to record."
+            case .selectedDisplayUnavailable:
+                "The selected display is no longer connected. Choose another screen and try again."
             }
         }
     }

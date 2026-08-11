@@ -10,6 +10,7 @@ final class TeachController: ObservableObject {
     @Published private(set) var captureScreen = true
     @Published private(set) var captureMicrophone = true
     @Published private(set) var captureSystemAudio = true
+    @Published var screenCaptureTarget: ScreenCaptureTarget = .followActiveApplication
     @Published var targetApplicationBundleIdentifier: String?
     @Published var draft: Workflow?
     @Published var message: String?
@@ -65,7 +66,8 @@ final class TeachController: ObservableObject {
             if captureScreen {
                 screenURL = try await screen.start(
                     includeSystemAudio: captureSystemAudio,
-                    preferredBundleIdentifier: targetApplicationBundleIdentifier
+                    preferredBundleIdentifier: targetApplicationBundleIdentifier,
+                    captureTarget: screenCaptureTarget
                 )
             }
             if captureMicrophone {
@@ -146,6 +148,10 @@ final class TeachController: ObservableObject {
 
     func setTeachingTarget(_ bundleIdentifier: String?) {
         targetApplicationBundleIdentifier = Self.resolvedTeachingTarget(bundleIdentifier)
+    }
+
+    func setScreenCaptureTarget(_ target: ScreenCaptureTarget) {
+        screenCaptureTarget = target
     }
 
     nonisolated static func resolvedTeachingTarget(_ bundleIdentifier: String?) -> String? {
