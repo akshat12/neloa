@@ -347,7 +347,7 @@ struct TeachView: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(teacher.draft?.steps.contains(where: { [.click, .typeText, .keyPress].contains($0.kind) }) != true)
+                    .disabled(teacher.draft?.steps.contains(where: { [.openURL, .click, .typeText, .keyPress].contains($0.kind) }) != true)
                 }
             }
         }

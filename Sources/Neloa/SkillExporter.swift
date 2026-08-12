@@ -8,7 +8,7 @@ enum SkillExporter {
     }
 
     static func markdown(for workflow: Workflow) -> String {
-        let inputs = workflow.steps.filter { $0.kind == .typeText }
+        let inputs = workflow.steps.filter(\.isRunVariable)
         let approvals = workflow.steps.filter { $0.kind == .approval || $0.requiresApproval }
         let userInstructions = workflow.steps.filter(\.isUserInstruction)
         let steps = workflow.steps.enumerated().map { index, step in

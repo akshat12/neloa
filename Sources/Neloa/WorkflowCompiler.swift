@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 enum WorkflowCompiler {
@@ -67,7 +68,7 @@ enum WorkflowCompiler {
             case .keyPress:
                 steps.append(WorkflowStep(
                     kind: .keyPress,
-                    title: keyTitle(event.keyCode),
+                    title: keyTitle(event.keyCode, flags: event.flags),
                     time: event.time,
                     keyCode: event.keyCode,
                     flags: event.flags,
@@ -104,7 +105,9 @@ enum WorkflowCompiler {
             ))
         }
 
-        return Workflow(name: name, transcript: transcript, steps: steps)
+        return WorkflowSemanticEnricher.enrich(
+            Workflow(name: name, transcript: transcript, steps: steps)
+        )
     }
 
     private static func decisionSentences(in transcript: String) -> [String] {
@@ -127,12 +130,21 @@ enum WorkflowCompiler {
         return cleaned.count > 28 ? "\(cleaned.prefix(28))…" : cleaned
     }
 
-    private static func keyTitle(_ keyCode: Int?) -> String {
-        switch keyCode {
+    private static func keyTitle(_ keyCode: Int?, flags: UInt64?) -> String {
+        if keyCode == 17,
+           let flags,
+           CGEventFlags(rawValue: flags).contains(.maskCommand) {
+            return "Open a new tab"
+        }
+        return switch keyCode {
         case 36: "Press Return"
         case 48: "Press Tab"
         case 51: "Press Delete"
         case 53: "Press Escape"
+        case 123: "Press Left Arrow"
+        case 124: "Press Right Arrow"
+        case 125: "Press Down Arrow"
+        case 126: "Press Up Arrow"
         default: "Press a key"
         }
     }

@@ -85,7 +85,10 @@ final class AutomationRunner: ObservableObject {
                     self.state = .failed(error.localizedDescription)
                     return
                 }
-                try? await Task.sleep(for: .milliseconds(350))
+                if plan.steps.indices.contains(index + 1) {
+                    let delay = Self.replayDelay(after: step, before: plan.steps[index + 1])
+                    try? await Task.sleep(for: .seconds(delay))
+                }
             }
             self.currentStepID = nil
             self.state = .completed
@@ -126,6 +129,12 @@ final class AutomationRunner: ObservableObject {
         step.isUserInstruction && !step.requiresApproval && step.kind != .approval
     }
 
+    nonisolated static func replayDelay(after step: WorkflowStep, before nextStep: WorkflowStep) -> TimeInterval {
+        let recordedDelay = nextStep.time - step.time
+        guard recordedDelay.isFinite, recordedDelay > 0 else { return 0.35 }
+        return min(4, max(0.35, recordedDelay))
+    }
+
     private func perform(_ step: WorkflowStep) async throws {
         switch step.kind {
         case .openApp:
@@ -137,8 +146,31 @@ final class AutomationRunner: ObservableObject {
                 let configuration = NSWorkspace.OpenConfiguration()
                 _ = try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
             }
-            try? await Task.sleep(for: .milliseconds(700))
+        case .openURL:
+            guard let rawURL = step.text,
+                  let url = URL(string: rawURL),
+                  let scheme = url.scheme?.lowercased(),
+                  ["https", "http"].contains(scheme) else {
+                throw RunnerError.invalidWebAddress
+            }
+            if let identifier = step.bundleIdentifier,
+               let applicationURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: identifier) {
+                let configuration = NSWorkspace.OpenConfiguration()
+                configuration.activates = true
+                _ = try await NSWorkspace.shared.open(
+                    [url],
+                    withApplicationAt: applicationURL,
+                    configuration: configuration
+                )
+            } else if !NSWorkspace.shared.open(url) {
+                throw RunnerError.couldNotOpenWebAddress
+            }
         case .click:
+            if let target = step.target,
+               let application = runningApplication(for: step),
+               AccessibilityTargetResolver.press(target: target, in: application.processIdentifier) {
+                return
+            }
             guard let x = step.x, let y = step.y else { return }
             let point = CGPoint(x: x, y: y)
             CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
@@ -171,6 +203,27 @@ final class AutomationRunner: ObservableObject {
             try? await Task.sleep(for: .seconds(1))
         case .decision, .approval:
             break
+        }
+    }
+
+    private func runningApplication(for step: WorkflowStep) -> NSRunningApplication? {
+        if let identifier = step.bundleIdentifier,
+           let application = NSRunningApplication.runningApplications(withBundleIdentifier: identifier).first {
+            return application
+        }
+        guard let name = step.application else { return nil }
+        return NSWorkspace.shared.runningApplications.first { $0.localizedName == name }
+    }
+
+    private enum RunnerError: LocalizedError {
+        case invalidWebAddress
+        case couldNotOpenWebAddress
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidWebAddress: "This automation contains an invalid web address."
+            case .couldNotOpenWebAddress: "Neloa could not open the saved web address."
+            }
         }
     }
 }

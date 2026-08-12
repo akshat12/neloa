@@ -23,6 +23,7 @@ enum RunPlanner {
         var stepID: String
         var title: String
         var detail: String
+        var target: String?
         var currentText: String
         var application: String?
 
@@ -31,6 +32,7 @@ enum RunPlanner {
             case stepID = "step_id"
             case title
             case detail
+            case target
             case currentText = "current_text"
             case application
         }
@@ -52,7 +54,7 @@ enum RunPlanner {
                       replacedStepIDs.insert(id).inserted,
                       let index = steps.firstIndex(where: { $0.id == id }),
                       let before = steps[index].text,
-                      steps[index].kind == .typeText else { continue }
+                      steps[index].isRunVariable else { continue }
                 guard let safeText = safeAgentText(replacement.text), safeText != before else { continue }
                 steps[index].text = safeText
                 steps[index].title = "Type \(short(safeText))"
@@ -72,7 +74,7 @@ enum RunPlanner {
         }
 
         if let replacement = explicitReplacement(in: cleanInstruction) {
-            for index in steps.indices where steps[index].kind == .typeText {
+            for index in steps.indices where steps[index].isRunVariable {
                 guard let before = steps[index].text, before.localizedCaseInsensitiveContains(replacement.from) else { continue }
                 let after = before.replacingOccurrences(of: replacement.from, with: replacement.to, options: .caseInsensitive)
                 steps[index].text = after
@@ -95,12 +97,13 @@ enum RunPlanner {
 
     static func prompt(workflow: Workflow, instruction: String) -> String {
         let promptInputs = workflow.steps.enumerated().compactMap { index, step -> PromptInput? in
-            guard step.kind == .typeText else { return nil }
+            guard step.isRunVariable else { return nil }
             return PromptInput(
                 order: index + 1,
                 stepID: step.id.uuidString,
                 title: step.title,
                 detail: step.detail,
+                target: step.target,
                 currentText: step.text ?? "",
                 application: step.application
             )
@@ -155,10 +158,10 @@ enum RunPlanner {
 
     private static func bestInputStep(in steps: [WorkflowStep], for value: String) -> Int? {
         let wantsNumber = value.rangeOfCharacter(from: .decimalDigits) != nil
-        if wantsNumber, let index = steps.firstIndex(where: { $0.kind == .typeText && ($0.text?.rangeOfCharacter(from: .decimalDigits) != nil) }) {
+        if wantsNumber, let index = steps.firstIndex(where: { $0.isRunVariable && ($0.text?.rangeOfCharacter(from: .decimalDigits) != nil) }) {
             return index
         }
-        return steps.firstIndex { $0.kind == .typeText }
+        return steps.firstIndex { $0.isRunVariable }
     }
 
     private static func short(_ text: String) -> String {

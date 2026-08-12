@@ -185,7 +185,7 @@ private struct AutomationDetail: View {
         } message: { Text(exportMessage ?? "") }
     }
 
-    private var flexibleInputs: [WorkflowStep] { workflow.steps.filter { $0.kind == .typeText } }
+    private var flexibleInputs: [WorkflowStep] { workflow.steps.filter(\.isRunVariable) }
     private var approvalRules: [WorkflowStep] { workflow.steps.filter { $0.kind == .approval || $0.requiresApproval } }
     private var userInstructions: [WorkflowStep] { workflow.steps.filter(\.isUserInstruction) }
     private var appsUsed: [String] {
@@ -193,6 +193,7 @@ private struct AutomationDetail: View {
     }
 
     private func inputName(_ step: WorkflowStep, index: Int) -> String {
+        if let target = step.target, !target.isEmpty { return target }
         let value = step.text ?? ""
         let context = "\(step.title) \(step.detail)".lowercased()
         if context.contains("recipient") || value.contains("@") { return "Recipient" }

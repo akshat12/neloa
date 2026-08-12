@@ -24,6 +24,7 @@ struct CaptureEvent: Codable, Equatable, Sendable {
 
 enum WorkflowStepKind: String, Codable, CaseIterable, Sendable {
     case openApp
+    case openURL
     case click
     case typeText
     case keyPress
@@ -34,6 +35,7 @@ enum WorkflowStepKind: String, Codable, CaseIterable, Sendable {
     var label: String {
         switch self {
         case .openApp: "App"
+        case .openURL: "Web"
         case .click: "Click"
         case .typeText: "Input"
         case .keyPress: "Key"
@@ -83,6 +85,13 @@ struct WorkflowStep: Identifiable, Codable, Equatable, Sendable {
     var x: Double?
     var y: Double?
     var text: String?
+    /// A stable semantic destination such as `Sheet2!A1` when Neloa can
+    /// identify one. Replay may still use captured input events, but review and
+    /// run planning should describe the user's target instead of a coordinate.
+    var target: String?
+    /// `nil` preserves the behavior of workflows saved before semantic input
+    /// roles were introduced. Navigation text explicitly opts out.
+    var runVariable: Bool?
     var keyCode: Int?
     var flags: UInt64?
     var application: String?
@@ -94,6 +103,7 @@ struct WorkflowStep: Identifiable, Codable, Equatable, Sendable {
     var linkedStepID: UUID?
 
     var isUserInstruction: Bool { origin == .user }
+    var isRunVariable: Bool { kind == .typeText && runVariable != false }
 
     var displayKindLabel: String {
         let base: String
@@ -119,6 +129,8 @@ struct Workflow: Identifiable, Codable, Equatable, Sendable {
     var narrationPath: String?
     var steps: [WorkflowStep]
     var defaultInstruction = "Run it the same way"
+    /// Optional so existing on-disk workflows decode without a migration shim.
+    var semanticVersion: Int? = nil
 }
 
 struct PlannedChange: Identifiable, Codable, Equatable, Sendable {

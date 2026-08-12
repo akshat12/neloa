@@ -42,7 +42,7 @@ final class WorkflowStore: ObservableObject {
     }
 
     func save(_ workflow: Workflow) {
-        var value = workflow
+        var value = WorkflowSemanticEnricher.enrich(workflow)
         value.updatedAt = Date()
         value.recordingPath = preserveAsset(at: value.recordingPath, for: value.id)
         value.narrationPath = preserveAsset(at: value.narrationPath, for: value.id)
@@ -122,6 +122,7 @@ final class WorkflowStore: ObservableObject {
         do {
             workflows = try JSONDecoder.neloa.decode([Workflow].self, from: Data(contentsOf: fileURL))
             repairLegacyAssetPaths()
+            repairLegacyWorkflowSemantics()
         } catch {
             report(
                 title: "Automations couldn’t be opened",
@@ -262,6 +263,18 @@ final class WorkflowStore: ObservableObject {
             if recording != workflows[index].recordingPath || narration != workflows[index].narrationPath {
                 workflows[index].recordingPath = recording
                 workflows[index].narrationPath = narration
+                changed = true
+            }
+        }
+        if changed { persist() }
+    }
+
+    private func repairLegacyWorkflowSemantics() {
+        var changed = false
+        for index in workflows.indices {
+            let enriched = WorkflowSemanticEnricher.enrich(workflows[index])
+            if enriched != workflows[index] {
+                workflows[index] = enriched
                 changed = true
             }
         }

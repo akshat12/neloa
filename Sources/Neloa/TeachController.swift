@@ -109,7 +109,7 @@ final class TeachController: ObservableObject {
             captureFrame: screen.captureFrame
         )
         if captureScreen,
-           draft?.steps.contains(where: { [.click, .typeText, .keyPress].contains($0.kind) }) != true {
+           draft?.steps.contains(where: { [.openURL, .click, .typeText, .keyPress].contains($0.kind) }) != true {
             message = "Qwen could not ground any repeatable actions in this recording. Play it back to confirm the correct app was visible, then teach the task again."
         } else {
             message = nil
