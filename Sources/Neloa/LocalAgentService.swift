@@ -288,12 +288,21 @@ final class LocalAgentService: ObservableObject {
         let hasCapturedReplayActions = candidate.steps.contains {
             [.openURL, .click, .typeText, .keyPress].contains($0.kind)
         }
-        let modelFrames = hasCapturedReplayActions
-            ? frames
-            : WorkflowEvidenceExtractor.prioritizedRecoveryFrames(frames)
-        let usesGroundedPerFrameRecovery = !hasCapturedReplayActions
-            && modelFrames.count > 1
-            && modelFrames.count < frames.count
+        let hasCapturedTyping = candidate.steps.contains { $0.kind == .typeText }
+        let recoveryFrames = WorkflowEvidenceExtractor.prioritizedRecoveryFrames(frames)
+        // A partial event tap is common in browsers: clicks may be captured
+        // while secure-input transitions or accessibility clients hide the
+        // actual keystrokes. Treat grounded spreadsheet before/after evidence
+        // as recovery input whenever no typing survived, not only when the
+        // entire event stream is empty.
+        let canRecoverMissingTyping = !hasCapturedTyping
+            && recoveryFrames.count > 1
+            && recoveryFrames.count < frames.count
+        let modelFrames = canRecoverMissingTyping
+            ? recoveryFrames
+            : (hasCapturedReplayActions ? frames : recoveryFrames)
+        let usesGroundedPerFrameRecovery = canRecoverMissingTyping
+            || (!hasCapturedReplayActions && modelFrames.count > 1 && modelFrames.count < frames.count)
         let content: String
         let response: LearnedWorkflowResponse
         if usesGroundedPerFrameRecovery {
@@ -390,6 +399,7 @@ final class LocalAgentService: ObservableObject {
         CommandLine.arguments.contains("--qwen-smoke-test")
             || CommandLine.arguments.contains("--qwen-8bit-smoke-test")
             || CommandLine.arguments.contains("--qwen-recording-test")
+            || ProcessInfo.processInfo.environment["NELOA_MODEL_EVAL_VERBOSE"] == "1"
     }
 
     enum AgentError: Error { case badResponse }

@@ -1,4 +1,4 @@
-.PHONY: build build-mlx test agent-test qwen-test qwen-8bit-test setup-signing app basic-app unsigned-release run clean
+.PHONY: build build-mlx test agent-test qwen-test qwen-8bit-test model-eval model-eval-8bit setup-signing app basic-app unsigned-release run clean
 
 build:
 	swift build
@@ -21,6 +21,18 @@ qwen-8bit-test:
 	NELOA_MLX_CONFIGURATION=Debug sh scripts/build-mlx.sh
 	NELOA_EXECUTABLE_PATH="$(CURDIR)/.build/arm64-apple-macosx/debug/Neloa" NELOA_APP_OUTPUT_PATH="$(CURDIR)/.build/qwen-qa/Neloa.app" NELOA_FORCE_ADHOC=1 NELOA_EXPECT_MLX_RESOURCES=1 sh scripts/package-app.sh
 	.build/qwen-qa/Neloa.app/Contents/MacOS/Neloa --qwen-8bit-smoke-test
+
+model-eval:
+	NELOA_MLX_CONFIGURATION=Debug sh scripts/build-mlx.sh
+	NELOA_EXECUTABLE_PATH="$(CURDIR)/.build/arm64-apple-macosx/debug/Neloa" NELOA_APP_OUTPUT_PATH="$(CURDIR)/.build/model-eval/Neloa.app" NELOA_FORCE_ADHOC=1 NELOA_EXPECT_MLX_RESOURCES=1 sh scripts/package-app.sh
+	mkdir -p .build/model-eval/reports
+	NELOA_EVAL_COMMIT="$$(git rev-parse HEAD 2>/dev/null || true)" NELOA_MODEL_EVAL_REPORT="$(CURDIR)/.build/model-eval/reports/qwen3-vl-4b-4bit.json" .build/model-eval/Neloa.app/Contents/MacOS/Neloa --model-eval
+
+model-eval-8bit:
+	NELOA_MLX_CONFIGURATION=Debug sh scripts/build-mlx.sh
+	NELOA_EXECUTABLE_PATH="$(CURDIR)/.build/arm64-apple-macosx/debug/Neloa" NELOA_APP_OUTPUT_PATH="$(CURDIR)/.build/model-eval/Neloa.app" NELOA_FORCE_ADHOC=1 NELOA_EXPECT_MLX_RESOURCES=1 sh scripts/package-app.sh
+	mkdir -p .build/model-eval/reports
+	NELOA_EVAL_COMMIT="$$(git rev-parse HEAD 2>/dev/null || true)" NELOA_MODEL_EVAL_REPORT="$(CURDIR)/.build/model-eval/reports/qwen3-vl-4b-8bit.json" .build/model-eval/Neloa.app/Contents/MacOS/Neloa --model-eval-8bit
 
 setup-signing:
 	sh scripts/setup-local-signing.sh

@@ -56,6 +56,7 @@ enum RunPlanner {
                       let before = steps[index].text,
                       steps[index].isRunVariable else { continue }
                 guard let safeText = safeAgentText(replacement.text), safeText != before else { continue }
+                guard !isStructuralSpreadsheetReference(safeText, for: steps[index]) else { continue }
                 steps[index].text = safeText
                 steps[index].title = "Type \(short(safeText))"
                 changes.append(PlannedChange(
@@ -174,6 +175,18 @@ enum RunPlanner {
             CharacterSet.controlCharacters.contains($0) && $0 != "\n" && $0 != "\t"
         }
         return disallowed ? nil : text
+    }
+
+    private static func isStructuralSpreadsheetReference(_ text: String, for step: WorkflowStep) -> Bool {
+        guard step.target?.range(
+            of: #"(?i)^(?:sheet\s*\d+!)?[A-Z]{1,3}\d+$"#,
+            options: .regularExpression
+        ) != nil else { return false }
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.range(
+            of: #"(?i)^(?:sheet\s*\d+|(?:sheet\s*\d+!)?[A-Z]{1,3}\d+)$"#,
+            options: .regularExpression
+        ) != nil
     }
 
 }

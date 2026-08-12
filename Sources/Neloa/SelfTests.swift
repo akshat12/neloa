@@ -39,6 +39,67 @@ enum SelfTests {
         try recoveryEvidenceRoutingCheck()
         try evidenceCoordinateMappingCheck()
         try qwenResponseRepairCheck()
+        try modelEvaluationScoringCheck()
+    }
+
+    private static func modelEvaluationScoringCheck() throws {
+        let softFailure = ModelEvaluationAssertion(
+            name: "wording quality",
+            passed: false,
+            critical: false,
+            weight: 1,
+            expected: "specific wording",
+            actual: "generic wording"
+        )
+        let structuralPass = ModelEvaluationAssertion(
+            name: "preserve replay graph",
+            passed: true,
+            critical: true,
+            weight: 4,
+            expected: "unchanged",
+            actual: "unchanged"
+        )
+        let acceptable = ModelEvaluationCase(
+            id: "scoring-fixture",
+            category: "self-test",
+            durationSeconds: 0,
+            assertions: [softFailure, structuralPass]
+        )
+        try expect(acceptable.passed && acceptable.score == 0.8, "a noncritical wording miss may pass at the case threshold")
+
+        let criticalFailure = ModelEvaluationAssertion(
+            name: "unsafe action",
+            passed: false,
+            critical: true,
+            weight: 1,
+            expected: "none",
+            actual: "send"
+        )
+        let rejected = ModelEvaluationCase(
+            id: "critical-fixture",
+            category: "self-test",
+            durationSeconds: 0,
+            assertions: [criticalFailure, structuralPass]
+        )
+        try expect(!rejected.passed, "a critical model regression must fail regardless of aggregate score")
+
+        let report = ModelEvaluationReport(
+            generatedAt: Date(timeIntervalSince1970: 0),
+            gitCommit: "fixture",
+            modelID: "fixture/model",
+            modelRevision: "fixture-revision",
+            precision: "4-bit",
+            operatingSystem: "fixture macOS",
+            physicalMemoryBytes: 16,
+            minimumScore: 0.9,
+            durationSeconds: 1,
+            cases: [acceptable]
+        )
+        let encoded = try JSONEncoder().encode(report)
+        let object = try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        let encodedCases = object?["cases"] as? [[String: Any]]
+        try expect(object?["score"] != nil && object?["passed"] != nil, "machine-readable model reports should include aggregate outcome fields")
+        try expect(encodedCases?.first?["score"] != nil && encodedCases?.first?["passed"] != nil, "machine-readable model reports should include per-case outcome fields")
     }
 
     private static func appearanceCheck() throws {
@@ -421,6 +482,21 @@ enum SelfTests {
         )
         let accepted = RunPlanner.plan(workflow: workflow, instruction: "Use a different month", agentResponse: valid)
         try expect(accepted.steps.first?.text == "July", "a safe agent replacement should still be accepted for review")
+
+        var spreadsheetInput = WorkflowStep(kind: .typeText, title: "Set Sheet2!A1", time: 0, text: "X")
+        spreadsheetInput.target = "Sheet2!A1"
+        spreadsheetInput.runVariable = true
+        let spreadsheet = Workflow(name: "Fill spreadsheet", transcript: "", steps: [spreadsheetInput])
+        let structural = AgentPlanResponse(
+            summary: "Use another sheet",
+            replacements: [AgentReplacement(stepID: spreadsheetInput.id.uuidString, text: "Sheet3!A1", reason: "Requested sheet")]
+        )
+        let structurallyRejected = RunPlanner.plan(
+            workflow: spreadsheet,
+            instruction: "Use Sheet3 instead of Sheet2",
+            agentResponse: structural
+        )
+        try expect(structurallyRejected.changes.isEmpty, "a model must not smuggle a spreadsheet structure change into a cell value")
     }
 
     private static func staleEvidenceCleanupCheck() throws {

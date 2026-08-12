@@ -85,6 +85,22 @@ enum NeloaMain {
                 }
             }
             dispatchMain()
+        } else if CommandLine.arguments.contains("--model-eval") || CommandLine.arguments.contains("--model-eval-8bit") {
+            Task { @MainActor in
+                do {
+                    let tier: LocalModelTier = CommandLine.arguments.contains("--model-eval-8bit") ? .quality8Bit : .balanced4Bit
+                    let defaultReport = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                        .appendingPathComponent("neloa-model-eval-\(tier.precisionLabel).json")
+                    let reportURL = ProcessInfo.processInfo.environment["NELOA_MODEL_EVAL_REPORT"]
+                        .map { URL(fileURLWithPath: $0) } ?? defaultReport
+                    let report = try await ModelEvaluation.run(tier: tier, reportURL: reportURL)
+                    Foundation.exit(report.passed ? 0 : 1)
+                } catch {
+                    fputs("Neloa model evaluation could not run: \(error)\n", stderr)
+                    Foundation.exit(1)
+                }
+            }
+            dispatchMain()
         } else if CommandLine.arguments.contains("--qwen-smoke-test") || CommandLine.arguments.contains("--qwen-8bit-smoke-test") {
             Task { @MainActor in
                 do {

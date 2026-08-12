@@ -34,6 +34,8 @@ open dist/Neloa.app
 
 `make qwen-test` performs the end-to-end direct MLX model check, including real GPU inference. Its first run downloads the same 3.1 GB 4-bit model used by the app; later runs reuse Neloa's private local cache. `make qwen-8bit-test` performs the equivalent check for the optional 5.1 GB 8-bit tier.
 
+`make model-eval` runs the comprehensive regression suite used for model, prompt, quantization, evidence, and planning changes. It recreates the Drive/Sheets workflow with generated local fixtures, exercises complete, partial, and video-only capture paths, validates one- and two-field customization, and probes unsupported and unsafe instructions. It never replays actions or touches an external account. The command fails below the quality threshold and writes JSON and Markdown reports under `.build/model-eval/reports`. See the [model evaluation guide](docs/MODEL_EVALUATION.md).
+
 For faster UI-only work, `make basic-app` creates a build without Qwen. Complete local builds and GitHub releases always enable Qwen and include the verified MLX GPU shader.
 
 The app asks for Screen Recording, Accessibility, Microphone, and Speech Recognition permissions. Accessibility lets Neloa learn clicks and typing during a demonstration and replay only the actions you approve. macOS may require reopening Neloa after it is granted.
