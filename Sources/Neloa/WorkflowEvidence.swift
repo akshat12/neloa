@@ -61,7 +61,17 @@ enum WorkflowEvidenceExtractor {
         let usefulKinds: Set<WorkflowStepKind> = [.click, .typeText, .keyPress, .decision, .approval]
         var times = steps
             .filter { usefulKinds.contains($0.kind) }
-            .map { max(0, $0.time - ($0.kind == .click ? 0.18 : 0.05)) }
+            .map { step -> TimeInterval in
+                let offset: TimeInterval
+                switch step.kind {
+                case .click: offset = -0.12
+                case .typeText: offset = 0.38
+                case .keyPress: offset = 0.18
+                case .decision, .approval: offset = 0
+                default: offset = 0
+                }
+                return max(0, step.time + offset)
+            }
             .sorted()
 
         times = times.reduce(into: []) { result, time in
@@ -88,6 +98,12 @@ enum WorkflowEvidenceExtractor {
     ) -> [TimeInterval] {
         guard maximumCount > 0 else { return [] }
         let eventTimes = sampleTimes(steps: steps, maximumCount: maximumCount)
+            .map { min(max(0, $0), max(0, duration - 0.08)) }
+            .reduce(into: [TimeInterval]()) { result, time in
+                if result.last.map({ abs($0 - time) >= 0.12 }) ?? true {
+                    result.append(time)
+                }
+            }
         guard duration.isFinite, duration > 0.05 else { return eventTimes }
         if maximumCount == 1 { return [eventTimes.first ?? 0] }
 
@@ -142,7 +158,11 @@ enum WorkflowEvidenceExtractor {
         var times = (0..<desiredCount).map { index in
             min(usableEnd, Double(index) / Double(desiredCount - 1) * usableEnd)
         }
-        times.append(contentsOf: sampleTimes(steps: steps, maximumCount: maximumFrameCount))
+        times.append(contentsOf: sampleTimes(
+            steps: steps,
+            duration: duration,
+            maximumCount: maximumFrameCount
+        ))
         return times.sorted().reduce(into: []) { result, time in
             if result.last.map({ abs($0 - time) >= 0.12 }) ?? true {
                 result.append(time)

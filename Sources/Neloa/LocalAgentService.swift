@@ -286,7 +286,7 @@ final class LocalAgentService: ObservableObject {
         frames: [WorkflowEvidenceFrame]
     ) async throws -> Workflow {
         let hasCapturedReplayActions = candidate.steps.contains {
-            [.click, .typeText, .keyPress].contains($0.kind)
+            [.openURL, .click, .typeText, .keyPress].contains($0.kind)
         }
         let modelFrames = hasCapturedReplayActions
             ? frames
@@ -332,7 +332,9 @@ final class LocalAgentService: ObservableObject {
         if isQwenSmokeTest {
             fputs("Neloa Qwen visual-learning response: \(content)\n", stderr)
         }
-        let learned = WorkflowLearner.apply(response, to: candidate, frames: modelFrames)
+        let learned = WorkflowSemanticEnricher.enrich(
+            WorkflowLearner.apply(response, to: candidate, frames: modelFrames)
+        )
         let visualDraftCount = learned.steps.filter { $0.origin == .visual && $0.kind != .openApp }.count
         status = visualDraftCount > 0
             ? "Qwen drafted \(visualDraftCount) actions from the recording for your review"

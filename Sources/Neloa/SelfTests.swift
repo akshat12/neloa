@@ -9,6 +9,7 @@ enum SelfTests {
 
     static func run() throws {
         try compilationCheck()
+        try googleDriveSpreadsheetSemanticCompilationCheck()
         try spokenOnlyCheck()
         try replacementCheck()
         try amountCheck()
@@ -340,6 +341,46 @@ enum SelfTests {
         try expect(workflow.steps[3].requiresApproval, "spoken approval rule should become a gate")
     }
 
+    private static func googleDriveSpreadsheetSemanticCompilationCheck() throws {
+        let chrome = "Google Chrome"
+        let bundle = "com.google.Chrome"
+        let events = [
+            CaptureEvent(time: 1.57, kind: .click, x: 2_144, y: 571, application: chrome, bundleIdentifier: bundle, displayID: 2),
+            CaptureEvent(time: 3.11, kind: .keyPress, keyCode: 17, flags: CGEventFlags.maskCommand.rawValue, application: chrome, bundleIdentifier: bundle, displayID: 2),
+            CaptureEvent(time: 3.74, kind: .text, text: "dr", application: chrome, bundleIdentifier: bundle, displayID: 2),
+            CaptureEvent(time: 4.90, kind: .keyPress, keyCode: 36, application: chrome, bundleIdentifier: bundle, displayID: 2),
+            CaptureEvent(time: 6.62, kind: .click, x: 2_147, y: 821, application: chrome, bundleIdentifier: bundle, displayID: 2),
+            CaptureEvent(time: 9.24, kind: .click, x: 1_794, y: 1_092, application: chrome, bundleIdentifier: bundle, displayID: 2),
+            CaptureEvent(time: 16.50, kind: .text, text: "X", application: chrome, bundleIdentifier: bundle, displayID: 2),
+            CaptureEvent(time: 17.19, kind: .keyPress, keyCode: 124, application: chrome, bundleIdentifier: bundle, displayID: 2),
+            CaptureEvent(time: 20.36, kind: .text, text: "3", application: chrome, bundleIdentifier: bundle, displayID: 2),
+            CaptureEvent(time: 21.07, kind: .keyPress, keyCode: 36, application: chrome, bundleIdentifier: bundle, displayID: 2)
+        ]
+        let narration = "First we go on Google Drive then we click on this testing spreadsheet then we create a new sheet so now we have one that's a sheet two in column A1 we put X and in column B1 I'm gonna put three"
+        let workflow = WorkflowCompiler.compile(events: events, transcript: narration, name: "First we go on Google Drive")
+
+        try expect(workflow.name == "Fill Sheet2 in Testing Spreadsheet", "spreadsheet narration should produce a task-level workflow name")
+        try expect(
+            workflow.steps.map(\.kind) == [.openApp, .openURL, .click, .click, .typeText, .keyPress, .typeText, .keyPress],
+            "browser navigation and spreadsheet edits should compile into a concise replay graph; got \(workflow.steps.map(\.kind))"
+        )
+        try expect(workflow.steps[1].text == "https://drive.google.com", "typed browser shorthand should become a stable Google Drive URL")
+        try expect(workflow.steps[2].title == "Open Testing Spreadsheet" && workflow.steps[2].target == "Testing Spreadsheet", "the Drive click should retain the narrated file target")
+        try expect(workflow.steps[3].title == "Create Sheet2" && workflow.steps[3].target == "Add sheet", "the sheet-tab click should retain a layout-independent accessibility target")
+        let inputs = workflow.steps.filter(\.isRunVariable)
+        try expect(inputs.map(\.text) == ["X", "3"], "only demonstrated spreadsheet values should be flexible; got \(inputs.compactMap(\.text))")
+        try expect(inputs.map(\.target) == ["Sheet2!A1", "Sheet2!B1"], "spreadsheet inputs should expose stable cell roles")
+        try expect(!workflow.steps.contains(where: { $0.text == "dr" }), "browser navigation shorthand must not appear as a flexible input")
+        try expect(workflow.steps[5].title == "Move to Sheet2!B1", "the captured arrow key should retain its cell destination")
+        try expect(workflow.steps[7].title == "Finish editing Sheet2!B1", "the final Return should explain that it commits the edit")
+
+        let prompt = RunPlanner.prompt(workflow: workflow, instruction: "Use Z in A1 and 7 in B1")
+        try expect(prompt.contains("Sheet2!A1") && prompt.contains("Sheet2!B1"), "the local planner should receive semantic spreadsheet targets")
+        try expect(!prompt.contains("\"current_text\":\"dr\""), "fixed browser navigation must not be offered to the run planner")
+        try expect(AutomationRunner.replayDelay(after: workflow.steps[2], before: workflow.steps[3]) > 2.5, "web replay should preserve the demonstrated load time between actions")
+        try expect(AutomationRunner.replayDelay(after: workflow.steps[3], before: workflow.steps[4]) == 4, "long recorded pauses should be retained up to the safe replay cap")
+    }
+
     private static func spokenOnlyCheck() throws {
         let workflow = WorkflowCompiler.compile(events: [], transcript: "Download the latest report")
         try expect(workflow.steps.count == 1 && workflow.steps[0].kind == .decision, "spoken-only teaching should create a step")
@@ -393,7 +434,7 @@ enum SelfTests {
 
     private static func denseEvidenceSamplingCheck() throws {
         let times = WorkflowEvidenceExtractor.candidateSampleTimes(
-            steps: [],
+            steps: [WorkflowStep(kind: .typeText, title: "Late input", time: 30, text: "X")],
             duration: 18,
             maximumCount: 30
         )
@@ -407,6 +448,7 @@ enum SelfTests {
         )
         let largestGap = zip(times, times.dropFirst()).map { $1 - $0 }.max() ?? .infinity
         try expect(largestGap < 1.1, "dense evidence scanning should catch brief visual edits")
+        try expect((times.last ?? .infinity) <= 17.92, "event-adjacent evidence must be clamped to the recording duration")
     }
 
     private static func recoveryEvidenceRoutingCheck() throws {
@@ -587,6 +629,11 @@ enum SelfTests {
         try expect(learned.steps.count == workflow.steps.count, "the visual model must not invent executable steps")
         try expect(learned.steps[0].title == "Click Download report" && learned.steps[0].x == 30, "visual labels should preserve replay coordinates")
         try expect(WorkflowEvidenceExtractor.sampleTimes(steps: workflow.steps, maximumCount: 1).count == 1, "evidence sampling should stay within its memory budget")
+        let postTypingTimes = WorkflowEvidenceExtractor.sampleTimes(
+            steps: [WorkflowStep(kind: .typeText, title: "Type X", time: 2, text: "X")],
+            maximumCount: 1
+        )
+        try expect((postTypingTimes.first ?? 0) > 2.2, "typed-input evidence should be sampled after the value becomes visible")
         let videoOnlyTimes = WorkflowEvidenceExtractor.sampleTimes(steps: [], duration: 12, maximumCount: 8)
         try expect(videoOnlyTimes.count == 8 && videoOnlyTimes.first == 0 && (videoOnlyTimes.last ?? 0) > 11, "video-only teaching should sample the full recording even with zero captured events")
 
@@ -632,6 +679,28 @@ enum SelfTests {
         try expect(videoDraft.steps.filter { $0.origin == .visual }.count == 5, "video-drafted actions should remain visibly attributable to Qwen")
         try expect(videoDraft.steps[1].x == 600 && videoDraft.steps[1].y == 250, "Qwen image coordinates should map back to global replay coordinates")
         try expect(videoDraft.steps[2].text == "X" && videoDraft.steps[4].text == "2", "video-drafted typed values should remain customizable")
+
+        let partialResponse = LearnedWorkflowResponse(
+            name: "Fill spreadsheet row",
+            application: "Google Chrome",
+            annotations: [],
+            decisions: [],
+            proposedActions: [
+                .init(kind: "click", title: "Select the first cell", time: 1, image: 1, x: 15, y: 72.5, confidence: 0.96),
+                .init(kind: "typeText", title: "Type X in cell A1", detail: "X", time: 2, image: 1, x: 250, y: 100, text: "X", confidence: 0.96)
+            ]
+        )
+        let partiallyCaptured = Workflow(
+            name: "My automation",
+            transcript: "Put X in A1",
+            steps: [WorkflowStep(kind: .click, title: "Click", time: 1, x: 130, y: 195)]
+        )
+        let repairedPartialCapture = WorkflowLearner.apply(partialResponse, to: partiallyCaptured, frames: [videoFrame])
+        try expect(
+            repairedPartialCapture.steps.filter { $0.kind == .click }.count == 1
+                && repairedPartialCapture.steps.contains(where: { $0.kind == .typeText && $0.text == "X" }),
+            "Qwen should fill a visibly missing action without duplicating the captured click"
+        )
 
         let overlappingSpreadsheetResponse = LearnedWorkflowResponse(
             name: "Fill spreadsheet row",

@@ -117,7 +117,7 @@ enum WorkflowLearner {
     """
 
     static func prompt(candidate: Workflow, frames: [WorkflowEvidenceFrame]) throws -> String {
-        let replayKinds: Set<WorkflowStepKind> = [.click, .typeText, .keyPress]
+        let replayKinds: Set<WorkflowStepKind> = [.openURL, .click, .typeText, .keyPress]
         let replaySteps = candidate.steps.filter { replayKinds.contains($0.kind) }
         let promptSteps = replaySteps.map { step in
             let visualLocation = evidenceLocation(for: step, frames: frames)
@@ -151,7 +151,7 @@ enum WorkflowLearner {
             .joined(separator: ", ")
         let reconstructionRule = replaySteps.isEmpty
             ? "There are ZERO captured replay actions. This is a recorder limitation, not evidence that nothing happened. You MUST reconstruct visibly changed fields and spreadsheet cells in proposedActions. Compare adjacent close-ups and OCR: an active cell name paired with a visible value means that value was typed into that cell. Create one typeText action per distinct demonstrated value, each grounded to the corresponding close-up. Return an empty proposedActions array only when no editable target or value change is visible in any image."
-            : "Captured replay actions are present. Return an empty proposedActions array and annotate only their exact IDs."
+            : "Captured replay actions are present. Annotate their exact IDs and use proposedActions only for clearly visible demonstrated actions missing from the captured list. Do not duplicate an existing action."
 
         return """
         Learn this demonstrated workflow.
@@ -191,7 +191,7 @@ enum WorkflowLearner {
         - Prefer labels such as “Click Download report” over “Click”.
         - Treat typed values, dates, people, files, amounts, and thresholds as details that may vary later.
         - Application context is not a replay action. Never put an app-context item in annotations.
-        - Follow Recovery mode exactly. If replay-action count is zero, proposedActions must contain the visibly demonstrated workflow; otherwise proposedActions must be empty.
+        - Follow Recovery mode exactly. If replay-action count is zero, proposedActions must contain the visibly demonstrated workflow. If it is nonzero, proposedActions may contain only visibly demonstrated actions that are missing from the supplied list.
         - Compare adjacent before/after close-ups. A newly visible value in a selected field is strong evidence of a typeText action even when the system event recorder missed the keystroke.
         - Spreadsheet example: if one close-up shows active cell A15 with X and the next shows active cell B15 with 2, create `typeText` X at A15 followed by `typeText` 2 at B15. The cell address and formula/value text are sufficient grounding.
         - For a proposed click, image is one-based and x/y are exact pixel coordinates in that image using a top-left origin. Choose the center of the visible target.
@@ -461,9 +461,7 @@ enum WorkflowLearner {
         frames: [WorkflowEvidenceFrame],
         to workflow: inout Workflow
     ) {
-        let executableKinds: Set<WorkflowStepKind> = [.click, .typeText, .keyPress]
-        guard !workflow.steps.contains(where: { executableKinds.contains($0.kind) }),
-              !frames.isEmpty else { return }
+        guard !frames.isEmpty else { return }
 
         let responseApplication = response.application.map { cleaned($0, maximumLength: 80) }
             .flatMap { value in
@@ -479,6 +477,7 @@ enum WorkflowLearner {
             let title = cleaned(action.title, maximumLength: 90)
             guard !title.isEmpty else { return nil }
             let detail = action.detail.map { cleaned($0, maximumLength: 180) } ?? ""
+            guard isSafeVisualAction(title: title, detail: detail) else { return nil }
             let time = min(action.time, maximumEvidenceTime)
 
             switch action.kind.lowercased() {
@@ -532,6 +531,10 @@ enum WorkflowLearner {
 
         guard !proposedSteps.isEmpty else { return }
         proposedSteps.sort { $0.time < $1.time }
+        proposedSteps.removeAll { proposed in
+            workflow.steps.contains { captured in duplicate(proposed, captured) }
+        }
+        guard !proposedSteps.isEmpty else { return }
         proposedSteps = repairingSpreadsheetNavigation(in: proposedSteps)
         if let application,
            !workflow.steps.contains(where: { $0.kind == .openApp }) {
@@ -546,6 +549,36 @@ enum WorkflowLearner {
             ), at: 0)
         }
         workflow.steps.append(contentsOf: proposedSteps)
+    }
+
+    private static func duplicate(_ proposed: WorkflowStep, _ captured: WorkflowStep) -> Bool {
+        guard proposed.kind == captured.kind else { return false }
+        switch proposed.kind {
+        case .typeText:
+            guard abs(proposed.time - captured.time) < 2.5 else { return false }
+            return proposed.text?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                == captured.text?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        case .click:
+            guard abs(proposed.time - captured.time) < 1.25 else { return false }
+            if let proposedX = proposed.x, let proposedY = proposed.y,
+               let capturedX = captured.x, let capturedY = captured.y {
+                return hypot(proposedX - capturedX, proposedY - capturedY) < 80
+            }
+            return true
+        case .keyPress:
+            return proposed.keyCode == captured.keyCode && abs(proposed.time - captured.time) < 1.25
+        default:
+            return false
+        }
+    }
+
+    private static func isSafeVisualAction(title: String, detail: String) -> Bool {
+        let description = "\(title) \(detail)".lowercased()
+        let disallowed = [
+            "send", "share", "publish", "submit", "purchase", "buy", "pay",
+            "delete", "remove", "password", "permission", "allow access"
+        ]
+        return !disallowed.contains { description.contains($0) }
     }
 
     private static func repairingSpreadsheetNavigation(in steps: [WorkflowStep]) -> [WorkflowStep] {
