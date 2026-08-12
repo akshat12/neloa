@@ -2,6 +2,19 @@
 
 Neloa is a private, voice-first Mac app for automating work that changes a little every time. Show a workflow once, explain the decisions out loud, then run it later by saying only what is different.
 
+<p align="center">
+  <a href="docs/media/neloa-introduction.mp4">
+    <img src="docs/media/neloa-preview.gif" width="960" alt="Neloa turns a demonstrated spreadsheet task into a private, adaptable workflow, then previews requested changes before running.">
+  </a>
+</p>
+
+<p align="center">
+  <strong>Teach once. Adapt by voice. Stay in control.</strong><br>
+  <a href="docs/media/neloa-introduction.mp4">Watch the full 27-second introduction</a> · <a href="#install-an-unsigned-preview">Try Neloa on macOS</a>
+</p>
+
+<p align="center"><sub>This is a purpose-built animation. It contains no desktop capture or personal data.</sub></p>
+
 ## What works
 
 - Records the primary display and optional system audio using ScreenCaptureKit.
