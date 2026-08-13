@@ -15,6 +15,9 @@ struct CaptureEvent: Codable, Equatable, Sendable {
     var x: Double?
     var y: Double?
     var text: String?
+    /// A human-readable accessibility label for the clicked control when the
+    /// target application exposes one. Coordinates remain the replay fallback.
+    var target: String?
     var keyCode: Int?
     var flags: UInt64?
     var application: String?
@@ -28,6 +31,7 @@ enum WorkflowStepKind: String, Codable, CaseIterable, Sendable {
     case click
     case typeText
     case keyPress
+    case selectSpreadsheetCell
     case decision
     case approval
     case wait
@@ -39,6 +43,7 @@ enum WorkflowStepKind: String, Codable, CaseIterable, Sendable {
         case .click: "Click"
         case .typeText: "Input"
         case .keyPress: "Key"
+        case .selectSpreadsheetCell: "Navigation"
         case .decision: "Agent"
         case .approval: "Approval"
         case .wait: "Wait"

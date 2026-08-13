@@ -7,6 +7,11 @@ enum RunPresentation {
 
     nonisolated static func summary(for plan: RunPlan) -> String {
         guard !plan.changes.isEmpty else { return "Neloa will use the saved workflow without changing its values." }
+        if let selection = plan.steps.first(where: { $0.kind == .selectSpreadsheetCell }),
+           let target = selection.target,
+           let value = plan.steps.first(where: { $0.kind == .typeText && $0.target == target })?.text {
+            return "For this run, Neloa will set \(target) to \(value)."
+        }
         let values = plan.changes.map(\.after)
         let joined: String
         if values.count == 1 {
@@ -339,7 +344,7 @@ struct RunView: View {
                 systemImage: "hand.raised.fill"
             )
             Label(
-                "\(plan.changes.count) value change\(plan.changes.count == 1 ? "" : "s")",
+                "\(plan.changes.count) requested change\(plan.changes.count == 1 ? "" : "s")",
                 systemImage: "arrow.left.arrow.right"
             )
         }

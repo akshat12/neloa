@@ -113,13 +113,15 @@ final class InteractionRecorder: ObservableObject {
         switch type {
         case .leftMouseDown, .rightMouseDown:
             let location = event.location
-            let clickedApplication = application(at: location) ?? active
+            let clicked = clickContext(at: location)
+            let clickedApplication = clicked.application ?? active
             guard !PrivacyShield.excludes(clickedApplication?.bundleIdentifier) else { return }
             events.append(CaptureEvent(
                 time: elapsed,
                 kind: type == .rightMouseDown ? .rightClick : .click,
                 x: location.x,
                 y: location.y,
+                target: clicked.target,
                 application: clickedApplication?.localizedName,
                 bundleIdentifier: clickedApplication?.bundleIdentifier,
                 displayID: Self.displayID(at: location)
@@ -146,7 +148,7 @@ final class InteractionRecorder: ObservableObject {
         }
     }
 
-    private func application(at point: CGPoint) -> NSRunningApplication? {
+    private func clickContext(at point: CGPoint) -> (application: NSRunningApplication?, target: String?) {
         let systemWideElement = AXUIElementCreateSystemWide()
         var clickedElement: AXUIElement?
         if AXUIElementCopyElementAtPosition(
@@ -159,7 +161,7 @@ final class InteractionRecorder: ObservableObject {
             var processID: pid_t = 0
             if AXUIElementGetPid(clickedElement, &processID) == .success,
                let application = NSRunningApplication(processIdentifier: processID) {
-                return application
+                return (application, Self.semanticClickTarget(from: clickedElement))
             }
         }
 
@@ -169,7 +171,7 @@ final class InteractionRecorder: ObservableObject {
         guard let windowInfo = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly, .excludeDesktopElements],
             kCGNullWindowID
-        ) as? [[CFString: Any]] else { return nil }
+        ) as? [[CFString: Any]] else { return (nil, nil) }
 
         let candidates = windowInfo.compactMap { window -> WindowCandidate? in
             guard let layer = (window[kCGWindowLayer] as? NSNumber)?.intValue,
@@ -185,8 +187,51 @@ final class InteractionRecorder: ObservableObject {
                 processID: processID
             )
         }
-        guard let processID = Self.topmostOwner(at: point, among: candidates) else { return nil }
-        return NSRunningApplication(processIdentifier: processID)
+        guard let processID = Self.topmostOwner(at: point, among: candidates) else { return (nil, nil) }
+        return (NSRunningApplication(processIdentifier: processID), nil)
+    }
+
+    private nonisolated static func semanticClickTarget(from source: AXUIElement) -> String? {
+        var element: AXUIElement? = source
+        for _ in 0..<5 {
+            guard let current = element else { break }
+            if stringAttribute(kAXRoleAttribute as CFString, from: current) == "AXSecureTextField" {
+                return nil
+            }
+            if supportsPress(current) {
+                for attribute in [kAXTitleAttribute, kAXDescriptionAttribute, kAXHelpAttribute] {
+                    if let label = usefulTargetLabel(stringAttribute(attribute as CFString, from: current)) {
+                        return label
+                    }
+                }
+            }
+            var parent: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(current, kAXParentAttribute as CFString, &parent) == .success,
+                  let next = parent else { break }
+            element = unsafeBitCast(next, to: AXUIElement.self)
+        }
+        return nil
+    }
+
+    private nonisolated static func stringAttribute(_ attribute: CFString, from element: AXUIElement) -> String? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else { return nil }
+        return value as? String
+    }
+
+    private nonisolated static func supportsPress(_ element: AXUIElement) -> Bool {
+        var names: CFArray?
+        guard AXUIElementCopyActionNames(element, &names) == .success,
+              let actions = names as? [String] else { return false }
+        return actions.contains(kAXPressAction)
+    }
+
+    private nonisolated static func usefulTargetLabel(_ rawValue: String?) -> String? {
+        guard let value = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty,
+              value.count <= 120 else { return nil }
+        let generic = ["button", "group", "web area", "scroll area", "unknown"]
+        return generic.contains(value.lowercased()) ? nil : value
     }
 
     nonisolated static func topmostOwner(at point: CGPoint, among candidates: [WindowCandidate]) -> pid_t? {

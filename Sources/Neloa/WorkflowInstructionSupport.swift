@@ -76,7 +76,7 @@ enum WorkflowInstructionSupport {
 
     private nonisolated static func isCapturedAction(_ kind: WorkflowStepKind) -> Bool {
         switch kind {
-        case .openApp, .openURL, .click, .typeText, .keyPress, .wait: true
+        case .openApp, .openURL, .click, .typeText, .keyPress, .selectSpreadsheetCell, .wait: true
         case .decision, .approval: false
         }
     }

@@ -35,11 +35,12 @@ enum WorkflowCompiler {
                 }
                 steps.append(WorkflowStep(
                     kind: .click,
-                    title: event.kind == .rightClick ? "Right-click" : "Click",
-                    detail: coordinateDescription(x: event.x, y: event.y),
+                    title: clickTitle(rightClick: event.kind == .rightClick, target: event.target),
+                    detail: event.target.map { "Captured control: \($0)" } ?? coordinateDescription(x: event.x, y: event.y),
                     time: event.time,
                     x: event.x,
                     y: event.y,
+                    target: event.target,
                     application: event.application,
                     bundleIdentifier: event.bundleIdentifier,
                     displayID: event.displayID
@@ -123,6 +124,12 @@ enum WorkflowCompiler {
     private static func coordinateDescription(x: Double?, y: Double?) -> String {
         guard let x, let y else { return "Recorded position" }
         return "At \(Int(x)), \(Int(y))"
+    }
+
+    private static func clickTitle(rightClick: Bool, target: String?) -> String {
+        let action = rightClick ? "Right-click" : "Click"
+        guard let target, !target.isEmpty else { return action }
+        return "\(action) \(target.count > 48 ? "\(target.prefix(48))…" : target)"
     }
 
     private static func displayText(_ text: String) -> String {

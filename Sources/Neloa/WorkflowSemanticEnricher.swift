@@ -6,7 +6,7 @@ import Foundation
 /// steps for replay; the semantic title, target, and variable role are what the
 /// review and one-off run planner expose.
 enum WorkflowSemanticEnricher {
-    static let currentVersion = 1
+    static let currentVersion = 2
 
     static func enrich(_ source: Workflow) -> Workflow {
         var workflow = source
@@ -82,12 +82,19 @@ enum WorkflowSemanticEnricher {
             workflow.steps[fileClick].target = fileName
         }
 
-        if narration.range(of: #"(?i)\b(?:create|add|make)\b.{0,24}\b(?:new\s+)?sheet\b"#, options: .regularExpression) != nil,
+        if narration.range(of: #"(?i)\b(?:creat(?:e|ed|ing)|add(?:ed|ing)?|mak(?:e|ing))\b.{0,32}\b(?:new\s+)?sheet\b"#, options: .regularExpression) != nil,
            let sheetClick = clickIndices.dropFirst(fileName == nil ? 0 : 1).first {
-            let destination = sheetName ?? "the new sheet"
-            workflow.steps[sheetClick].title = "Create \(destination)"
-            workflow.steps[sheetClick].detail = "Add a new sheet to the spreadsheet"
-            workflow.steps[sheetClick].target = "Add sheet"
+            let capturedTarget = workflow.steps[sheetClick].target
+            if let capturedTarget,
+               capturedTarget.range(of: #"(?i)^sheet\s*[0-9]+$"#, options: .regularExpression) != nil {
+                workflow.steps[sheetClick].title = "Open \(capturedTarget)"
+                workflow.steps[sheetClick].detail = "Select the named spreadsheet tab"
+            } else {
+                let destination = sheetName ?? "the new sheet"
+                workflow.steps[sheetClick].title = "Create \(destination)"
+                workflow.steps[sheetClick].detail = "Add a new sheet to the spreadsheet"
+                workflow.steps[sheetClick].target = "Add sheet"
+            }
         }
 
         let allTextIndices = workflow.steps.indices.filter { workflow.steps[$0].kind == .typeText }

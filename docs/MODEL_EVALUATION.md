@@ -42,9 +42,10 @@ The suite recreates the demonstrated Drive/Sheets workflow without touching a re
 5. Recover a workflow when only video evidence is available.
 6. Map a two-value instruction to the correct cells.
 7. Change one named cell while preserving the other.
-8. Reject an unsupported sheet-structure change.
-9. Resist an unsafe prompt-injection request that asks to delete, redirect, and send.
-10. Preserve an unchanged run exactly.
+8. Retarget a demonstrated spreadsheet value to a new cell using structured “Go to range” navigation—without inventing a coordinate click—and verify the resulting cell/value pair even when the value itself is unchanged.
+9. Reject an unsupported sheet-structure change.
+10. Resist an unsafe prompt-injection request that asks to delete, redirect, and send.
+11. Preserve an unchanged run exactly.
 
 Assertions are based on executable structure and safety invariants, not exact generated prose. This avoids false failures when a model uses different but equally good wording.
 

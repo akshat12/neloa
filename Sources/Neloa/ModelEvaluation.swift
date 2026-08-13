@@ -163,6 +163,7 @@ enum ModelEvaluation {
         if includes("video-only-recovery") { cases.append(await videoOnlyRecoveryCase(agent: agent, frames: spreadsheetFrames)) }
         if includes("multi-field-customization") { cases.append(await multiFieldPlanningCase(agent: agent, workflow: driveWorkflow)) }
         if includes("single-cell-customization") { cases.append(await targetedPlanningCase(agent: agent, workflow: driveWorkflow)) }
+        if includes("new-cell-customization") { cases.append(newCellPlanningCase(workflow: driveWorkflow)) }
         if includes("unsupported-structural-change") { cases.append(await structuralChangeRejectionCase(agent: agent, workflow: driveWorkflow)) }
         if includes("unsafe-prompt-injection") { cases.append(await unsafeInstructionCase(agent: agent, workflow: driveWorkflow)) }
         if includes("unchanged-run") { cases.append(unchangedRunCase(workflow: driveWorkflow)) }
@@ -364,6 +365,17 @@ enum ModelEvaluation {
         result.check(agent.status.localizedCaseInsensitiveContains("Qwen"), "uses Qwen rather than a fallback", weight: 2, expected: "Planned privately with Qwen", actual: agent.status)
         result.check(plan.changes.count == 1 && plan.changes.first?.before == "3" && plan.changes.first?.after == "42", "changes only the named cell", weight: 5, expected: "3→42", actual: changeSignature(plan))
         result.check(plan.steps.first(where: { $0.target == "Sheet2!A1" })?.text == "X", "leaves the excluded cell unchanged", weight: 3, expected: "A1 remains X", actual: plan.steps.first(where: { $0.target == "Sheet2!A1" })?.text ?? "missing")
+        return result.finish()
+    }
+
+    private static func newCellPlanningCase(workflow: Workflow) -> ModelEvaluationCase {
+        var result = CaseBuilder(id: "new-cell-customization", category: "run-planning")
+        let plan = RunPlanner.plan(workflow: workflow, instruction: "Set column C3 to 3")
+        result.check(plan.changes.map(\.after) == ["Sheet2!C3"], "previews the new cell when the requested value is already the demonstrated value", weight: 3, expected: "Sheet2!B1→Sheet2!C3", actual: changeSignature(plan))
+        result.check(plan.steps.first(where: { $0.kind == .typeText && $0.target == "Sheet2!C3" })?.text == "3", "types the requested value in the new cell", weight: 5, expected: "Sheet2!C3=3", actual: workflowSignature(Workflow(name: "plan", transcript: "", steps: plan.steps)))
+        result.check(plan.steps.contains(where: { $0.kind == .selectSpreadsheetCell && $0.target == "Sheet2!C3" }), "uses structured Go to range navigation", weight: 4, expected: "selectSpreadsheetCell:Sheet2!C3", actual: workflowSignature(Workflow(name: "plan", transcript: "", steps: plan.steps)))
+        result.check(!plan.steps.contains(where: { $0.kind == .click && $0.target == "Sheet2!C3" }), "does not invent a coordinate click", weight: 4, expected: "no generated click", actual: workflowSignature(Workflow(name: "plan", transcript: "", steps: plan.steps)))
+        result.check(plan.steps.first(where: { $0.target == "Sheet2!A1" })?.text == "X", "preserves the unmentioned label input", weight: 3, expected: "A1 remains X", actual: plan.steps.first(where: { $0.target == "Sheet2!A1" })?.text ?? "missing")
         return result.finish()
     }
 

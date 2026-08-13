@@ -18,6 +18,11 @@ struct AgentPlanResponse: Codable, Sendable {
 }
 
 enum RunPlanner {
+    private struct SpreadsheetCellRequest {
+        var target: String
+        var value: String
+    }
+
     private struct PromptInput: Encodable {
         var order: Int
         var stepID: String
@@ -42,6 +47,10 @@ enum RunPlanner {
         let cleanInstruction = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanInstruction.isEmpty, cleanInstruction.lowercased() != "run it the same way" else {
             return RunPlan(instruction: cleanInstruction, steps: workflow.steps, changes: [], summary: "Run the saved workflow without changes")
+        }
+
+        if let spreadsheetPlan = spreadsheetCellPlan(workflow: workflow, instruction: cleanInstruction) {
+            return spreadsheetPlan
         }
 
         var steps = workflow.steps
@@ -125,6 +134,118 @@ enum RunPlanner {
         """
     }
 
+    /// Builds a narrowly scoped structural variation for spreadsheet workflows.
+    /// Unlike an arbitrary model-generated click, this uses Google Sheets' own
+    /// Go to range command and accepts only a validated cell address and text.
+    static func spreadsheetCellPlan(workflow: Workflow, instruction: String) -> RunPlan? {
+        guard let request = spreadsheetCellRequest(in: instruction),
+              let safeValue = safeAgentText(request.value) else { return nil }
+
+        let isGoogleSheetsWorkflow = workflow.steps.contains {
+            $0.bundleIdentifier == "com.google.Chrome"
+                && ($0.kind == .openURL || $0.kind == .typeText || $0.kind == .keyPress)
+        } && (workflow.name.localizedCaseInsensitiveContains("spreadsheet")
+            || workflow.transcript.localizedCaseInsensitiveContains("sheet"))
+        guard isGoogleSheetsWorkflow else { return nil }
+
+        var steps = workflow.steps
+        let candidates = steps.indices.filter {
+            steps[$0].isRunVariable && spreadsheetAddress(from: steps[$0].target) != nil
+        }
+        guard !candidates.isEmpty else { return nil }
+
+        // A value change for an already demonstrated cell remains ordinary
+        // model planning. This path is only for the new, structured capability:
+        // safely navigating to a different cell without inventing a click.
+        let requestedCell = request.target.split(separator: "!").last.map(String.init) ?? request.target
+        if candidates.contains(where: {
+            let existing = spreadsheetAddress(from: steps[$0].target) ?? ""
+            return existing.split(separator: "!").last.map(String.init) == requestedCell
+        }) {
+            return nil
+        }
+
+        let wantsNumber = safeValue.rangeOfCharacter(from: .decimalDigits) != nil
+        let matchingValueKind = candidates.first {
+            wantsNumber && steps[$0].text?.rangeOfCharacter(from: .decimalDigits) != nil
+        }
+        guard let originalIndex = matchingValueKind ?? candidates.first else { return nil }
+
+        let originalStep = steps[originalIndex]
+        let oldTarget = originalStep.target ?? "Current cell"
+        let target = resolvedSpreadsheetTarget(request.target, preservingSheetFrom: originalStep.target)
+
+        var updatedInput = originalStep
+        updatedInput.target = target
+        updatedInput.text = safeValue
+        updatedInput.title = "Set \(target) to \(short(safeValue))"
+        updatedInput.detail = "Spreadsheet cell \(target) · Changed for this run"
+
+        var selection = WorkflowStep(
+            kind: .selectSpreadsheetCell,
+            title: "Go to \(target)",
+            detail: "Use Google Sheets’ Go to range command",
+            time: max(0, originalStep.time - 0.2),
+            target: target,
+            application: originalStep.application,
+            bundleIdentifier: originalStep.bundleIdentifier,
+            displayID: originalStep.displayID
+        )
+        selection.runVariable = false
+
+        var inputIndex = originalIndex
+        if originalIndex > steps.startIndex {
+            let previousIndex = steps.index(before: originalIndex)
+            let previous = steps[previousIndex]
+            if previous.kind == .keyPress, previous.target == originalStep.target {
+                steps[previousIndex] = selection
+            } else {
+                steps.insert(selection, at: originalIndex)
+                inputIndex += 1
+            }
+        } else {
+            steps.insert(selection, at: originalIndex)
+            inputIndex += 1
+        }
+        steps[inputIndex] = updatedInput
+
+        for index in steps.indices where index != inputIndex && steps[index].target == originalStep.target {
+            if steps[index].kind == .keyPress {
+                steps[index].target = target
+                if steps[index].keyCode == 36 {
+                    steps[index].title = "Finish editing \(target)"
+                }
+            }
+        }
+
+        var changes: [PlannedChange] = []
+        if oldTarget.caseInsensitiveCompare(target) != .orderedSame {
+            changes.append(PlannedChange(
+                stepID: originalStep.id,
+                before: oldTarget,
+                after: target,
+                reason: "Use the requested spreadsheet cell"
+            ))
+        }
+        let oldValue = originalStep.text ?? ""
+        if oldValue != safeValue {
+            changes.append(PlannedChange(
+                stepID: originalStep.id,
+                before: oldValue,
+                after: safeValue,
+                reason: "Use the requested value in \(target)"
+            ))
+        }
+        guard !changes.isEmpty else { return nil }
+
+        return RunPlan(
+            instruction: instruction.trimmingCharacters(in: .whitespacesAndNewlines),
+            steps: steps,
+            changes: changes,
+            summary: "Set \(target) to \(short(safeValue)) for this run"
+        )
+    }
+
     private static func explicitReplacement(in instruction: String) -> (from: String, to: String)? {
         let pattern = #"(?i)(?:replace|change)\s+[\"']?(.+?)[\"']?\s+(?:with|to)\s+[\"']?(.+?)[\"']?$"#
         guard let regex = try? NSRegularExpression(pattern: pattern),
@@ -133,6 +254,62 @@ enum RunPlanner {
               let toRange = Range(match.range(at: 2), in: instruction) else { return nil }
         return (String(instruction[fromRange]).trimmingCharacters(in: .whitespacesAndNewlines),
                 String(instruction[toRange]).trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private static func spreadsheetCellRequest(in instruction: String) -> SpreadsheetCellRequest? {
+        let cell = #"((?:sheet\s*[0-9]+\s*!)?[A-Z]{1,3}\s*[1-9][0-9]{0,6})"#
+        let patterns = [
+            #"(?i)\b(?:set|put|enter|type|write)\s+(?:(?:cell|column)\s+)?"# + cell + #"\s+(?:to|as|=|with)\s+(.+?)\s*$"#,
+            #"(?i)\b(?:put|enter|type|write)\s+(.+?)\s+(?:in|into|at)\s+(?:(?:cell|column)\s+)?"# + cell + #"\s*$"#
+        ]
+        for (position, pattern) in patterns.enumerated() {
+            guard let regex = try? NSRegularExpression(pattern: pattern),
+                  let match = regex.firstMatch(in: instruction, range: NSRange(instruction.startIndex..., in: instruction)) else {
+                continue
+            }
+            let targetGroup = position == 0 ? 1 : 2
+            let valueGroup = position == 0 ? 2 : 1
+            guard let targetRange = Range(match.range(at: targetGroup), in: instruction),
+                  let valueRange = Range(match.range(at: valueGroup), in: instruction) else { continue }
+            let target = normalizeSpreadsheetTarget(String(instruction[targetRange]))
+            let value = unquoted(String(instruction[valueRange]))
+            guard !target.isEmpty, !value.isEmpty else { continue }
+            return SpreadsheetCellRequest(target: target, value: value)
+        }
+        return nil
+    }
+
+    private static func resolvedSpreadsheetTarget(_ requested: String, preservingSheetFrom original: String?) -> String {
+        guard !requested.contains("!"), let original, let separator = original.lastIndex(of: "!") else {
+            return requested
+        }
+        return "\(original[...separator])\(requested)"
+    }
+
+    private static func spreadsheetAddress(from target: String?) -> String? {
+        guard let target else { return nil }
+        let normalized = normalizeSpreadsheetTarget(target)
+        guard normalized.range(
+            of: #"(?i)^(?:SHEET[0-9]+!)?[A-Z]{1,3}[1-9][0-9]{0,6}$"#,
+            options: .regularExpression
+        ) != nil else { return nil }
+        return normalized
+    }
+
+    private static func normalizeSpreadsheetTarget(_ value: String) -> String {
+        value.replacingOccurrences(of: " ", with: "").uppercased()
+    }
+
+    private static func unquoted(_ value: String) -> String {
+        var result = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if result.count >= 2,
+           let first = result.first,
+           let last = result.last,
+           (first == "\"" && last == "\"") || (first == "'" && last == "'") {
+            result.removeFirst()
+            result.removeLast()
+        }
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func requestedValue(in instruction: String) -> String? {

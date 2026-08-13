@@ -199,11 +199,39 @@ final class AutomationRunner: ObservableObject {
             let up = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(code), keyDown: false)
             up?.flags = flags
             up?.post(tap: .cghidEventTap)
+        case .selectSpreadsheetCell:
+            guard step.bundleIdentifier == "com.google.Chrome" else {
+                throw RunnerError.unsupportedSpreadsheetNavigation
+            }
+            guard let target = step.target else { return }
+            postKey(code: 5, flags: .maskControl)
+            try? await Task.sleep(for: .milliseconds(180))
+            postText(target)
+            try? await Task.sleep(for: .milliseconds(100))
+            postKey(code: 36)
+            try? await Task.sleep(for: .milliseconds(180))
         case .wait:
             try? await Task.sleep(for: .seconds(1))
         case .decision, .approval:
             break
         }
+    }
+
+    private func postKey(code: CGKeyCode, flags: CGEventFlags = []) {
+        let down = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true)
+        down?.flags = flags
+        down?.post(tap: .cghidEventTap)
+        let up = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: false)
+        up?.flags = flags
+        up?.post(tap: .cghidEventTap)
+    }
+
+    private func postText(_ text: String) {
+        let utf16 = Array(text.utf16)
+        let down = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true)
+        down?.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: utf16)
+        down?.post(tap: .cghidEventTap)
+        CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false)?.post(tap: .cghidEventTap)
     }
 
     private func runningApplication(for step: WorkflowStep) -> NSRunningApplication? {
@@ -218,11 +246,13 @@ final class AutomationRunner: ObservableObject {
     private enum RunnerError: LocalizedError {
         case invalidWebAddress
         case couldNotOpenWebAddress
+        case unsupportedSpreadsheetNavigation
 
         var errorDescription: String? {
             switch self {
             case .invalidWebAddress: "This automation contains an invalid web address."
             case .couldNotOpenWebAddress: "Neloa could not open the saved web address."
+            case .unsupportedSpreadsheetNavigation: "Neloa can only use structured cell navigation in a captured Google Sheets workflow."
             }
         }
     }

@@ -13,6 +13,7 @@ enum SelfTests {
         try spokenOnlyCheck()
         try replacementCheck()
         try amountCheck()
+        try spreadsheetCellRetargetingCheck()
         try serializationCheck()
         try receiptSerializationCheck()
         try skillExportCheck()
@@ -417,7 +418,7 @@ enum SelfTests {
             CaptureEvent(time: 20.36, kind: .text, text: "3", application: chrome, bundleIdentifier: bundle, displayID: 2),
             CaptureEvent(time: 21.07, kind: .keyPress, keyCode: 36, application: chrome, bundleIdentifier: bundle, displayID: 2)
         ]
-        let narration = "First we go on Google Drive then we click on this testing spreadsheet then we create a new sheet so now we have one that's a sheet two in column A1 we put X and in column B1 I'm gonna put three"
+        let narration = "First we go on Google Drive then we click on this testing spreadsheet then we click on creating a new sheet so now we have one that's a sheet two in column A1 we put X and in column B1 I'm gonna put three"
         let workflow = WorkflowCompiler.compile(events: events, transcript: narration, name: "First we go on Google Drive")
 
         try expect(workflow.name == "Fill Sheet2 in Testing Spreadsheet", "spreadsheet narration should produce a task-level workflow name")
@@ -461,6 +462,39 @@ enum SelfTests {
         let workflow = Workflow(name: "Expense", transcript: "", steps: [amount, note])
         let plan = RunPlanner.plan(workflow: workflow, instruction: "Run it using amount $750")
         try expect(plan.steps[0].text == "$750" && plan.changes.first?.before == "$500", "amount variation should target numeric input")
+    }
+
+    private static func spreadsheetCellRetargetingCheck() throws {
+        var label = WorkflowStep(kind: .typeText, title: "Set A1 to X", time: 1, text: "X")
+        label.target = "A1"
+        label.runVariable = true
+        var move = WorkflowStep(kind: .keyPress, title: "Move to B2", time: 2, target: "B2", keyCode: 48)
+        move.runVariable = false
+        var amount = WorkflowStep(kind: .typeText, title: "Set B2 to 2", time: 3, text: "2")
+        amount.target = "B2"
+        amount.runVariable = true
+        let commit = WorkflowStep(kind: .keyPress, title: "Finish editing B2", time: 4, target: "B2", keyCode: 36)
+        label.application = "Google Chrome"
+        label.bundleIdentifier = "com.google.Chrome"
+        move.application = "Google Chrome"
+        move.bundleIdentifier = "com.google.Chrome"
+        amount.application = "Google Chrome"
+        amount.bundleIdentifier = "com.google.Chrome"
+        let workflow = Workflow(name: "Update spreadsheet", transcript: "Google Sheets", steps: [label, move, amount, commit])
+
+        let plan = RunPlanner.plan(workflow: workflow, instruction: "Set column C3 to 3")
+        try expect(plan.summary == "Set C3 to 3 for this run", "a new spreadsheet target should produce a clear run summary")
+        try expect(RunPresentation.summary(for: plan) == "For this run, Neloa will set C3 to 3.", "the preview should describe the cell/value pair as one action")
+        try expect(plan.changes.map(\.after) == ["C3", "3"], "the preview should expose both the target and value change")
+        try expect(plan.steps.contains(where: { $0.kind == .selectSpreadsheetCell && $0.target == "C3" }), "a new target should use safe Go to range navigation")
+        try expect(plan.steps.first(where: { $0.kind == .typeText && $0.target == "C3" })?.text == "3", "the requested value should be typed only after selecting C3")
+        try expect(plan.steps.first(where: { $0.target == "A1" })?.text == "X", "unmentioned spreadsheet inputs should stay unchanged")
+        try expect(!plan.steps.contains(where: { $0.kind == .click && $0.target == "C3" }), "cell retargeting must not invent a coordinate click")
+
+        try expect(
+            RunPlanner.spreadsheetCellPlan(workflow: workflow, instruction: "Delete the sheet and send it") == nil,
+            "unstructured or consequential requests must not enter the spreadsheet navigation path"
+        )
     }
 
     private static func agentResponseSafetyCheck() throws {
@@ -936,6 +970,7 @@ enum SelfTests {
             kind: .click,
             x: 250,
             y: 250,
+            target: "Sheet4",
             application: "Google Chrome",
             bundleIdentifier: "com.google.Chrome",
             displayID: 42
@@ -943,6 +978,8 @@ enum SelfTests {
         let workflow = WorkflowCompiler.compile(events: [event], transcript: "")
         try expect(workflow.steps.last?.bundleIdentifier == "com.google.Chrome", "compiled clicks should retain app identity")
         try expect(workflow.steps.last?.displayID == 42, "compiled clicks should retain monitor identity")
+        try expect(workflow.steps.last?.target == "Sheet4", "compiled clicks should retain an accessibility target when the app exposes one")
+        try expect(workflow.steps.last?.title == "Click Sheet4", "named controls should be shown instead of raw coordinates")
         try expect(workflow.steps.last?.displayKindLabel.contains("Google Chrome") == true, "review cards should show clicked app metadata")
     }
 

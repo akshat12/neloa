@@ -219,6 +219,10 @@ final class LocalAgentService: ObservableObject {
         guard !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return RunPlanner.plan(workflow: workflow, instruction: instruction)
         }
+        if let spreadsheetPlan = RunPlanner.spreadsheetCellPlan(workflow: workflow, instruction: instruction) {
+            status = "Planned with safe spreadsheet navigation"
+            return spreadsheetPlan
+        }
         isPlanning = true
         defer { isPlanning = false }
 

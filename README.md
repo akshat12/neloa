@@ -25,6 +25,7 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 - Lets users add typed or spoken instructions at any recording timestamp: approval wording creates a hard gate, while other free-form guidance becomes an explicit review checkpoint.
 - Replays the workflow under user supervision with the signature “Again, but…” interaction.
 - Accepts instructions such as “Replace June with July” or “use amount $750.”
+- Handles exact new-cell requests such as “set C3 to 3” with a previewed target change and Google Sheets’ structured Go to range navigation, rather than a guessed click.
 - Lets each change be used once, saved as a variant, or made the new default.
 - Uses one primary local model family—Qwen3-VL 4B—with a recommended 4-bit tier and an optional higher-precision 8-bit tier, plus Apple's on-device model and a narrow deterministic planner as safe fallbacks.
 - Pauses at spoken approval rules such as “always ask me before sending.”
