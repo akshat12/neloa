@@ -20,4 +20,14 @@ sips -z 512 512 "$MASTER" --out "$ICONSET/icon_256x256@2x.png" >/dev/null
 sips -z 512 512 "$MASTER" --out "$ICONSET/icon_512x512.png" >/dev/null
 cp "$MASTER" "$ICONSET/icon_512x512@2x.png"
 
-iconutil -c icns "$ICONSET" -o "$PROJECT_DIR/Resources/AppIcon.icns"
+GENERATED_ICNS="$PROJECT_DIR/.build/AppIcon.generated.$$.icns"
+if iconutil -c icns "$ICONSET" -o "$GENERATED_ICNS"; then
+    mv "$GENERATED_ICNS" "$PROJECT_DIR/Resources/AppIcon.icns"
+elif [ -f "$PROJECT_DIR/Resources/AppIcon.icns" ]; then
+    rm -f "$GENERATED_ICNS"
+    echo "warning: iconutil rejected the generated iconset; keeping the checked-in AppIcon.icns" >&2
+else
+    rm -f "$GENERATED_ICNS"
+    echo "error: iconutil failed and no checked-in AppIcon.icns is available" >&2
+    exit 1
+fi
