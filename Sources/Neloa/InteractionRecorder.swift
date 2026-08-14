@@ -21,9 +21,9 @@ final class InteractionRecorder: ObservableObject {
     private var applicationObserver: NSObjectProtocol?
     private var startedAt = Date()
 
-    func start() {
+    func start(timelineOrigin: Date? = nil) {
         events = []
-        startedAt = Date()
+        startedAt = timelineOrigin ?? Date()
         permissionMissing = false
         isRecording = true
         beginObservingApplications()

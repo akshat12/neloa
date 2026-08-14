@@ -18,7 +18,7 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 ## What works
 
 - Records the primary display and optional system audio using ScreenCaptureKit.
-- Records and transcribes microphone narration using Apple's on-device speech recognition when available.
+- Records and transcribes microphone narration using Apple's on-device speech recognition when available, preserving word timestamps on the same clock as the video and captured actions.
 - Learns mouse clicks, typed text, key presses, and app changes.
 - Samples salient video frames, reads visible interface text with Apple Vision, and uses an in-app Qwen3-VL model to label captured actions and narrated rules.
 - Turns the demonstration into an editable, locally saved workflow.

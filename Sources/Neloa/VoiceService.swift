@@ -5,6 +5,7 @@ import Speech
 @MainActor
 final class VoiceService: ObservableObject {
     @Published private(set) var transcript = ""
+    @Published private(set) var narrationSegments: [NarrationSegment] = []
     @Published private(set) var isListening = false
     @Published var errorMessage: String?
 
@@ -16,8 +17,10 @@ final class VoiceService: ObservableObject {
     private var outputURL: URL?
     private let speechSynthesizer = AVSpeechSynthesizer()
     private var hasInputTap = false
+    private var timelineOffset: TimeInterval = 0
+    private var recognitionFinished = false
 
-    func start() async throws -> URL {
+    func start(timelineOrigin: Date? = nil) async throws -> URL {
         let speechStatus = await withCheckedContinuation { continuation in
             SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
         }
@@ -32,7 +35,9 @@ final class VoiceService: ObservableObject {
 
         stop()
         transcript = ""
+        narrationSegments = []
         errorMessage = nil
+        recognitionFinished = false
 
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Neloa-Captures", isDirectory: true)
         try FileManager.default.createDirectory(
@@ -54,8 +59,22 @@ final class VoiceService: ObservableObject {
 
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             Task { @MainActor in
-                if let result { self?.transcript = result.bestTranscription.formattedString }
-                if let error { self?.errorMessage = error.localizedDescription }
+                if let result, let self {
+                    self.transcript = result.bestTranscription.formattedString
+                    self.narrationSegments = result.bestTranscription.segments.map { segment in
+                        NarrationSegment(
+                            text: segment.substring,
+                            time: self.timelineOffset + segment.timestamp,
+                            duration: segment.duration,
+                            confidence: Double(segment.confidence)
+                        )
+                    }
+                    if result.isFinal { self.recognitionFinished = true }
+                }
+                if let error {
+                    self?.errorMessage = error.localizedDescription
+                    self?.recognitionFinished = true
+                }
             }
         }
 
@@ -66,6 +85,7 @@ final class VoiceService: ObservableObject {
         hasInputTap = true
 
         audioEngine.prepare()
+        timelineOffset = timelineOrigin.map { max(0, Date().timeIntervalSince($0)) } ?? 0
         try audioEngine.start()
         isListening = true
         return url
@@ -73,6 +93,32 @@ final class VoiceService: ObservableObject {
 
     @discardableResult
     func stop() -> URL? {
+        stopAudioCapture()
+        request?.endAudio()
+        task?.cancel()
+        clearRecognitionTask()
+        return outputURL
+    }
+
+    /// Stops microphone capture immediately while leaving the recognizer alive
+    /// long enough to publish its final word timings.
+    @discardableResult
+    func beginFinalization() -> URL? {
+        stopAudioCapture()
+        request?.endAudio()
+        task?.finish()
+        if task == nil { recognitionFinished = true }
+        return outputURL
+    }
+
+    func awaitFinalization() async {
+        for _ in 0..<20 where !recognitionFinished {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        clearRecognitionTask()
+    }
+
+    private func stopAudioCapture() {
         if audioEngine.isRunning {
             audioEngine.stop()
         }
@@ -80,13 +126,13 @@ final class VoiceService: ObservableObject {
             audioEngine.inputNode.removeTap(onBus: 0)
             hasInputTap = false
         }
-        request?.endAudio()
-        task?.finish()
-        request = nil
-        task = nil
         audioFile = nil
         isListening = false
-        return outputURL
+    }
+
+    private func clearRecognitionTask() {
+        request = nil
+        task = nil
     }
 
     func speak(_ text: String) {

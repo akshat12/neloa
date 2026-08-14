@@ -68,6 +68,7 @@ enum WorkflowSemanticEnricher {
         let fileName = spreadsheetName(in: narration)
         let sheetName = namedSheet(in: narration)
         let cellReferences = spreadsheetCellReferences(in: narration)
+        let utterances = NarrationTimeline.utterances(from: workflow.narrationSegments ?? [])
 
         let navigationIndex = workflow.steps.lastIndex(where: { $0.kind == .openURL })
             ?? workflow.steps.lastIndex(where: { $0.kind == .openApp })
@@ -76,14 +77,27 @@ enum WorkflowSemanticEnricher {
             $0 > navigationIndex && workflow.steps[$0].kind == .click
         }
 
-        if let fileClick = clickIndices.first, let fileName {
+        let fileNarrationTime = utterances.first(where: {
+            $0.text.localizedCaseInsensitiveContains("spreadsheet")
+                && $0.text.localizedCaseInsensitiveContains("click")
+        }).map { ($0.time + $0.endTime) / 2 }
+        let fileClick = fileNarrationTime.flatMap { nearestIndex(to: $0, among: clickIndices, in: workflow) }
+            ?? clickIndices.first
+        if let fileClick, let fileName {
             workflow.steps[fileClick].title = "Open \(fileName)"
             workflow.steps[fileClick].detail = "Google Drive file"
             workflow.steps[fileClick].target = fileName
         }
 
-        if narration.range(of: #"(?i)\b(?:creat(?:e|ed|ing)|add(?:ed|ing)?|mak(?:e|ing))\b.{0,32}\b(?:new\s+)?sheet\b"#, options: .regularExpression) != nil,
-           let sheetClick = clickIndices.dropFirst(fileName == nil ? 0 : 1).first {
+        let sheetPattern = #"(?i)\b(?:creat(?:e|ed|ing)|add(?:ed|ing)?|mak(?:e|ing))\b.{0,32}\b(?:new\s+)?sheet\b"#
+        let sheetNarrationTime = utterances.first(where: {
+            $0.text.range(of: sheetPattern, options: .regularExpression) != nil
+        }).map { ($0.time + $0.endTime) / 2 }
+        let sheetCandidates = clickIndices.filter { $0 != fileClick }
+        let sheetClick = sheetNarrationTime.flatMap { nearestIndex(to: $0, among: sheetCandidates, in: workflow) }
+            ?? sheetCandidates.first
+        if narration.range(of: sheetPattern, options: .regularExpression) != nil,
+           let sheetClick {
             let capturedTarget = workflow.steps[sheetClick].target
             if let capturedTarget,
                capturedTarget.range(of: #"(?i)^sheet\s*[0-9]+$"#, options: .regularExpression) != nil {
@@ -104,11 +118,27 @@ enum WorkflowSemanticEnricher {
             return
         }
 
-        let cellInputIndices = Array(allTextIndices.suffix(cellReferences.count))
+        let timedCells = utterances.flatMap { utterance in
+            spreadsheetCellReferences(in: utterance.text).map {
+                (cell: $0, time: (utterance.time + utterance.endTime) / 2)
+            }
+        }
+        let assignments: [(index: Int, cell: String)]
+        if !timedCells.isEmpty,
+           timedCells.count == cellReferences.count,
+           timedCells.count <= allTextIndices.count {
+            assignments = timedCellAssignments(timedCells, inputIndices: allTextIndices, in: workflow)
+        } else {
+            assignments = Array(zip(allTextIndices.suffix(cellReferences.count), cellReferences)).map {
+                (index: $0.0, cell: $0.1)
+            }
+        }
+        let cellInputIndices = assignments.map(\.index)
         markNonCellInputsAsFixed(in: &workflow, cellInputIndices: Set(cellInputIndices))
 
-        for (position, inputIndex) in cellInputIndices.enumerated() {
-            let cell = cellReferences[position]
+        for (position, assignment) in assignments.enumerated() {
+            let inputIndex = assignment.index
+            let cell = assignment.cell
             let target = sheetName.map { "\($0)!\(cell)" } ?? cell
             let value = workflow.steps[inputIndex].text ?? "value"
             workflow.steps[inputIndex].title = "Set \(target) to \(short(value))"
@@ -117,11 +147,11 @@ enum WorkflowSemanticEnricher {
             workflow.steps[inputIndex].runVariable = true
 
             if position + 1 < cellInputIndices.count {
-                let nextInputIndex = cellInputIndices[position + 1]
+                let nextInputIndex = assignments[position + 1].index
                 if let movementIndex = workflow.steps.indices.dropFirst(inputIndex + 1).first(where: {
                     $0 < nextInputIndex && workflow.steps[$0].kind == .keyPress
                 }) {
-                    let destinationCell = cellReferences[position + 1]
+                    let destinationCell = assignments[position + 1].cell
                     let destination = sheetName.map { "\($0)!\(destinationCell)" } ?? destinationCell
                     workflow.steps[movementIndex].title = "Move to \(destination)"
                     workflow.steps[movementIndex].detail = keyDescription(workflow.steps[movementIndex].keyCode)
@@ -137,6 +167,33 @@ enum WorkflowSemanticEnricher {
         }
 
         applySpreadsheetName(&workflow, fileName: fileName, sheetName: sheetName)
+    }
+
+    private static func timedCellAssignments(
+        _ cells: [(cell: String, time: TimeInterval)],
+        inputIndices: [Int],
+        in workflow: Workflow
+    ) -> [(index: Int, cell: String)] {
+        var available = inputIndices
+        var result: [(index: Int, cell: String)] = []
+        for mention in cells {
+            guard let match = available.min(by: {
+                abs(workflow.steps[$0].time - mention.time) < abs(workflow.steps[$1].time - mention.time)
+            }) else { break }
+            result.append((match, mention.cell))
+            available.removeAll { $0 == match }
+        }
+        return result.sorted { $0.index < $1.index }
+    }
+
+    private static func nearestIndex(
+        to time: TimeInterval,
+        among indices: [Int],
+        in workflow: Workflow
+    ) -> Int? {
+        indices.min {
+            abs(workflow.steps[$0].time - time) < abs(workflow.steps[$1].time - time)
+        }
     }
 
     private static func markNonCellInputsAsFixed(
@@ -189,7 +246,9 @@ enum WorkflowSemanticEnricher {
     }
 
     private static func spreadsheetCellReferences(in narration: String) -> [String] {
-        guard let regex = try? NSRegularExpression(pattern: #"(?i)\b([A-Z]{1,3}\s*[0-9]+)\b"#) else {
+        // Require the column and row to be contiguous. Allowing arbitrary
+        // whitespace made ordinary speech such as "put 3" look like cell PUT3.
+        guard let regex = try? NSRegularExpression(pattern: #"(?i)\b([A-Z]{1,3}[0-9]+)\b"#) else {
             return []
         }
         let range = NSRange(narration.startIndex..., in: narration)

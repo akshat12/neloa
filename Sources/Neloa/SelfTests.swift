@@ -10,6 +10,7 @@ enum SelfTests {
     static func run() throws {
         try compilationCheck()
         try googleDriveSpreadsheetSemanticCompilationCheck()
+        try timedNarrationCorrelationCheck()
         try spokenOnlyCheck()
         try replacementCheck()
         try amountCheck()
@@ -443,6 +444,66 @@ enum SelfTests {
         try expect(AutomationRunner.replayDelay(after: workflow.steps[3], before: workflow.steps[4]) == 4, "long recorded pauses should be retained up to the safe replay cap")
     }
 
+    private static func timedNarrationCorrelationCheck() throws {
+        let narration = [
+            NarrationSegment(text: "Open", time: 1.00, duration: 0.30, confidence: 0.96),
+            NarrationSegment(text: "the", time: 1.34, duration: 0.18, confidence: 0.99),
+            NarrationSegment(text: "report.", time: 1.55, duration: 0.45, confidence: 0.94),
+            NarrationSegment(text: "Always", time: 6.00, duration: 0.40, confidence: 0.98),
+            NarrationSegment(text: "ask", time: 6.44, duration: 0.22, confidence: 0.97),
+            NarrationSegment(text: "before", time: 6.70, duration: 0.35, confidence: 0.97),
+            NarrationSegment(text: "sharing.", time: 7.08, duration: 0.48, confidence: 0.96)
+        ]
+        let utterances = NarrationTimeline.utterances(from: narration)
+        try expect(utterances.count == 2, "timestamped words should group into two spoken utterances")
+        try expect(utterances[1].text == "Always ask before sharing.", "utterance grouping should retain readable punctuation")
+
+        let events = [
+            CaptureEvent(time: 2, kind: .click, x: 10, y: 10, application: "Safari"),
+            CaptureEvent(time: 7, kind: .click, x: 20, y: 20, application: "Safari"),
+            CaptureEvent(time: 10, kind: .click, x: 30, y: 30, application: "Safari")
+        ]
+        let workflow = WorkflowCompiler.compile(
+            events: events,
+            transcript: "Open the report. Always ask before sharing.",
+            narrationSegments: narration
+        )
+        guard let approvalIndex = workflow.steps.firstIndex(where: { $0.kind == .approval }) else {
+            throw Failure(description: "timed approval narration should create an approval step")
+        }
+        try expect(workflow.steps[approvalIndex].time == 6, "spoken rules should retain their recording timestamp")
+        try expect(
+            approvalIndex + 1 < workflow.steps.count && workflow.steps[approvalIndex + 1].time == 7,
+            "a timed approval should be placed before the next recorded action"
+        )
+        try expect(
+            NarrationTimeline.context(around: 6.5, in: workflow) == "Always ask before sharing.",
+            "a visual frame should receive narration spoken near its timestamp"
+        )
+        try expect(
+            NarrationTimeline.promptLines(for: workflow).contains("[00:06.00"),
+            "the model prompt should expose narration timestamps"
+        )
+
+        let spreadsheet = Workflow(
+            name: "Timed cells",
+            transcript: "In the spreadsheet, in B1 put X. In A1 put 3.",
+            narrationSegments: [
+                NarrationSegment(text: "In B1 put X.", time: 3.5, duration: 1),
+                NarrationSegment(text: "In A1 put 3.", time: 9.5, duration: 1)
+            ],
+            steps: [
+                WorkflowStep(kind: .typeText, title: "Type X", time: 4, text: "X"),
+                WorkflowStep(kind: .typeText, title: "Type 3", time: 10, text: "3")
+            ]
+        )
+        let correlatedSpreadsheet = WorkflowSemanticEnricher.enrich(spreadsheet)
+        try expect(
+            correlatedSpreadsheet.steps.map(\.target) == ["B1", "A1"],
+            "spreadsheet values should inherit the cell narrated nearest their action rather than a fixed positional guess; got \(correlatedSpreadsheet.steps.map(\.target)), name \(correlatedSpreadsheet.name), variables \(correlatedSpreadsheet.steps.map(\.isRunVariable))"
+        )
+    }
+
     private static func spokenOnlyCheck() throws {
         let workflow = WorkflowCompiler.compile(events: [], transcript: "Download the latest report")
         try expect(workflow.steps.count == 1 && workflow.steps[0].kind == .decision, "spoken-only teaching should create a step")
@@ -652,10 +713,32 @@ enum SelfTests {
     }
 
     private static func serializationCheck() throws {
-        let workflow = Workflow(name: "Serializable", transcript: "hello", steps: [])
+        let segment = NarrationSegment(text: "hello", time: 1.25, duration: 0.4, confidence: 0.95)
+        let workflow = Workflow(name: "Serializable", transcript: "hello", narrationSegments: [segment], steps: [])
         let data = try JSONEncoder.neloa.encode(workflow)
         let decoded = try JSONDecoder.neloa.decode(Workflow.self, from: data)
-        try expect(decoded.id == workflow.id && decoded.name == workflow.name && decoded.transcript == workflow.transcript && decoded.steps == workflow.steps, "saved workflows should round-trip")
+        try expect(
+            decoded.id == workflow.id
+                && decoded.name == workflow.name
+                && decoded.transcript == workflow.transcript
+                && decoded.narrationSegments == [segment]
+                && decoded.steps == workflow.steps,
+            "saved workflows with timed narration should round-trip"
+        )
+
+        let legacyJSON = """
+        {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "name": "Legacy",
+          "createdAt": "2026-01-01T00:00:00Z",
+          "updatedAt": "2026-01-01T00:00:00Z",
+          "transcript": "hello",
+          "steps": [],
+          "defaultInstruction": "Run it the same way"
+        }
+        """.data(using: .utf8)!
+        let legacy = try JSONDecoder.neloa.decode(Workflow.self, from: legacyJSON)
+        try expect(legacy.narrationSegments == nil, "workflows saved before timed narration should still decode")
     }
 
     private static func receiptSerializationCheck() throws {

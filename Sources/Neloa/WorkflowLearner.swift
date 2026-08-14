@@ -157,7 +157,7 @@ enum WorkflowLearner {
         Learn this demonstrated workflow.
 
         Narration:
-        \(candidate.transcript.isEmpty ? "No narration was captured." : candidate.transcript)
+        \(NarrationTimeline.promptLines(for: candidate))
 
         Captured executable steps (JSON):
         \(stepsJSON)
@@ -218,6 +218,7 @@ enum WorkflowLearner {
 
         Image 1 is exactly \(dimensions) pixels. OCR: \(visibleText.isEmpty ? "none" : visibleText)
         Vision's formula-bar candidate is: \(formulaValue). Verify that candidate against the screenshot.
+        Narration near this frame: \(NarrationTimeline.context(around: frame.time, in: candidate) ?? "none")
 
         Read the active-cell address from the name box at the upper left. Read the exact entered value from the formula bar immediately after `fx`; the blue-outlined selected cell shows the same value. Ignore all other, unselected cells. If both an active cell and its value are visible, return exactly one typeText action. Otherwise return no action.
 

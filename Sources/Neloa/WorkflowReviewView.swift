@@ -224,12 +224,9 @@ struct WorkflowReviewView: View {
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.secondary)
                         ScrollView {
-                            Text(workflow.transcript.isEmpty ? "No narration was captured." : workflow.transcript)
-                                .font(.system(size: 14))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .textSelection(.enabled)
+                            narrationContent
                         }
-                        .frame(maxHeight: 82)
+                        .frame(maxHeight: 112)
                         .padding(10)
                         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
                     }
@@ -289,6 +286,45 @@ struct WorkflowReviewView: View {
 
     private var visualDraftCount: Int {
         workflow.steps.filter { $0.origin == .visual && $0.kind != .openApp }.count
+    }
+
+    @ViewBuilder
+    private var narrationContent: some View {
+        let utterances = NarrationTimeline.utterances(from: workflow.narrationSegments ?? [])
+        if utterances.isEmpty {
+            Text(workflow.transcript.isEmpty ? "No narration was captured." : workflow.transcript)
+                .font(.system(size: 14))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+        } else {
+            LazyVStack(alignment: .leading, spacing: 5) {
+                ForEach(Array(utterances.enumerated()), id: \.offset) { _, utterance in
+                    let isCurrent = playback.currentTime >= utterance.time - 0.05
+                        && playback.currentTime <= utterance.endTime + 0.2
+                    Button {
+                        seek(to: utterance.time)
+                    } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 9) {
+                            Text(utterance.time.clockString)
+                                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                                .foregroundStyle(isCurrent ? Color.accentColor : .secondary)
+                                .frame(width: 38, alignment: .leading)
+                            Text(utterance.text)
+                                .font(.system(size: 14, weight: isCurrent ? .semibold : .regular))
+                                .foregroundStyle(.primary)
+                                .multilineTextAlignment(.leading)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 5)
+                        .background(isCurrent ? Color.accentColor.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: 7))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("At \(utterance.time.clockString), \(utterance.text)")
+                    .help("Jump to this narration in the recording")
+                }
+            }
+        }
     }
 
     @ViewBuilder

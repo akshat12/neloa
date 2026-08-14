@@ -47,6 +47,7 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
     private var recordingOutput: SCRecordingOutput?
     private var timer: Timer?
     private var startedAt: Date?
+    private(set) var timelineOrigin: Date?
     private var outputURL: URL?
     private var recordingDidFinish = false
     private var applicationObserver: NSObjectProtocol?
@@ -138,7 +139,9 @@ final class ScreenRecorder: NSObject, ObservableObject, SCRecordingOutputDelegat
         self.activeDisplayID = display.displayID
         self.activeDisplayName = Self.displayName(for: display.displayID)
         self.capturesSystemAudio = includeSystemAudio
-        self.startedAt = Date()
+        let recordingOrigin = Date()
+        self.startedAt = recordingOrigin
+        self.timelineOrigin = recordingOrigin
         self.isRecording = true
         if captureTarget == .followActiveApplication {
             beginFollowingActiveApplication()

@@ -35,6 +35,12 @@ final class TeachController: ObservableObject {
             draft = Workflow(
                 name: "Prepare weekly report",
                 transcript: "Open the report, enter this week’s amount, flag the large change, and ask before sharing it.",
+                narrationSegments: [
+                    NarrationSegment(text: "Open the report.", time: 1.0, duration: 1.1),
+                    NarrationSegment(text: "Enter this week's amount.", time: 5.6, duration: 1.4),
+                    NarrationSegment(text: "Flag the large change.", time: 8.5, duration: 1.3),
+                    NarrationSegment(text: "Always ask before sharing it.", time: 10.8, duration: 1.6)
+                ],
                 recordingPath: "/System/Library/CoreServices/ControlCenter.app/Contents/Resources/BentoGalleryIntroduction.mov",
                 steps: [
                     WorkflowStep(kind: .openApp, title: "Open the weekly report", time: 1.2, application: "Numbers"),
@@ -70,10 +76,13 @@ final class TeachController: ObservableObject {
                     captureTarget: screenCaptureTarget
                 )
             }
+            // A microphone-only session must not reuse the previous screen
+            // recording's origin from this long-lived controller.
+            let origin = captureScreen ? (screen.timelineOrigin ?? Date()) : Date()
             if captureMicrophone {
-                narrationURL = try await voice.start()
+                narrationURL = try await voice.start(timelineOrigin: origin)
             }
-            interactions.start()
+            interactions.start(timelineOrigin: origin)
             if interactions.permissionMissing {
                 message = captureScreen
                     ? "Screen recording will continue, but Accessibility is needed to capture clicks and typing precisely. Qwen can still draft actions from the video."
@@ -96,10 +105,16 @@ final class TeachController: ObservableObject {
     func stopAndBuild(using agent: LocalAgentService) async {
         phase = .building
         let events = interactions.stop()
+        let shouldFinalizeNarration = voice.isListening
+        if shouldFinalizeNarration { narrationURL = voice.beginFinalization() }
         if screen.isRecording { screenURL = await screen.stop() }
-        if voice.isListening { narrationURL = voice.stop() }
+        if shouldFinalizeNarration { await voice.awaitFinalization() }
 
-        var workflow = WorkflowCompiler.compile(events: events, transcript: voice.transcript)
+        var workflow = WorkflowCompiler.compile(
+            events: events,
+            transcript: voice.transcript,
+            narrationSegments: voice.narrationSegments
+        )
         workflow.name = suggestedName(from: voice.transcript)
         workflow.recordingPath = screenURL?.path
         workflow.narrationPath = narrationURL?.path

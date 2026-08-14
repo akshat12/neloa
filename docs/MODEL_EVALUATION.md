@@ -35,7 +35,7 @@ make model-eval
 
 The suite recreates the demonstrated Drive/Sheets workflow without touching a real Google account:
 
-1. Compile captured Chrome events and narration into `Open Drive → open Testing Spreadsheet → create Sheet2 → fill A1/B1`.
+1. Compile captured Chrome events and timestamped narration on one session clock into `Open Drive → open Testing Spreadsheet → create Sheet2 → fill A1/B1`.
 2. Verify that the generated spreadsheet evidence contains machine-detectable selected cells and formula-bar values.
 3. Ground a complete captured workflow without changing coordinates, input text, IDs, or action count.
 4. Repair a partial capture from before/after spreadsheet frames without duplicating captured clicks.

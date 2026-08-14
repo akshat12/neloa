@@ -428,7 +428,19 @@ enum ModelEvaluation {
             CaptureEvent(time: 21.07, kind: .keyPress, keyCode: 36, application: app, bundleIdentifier: bundle, displayID: 2)
         ]
         let narration = "First we go on Google Drive then we click on this testing spreadsheet then we create a new sheet so now we have one that's a sheet two in column A1 we put X and in column B1 I'm gonna put three"
-        return WorkflowCompiler.compile(events: events, transcript: narration, name: "First we go on Google Drive")
+        let timedNarration = [
+            NarrationSegment(text: "First we go on Google Drive.", time: 2.4, duration: 1.4),
+            NarrationSegment(text: "Then we click on this testing spreadsheet.", time: 6.1, duration: 1.1),
+            NarrationSegment(text: "Then we create a new sheet, Sheet2.", time: 8.7, duration: 1.2),
+            NarrationSegment(text: "In A1 we put X.", time: 15.7, duration: 1.1),
+            NarrationSegment(text: "In B1 I'm going to put three.", time: 19.6, duration: 1.2)
+        ]
+        return WorkflowCompiler.compile(
+            events: events,
+            transcript: narration,
+            narrationSegments: timedNarration,
+            name: "First we go on Google Drive"
+        )
     }
 
     private static func makeFixtureDirectory() throws -> URL {

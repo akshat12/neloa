@@ -25,6 +25,18 @@ struct CaptureEvent: Codable, Equatable, Sendable {
     var displayID: CGDirectDisplayID?
 }
 
+/// One on-device Speech transcription token aligned to the teaching session's
+/// recording clock. Tokens are preserved so they can be regrouped without
+/// losing the recognizer's original timing.
+struct NarrationSegment: Codable, Equatable, Sendable {
+    var text: String
+    var time: TimeInterval
+    var duration: TimeInterval
+    var confidence: Double?
+
+    var endTime: TimeInterval { time + max(0, duration) }
+}
+
 enum WorkflowStepKind: String, Codable, CaseIterable, Sendable {
     case openApp
     case openURL
@@ -130,6 +142,8 @@ struct Workflow: Identifiable, Codable, Equatable, Sendable {
     var createdAt = Date()
     var updatedAt = Date()
     var transcript: String
+    /// Optional so workflows saved before timed narration continue to decode.
+    var narrationSegments: [NarrationSegment]? = nil
     var recordingPath: String?
     var narrationPath: String?
     var steps: [WorkflowStep]

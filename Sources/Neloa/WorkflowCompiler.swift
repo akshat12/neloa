@@ -2,7 +2,12 @@ import CoreGraphics
 import Foundation
 
 enum WorkflowCompiler {
-    static func compile(events: [CaptureEvent], transcript: String, name: String = "Untitled automation") -> Workflow {
+    static func compile(
+        events: [CaptureEvent],
+        transcript: String,
+        narrationSegments: [NarrationSegment] = [],
+        name: String = "Untitled automation"
+    ) -> Workflow {
         var steps: [WorkflowStep] = []
         var lastApp: String?
         var previousClick: CaptureEvent?
@@ -79,21 +84,30 @@ enum WorkflowCompiler {
             }
         }
 
-        let decisions = decisionSentences(in: transcript)
+        let timedUtterances = NarrationTimeline.utterances(from: narrationSegments)
+        let timedDecisions = timedUtterances.map(\.text).filter(isDecisionSentence)
+        let decisions = timedDecisions.isEmpty ? decisionSentences(in: transcript) : timedDecisions
         for sentence in decisions {
             let isApproval = sentence.lowercased().contains("ask") && sentence.lowercased().contains("before")
+            let narrationTime = narrationTime(for: sentence, segments: narrationSegments)
             let rule = WorkflowStep(
                 kind: isApproval ? .approval : .decision,
                 title: sentence,
                 detail: isApproval ? "The run pauses here for you" : "Neloa will interpret this rule at run time",
-                time: steps.last?.time ?? 0,
+                time: narrationTime ?? steps.last?.time ?? 0,
                 requiresApproval: isApproval
             )
-            if isApproval,
+            if let narrationTime,
+               let nextAction = steps.firstIndex(where: {
+                   [.click, .typeText, .keyPress].contains($0.kind) && $0.time >= narrationTime
+               }) {
+                steps.insert(rule, at: nextAction)
+            } else if isApproval,
                let finalAction = steps.lastIndex(where: { [.click, .typeText, .keyPress].contains($0.kind) }) {
                 steps.insert(rule, at: finalAction)
             } else {
-                steps.append(rule)
+                let insertionIndex = steps.firstIndex { $0.time >= rule.time } ?? steps.endIndex
+                steps.insert(rule, at: insertionIndex)
             }
         }
 
@@ -107,7 +121,12 @@ enum WorkflowCompiler {
         }
 
         return WorkflowSemanticEnricher.enrich(
-            Workflow(name: name, transcript: transcript, steps: steps)
+            Workflow(
+                name: name,
+                transcript: transcript,
+                narrationSegments: narrationSegments.isEmpty ? nil : narrationSegments,
+                steps: steps
+            )
         )
     }
 
@@ -115,10 +134,40 @@ enum WorkflowCompiler {
         transcript
             .split(whereSeparator: { ".!?\n".contains($0) })
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { sentence in
-                let value = sentence.lowercased()
-                return value.contains("if ") || value.contains("when ") || value.contains("always ") || value.contains("before ")
-            }
+            .filter(isDecisionSentence)
+    }
+
+    private static func isDecisionSentence(_ sentence: String) -> Bool {
+        let value = sentence.lowercased()
+        return value.contains("if ") || value.contains("when ") || value.contains("always ") || value.contains("before ")
+    }
+
+    private static func narrationTime(for sentence: String, segments: [NarrationSegment]) -> TimeInterval? {
+        let tokens = sentenceTokens(sentence)
+        guard !tokens.isEmpty else { return nil }
+        let timedTokens = segments.flatMap { segment in
+            sentenceTokens(segment.text).map { ($0, segment.time) }
+        }
+        guard !timedTokens.isEmpty else { return nil }
+
+        let ruleCues = Set(["if", "when", "always", "before"].filter(tokens.contains))
+        if let match = timedTokens.filter({ ruleCues.contains($0.0) }).min(by: { $0.1 < $1.1 }) {
+            return match.1
+        }
+
+        let distinctive = tokens.filter { token in
+            token.count > 3 && !["always", "before", "when", "then", "this", "that", "with"].contains(token)
+        }
+        for token in distinctive + tokens {
+            if let match = timedTokens.first(where: { $0.0 == token }) { return match.1 }
+        }
+        return nil
+    }
+
+    private static func sentenceTokens(_ text: String) -> [String] {
+        text.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
     }
 
     private static func coordinateDescription(x: Double?, y: Double?) -> String {
