@@ -25,10 +25,13 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 - Lets users add typed or spoken instructions at any recording timestamp: approval wording creates a hard gate, while other free-form guidance becomes an explicit review checkpoint.
 - Replays the workflow under user supervision with the signature “Again, but…” interaction.
 - Accepts instructions such as “Replace June with July” or “use amount $750.”
+- Retains accessible field roles such as client, amount, due date, and report month so one request can safely update several form values.
+- Converts demonstrated browser addresses into stable URL steps and presents captured cross-app shortcuts as Copy and Paste actions.
 - Handles exact new-cell requests such as “set C3 to 3” with a previewed target change and Google Sheets’ structured Go to range navigation, rather than a guessed click.
 - Lets each change be used once, saved as a variant, or made the new default.
 - Uses one primary local model family—Qwen3-VL 4B—with a recommended 4-bit tier and an optional higher-precision 8-bit tier, plus Apple's on-device model and a narrow deterministic planner as safe fallbacks.
 - Pauses at spoken approval rules such as “always ask me before sending.”
+- Automatically pauses before captured Send, Share, Submit, Publish, Purchase, Pay, Delete, Remove, and Upload controls even if no gate was narrated.
 - Keeps a local activity receipt showing what ran and what changed.
 - Uses the Lagoon visual identity with persistent System, Light, and Dark appearance choices.
 
@@ -86,6 +89,7 @@ The model receives only a small set of salient recording frames, locally recogni
 If the model is skipped or unavailable, Neloa still records and replays captured actions, handles explicit value replacements locally, and can use Apple's on-device language model as a planning fallback on supported macOS versions.
 
 See the [model strategy](docs/MODELS.md) for tier guidance, measured resource use, and the visual models being evaluated.
+See [supported scenarios](docs/SCENARIOS.md) for current product-fit boundaries and the deferred live research-and-synthesis milestone.
 
 ## Privacy and safety
 

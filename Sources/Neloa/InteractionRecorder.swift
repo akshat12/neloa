@@ -233,6 +233,7 @@ final class InteractionRecorder: ObservableObject {
         for _ in 0..<4 {
             let role = stringAttribute(kAXRoleAttribute as CFString, from: element)
             if role == "AXSecureTextField" { return nil }
+            if role == "AXWindow" || role == "AXApplication" { break }
             for attribute in [
                 kAXTitleAttribute as CFString,
                 kAXDescriptionAttribute as CFString,
