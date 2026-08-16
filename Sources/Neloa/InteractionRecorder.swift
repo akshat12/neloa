@@ -134,10 +134,12 @@ final class InteractionRecorder: ObservableObject {
             let isPrintable = isSafePrintableText(text)
                 && !event.flags.contains(.maskCommand)
                 && keyCode != 36 && keyCode != 48 && keyCode != 51 && keyCode != 53
+            let inputTarget = isPrintable ? Self.focusedInputTarget(for: active) : nil
             events.append(CaptureEvent(
                 time: elapsed,
                 kind: isPrintable ? .text : .keyPress,
                 text: isPrintable ? text : nil,
+                target: inputTarget,
                 keyCode: isPrintable ? nil : keyCode,
                 flags: event.flags.rawValue,
                 application: active?.localizedName,
@@ -209,6 +211,43 @@ final class InteractionRecorder: ObservableObject {
             guard AXUIElementCopyAttributeValue(current, kAXParentAttribute as CFString, &parent) == .success,
                   let next = parent else { break }
             element = unsafeBitCast(next, to: AXUIElement.self)
+        }
+        return nil
+    }
+
+    /// Reads only the focused control's label/placeholder—not its value—so a
+    /// captured input can retain a role such as "Invoice amount" or "Due date".
+    /// Secure fields are deliberately excluded.
+    private nonisolated static func focusedInputTarget(for application: NSRunningApplication?) -> String? {
+        guard let application else { return nil }
+        let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
+        var focusedValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            applicationElement,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedValue
+        ) == .success,
+        let focusedValue else { return nil }
+
+        var element = unsafeBitCast(focusedValue, to: AXUIElement.self)
+        for _ in 0..<4 {
+            let role = stringAttribute(kAXRoleAttribute as CFString, from: element)
+            if role == "AXSecureTextField" { return nil }
+            for attribute in [
+                kAXTitleAttribute as CFString,
+                kAXDescriptionAttribute as CFString,
+                "AXPlaceholderValue" as CFString,
+                kAXHelpAttribute as CFString
+            ] {
+                if let label = usefulTargetLabel(stringAttribute(attribute, from: element)) {
+                    return label
+                }
+            }
+
+            var parent: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &parent) == .success,
+                  let parent else { break }
+            element = unsafeBitCast(parent, to: AXUIElement.self)
         }
         return nil
     }

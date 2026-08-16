@@ -41,14 +41,15 @@ enum WorkflowCompiler {
                 steps.append(WorkflowStep(
                     kind: .click,
                     title: clickTitle(rightClick: event.kind == .rightClick, target: event.target),
-                    detail: event.target.map { "Captured control: \($0)" } ?? coordinateDescription(x: event.x, y: event.y),
+                    detail: clickDetail(target: event.target, x: event.x, y: event.y),
                     time: event.time,
                     x: event.x,
                     y: event.y,
                     target: event.target,
                     application: event.application,
                     bundleIdentifier: event.bundleIdentifier,
-                    displayID: event.displayID
+                    displayID: event.displayID,
+                    requiresApproval: requiresApproval(for: event.target)
                 ))
                 previousClick = event
             case .text:
@@ -58,15 +59,16 @@ enum WorkflowCompiler {
                    steps[index].application == event.application,
                    event.time - steps[index].time < 2.0 {
                     steps[index].text = (steps[index].text ?? "") + text
-                    steps[index].title = "Type \(displayText(steps[index].text ?? ""))"
+                    steps[index].title = inputTitle(text: steps[index].text ?? "", target: steps[index].target)
                     steps[index].time = event.time
                 } else {
                     steps.append(WorkflowStep(
                         kind: .typeText,
-                        title: "Type \(displayText(text))",
-                        detail: "Text can be changed for each run",
+                        title: inputTitle(text: text, target: event.target),
+                        detail: inputDetail(target: event.target),
                         time: event.time,
                         text: text,
+                        target: event.target,
                         application: event.application,
                         bundleIdentifier: event.bundleIdentifier
                     ))
@@ -101,9 +103,11 @@ enum WorkflowCompiler {
                let nextAction = steps.firstIndex(where: {
                    [.click, .typeText, .keyPress].contains($0.kind) && $0.time >= narrationTime
                }) {
+                if isApproval { steps[nextAction].requiresApproval = false }
                 steps.insert(rule, at: nextAction)
             } else if isApproval,
                let finalAction = steps.lastIndex(where: { [.click, .typeText, .keyPress].contains($0.kind) }) {
+                steps[finalAction].requiresApproval = false
                 steps.insert(rule, at: finalAction)
             } else {
                 let insertionIndex = steps.firstIndex { $0.time >= rule.time } ?? steps.endIndex
@@ -181,16 +185,51 @@ enum WorkflowCompiler {
         return "\(action) \(target.count > 48 ? "\(target.prefix(48))…" : target)"
     }
 
+    private static func clickDetail(target: String?, x: Double?, y: Double?) -> String {
+        guard let target else { return coordinateDescription(x: x, y: y) }
+        return requiresApproval(for: target)
+            ? "Captured control: \(target) · Neloa will ask before this action"
+            : "Captured control: \(target)"
+    }
+
+    private static func inputTitle(text: String, target: String?) -> String {
+        guard let target else { return "Type \(displayText(text))" }
+        return "Enter \(displayText(text)) in \(displayText(target))"
+    }
+
+    private static func inputDetail(target: String?) -> String {
+        target.map { "Field: \($0) · Value can change each run" }
+            ?? "Text can be changed for each run"
+    }
+
+    nonisolated static func requiresApproval(for target: String?) -> Bool {
+        guard let target = target?.lowercased() else { return false }
+        let consequentialWords = [
+            "send", "share", "submit", "publish", "post", "purchase",
+            "buy", "pay", "delete", "remove", "upload"
+        ]
+        return consequentialWords.contains { word in
+            target.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: word) + #"\b"#, options: .regularExpression) != nil
+        }
+    }
+
     private static func displayText(_ text: String) -> String {
         let cleaned = text.replacingOccurrences(of: "\n", with: " ↵ ")
         return cleaned.count > 28 ? "\(cleaned.prefix(28))…" : cleaned
     }
 
     private static func keyTitle(_ keyCode: Int?, flags: UInt64?) -> String {
-        if keyCode == 17,
-           let flags,
-           CGEventFlags(rawValue: flags).contains(.maskCommand) {
-            return "Open a new tab"
+        if let flags, CGEventFlags(rawValue: flags).contains(.maskCommand) {
+            return switch keyCode {
+            case 0: "Select all"
+            case 1: "Save"
+            case 7: "Cut selected content"
+            case 8: "Copy selected content"
+            case 9: "Paste copied content"
+            case 17: "Open a new tab"
+            case 37: "Focus the address bar"
+            default: "Use a keyboard shortcut"
+            }
         }
         return switch keyCode {
         case 36: "Press Return"

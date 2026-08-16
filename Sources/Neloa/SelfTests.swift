@@ -9,6 +9,7 @@ enum SelfTests {
 
     static func run() throws {
         try compilationCheck()
+        try supportedUseCaseScenarioCheck()
         try googleDriveSpreadsheetSemanticCompilationCheck()
         try timedNarrationCorrelationCheck()
         try spokenOnlyCheck()
@@ -402,6 +403,100 @@ enum SelfTests {
         try expect(workflow.steps.map(\.kind) == [.openApp, .click, .typeText, .approval, .keyPress], "approval should be inserted before the final action")
         try expect(workflow.steps[2].text == "June report", "adjacent typing should merge")
         try expect(workflow.steps[3].requiresApproval, "spoken approval rule should become a gate")
+    }
+
+    private static func supportedUseCaseScenarioCheck() throws {
+        let command = CGEventFlags.maskCommand.rawValue
+        let reportEvents = [
+            CaptureEvent(time: 0.2, kind: .keyPress, keyCode: 37, flags: command, application: "Google Chrome", bundleIdentifier: "com.google.Chrome"),
+            CaptureEvent(time: 0.5, kind: .text, text: "reports.example.com/monthly", target: "Address and search bar", application: "Google Chrome", bundleIdentifier: "com.google.Chrome"),
+            CaptureEvent(time: 0.8, kind: .keyPress, keyCode: 36, application: "Google Chrome", bundleIdentifier: "com.google.Chrome"),
+            CaptureEvent(time: 1.5, kind: .click, x: 300, y: 220, target: "Report month", application: "Google Chrome", bundleIdentifier: "com.google.Chrome"),
+            CaptureEvent(time: 1.8, kind: .text, text: "July 2026", target: "Report month", application: "Google Chrome", bundleIdentifier: "com.google.Chrome"),
+            CaptureEvent(time: 2.1, kind: .keyPress, keyCode: 48, application: "Google Chrome", bundleIdentifier: "com.google.Chrome"),
+            CaptureEvent(time: 2.4, kind: .text, text: "$2,500", target: "Amount", application: "Google Chrome", bundleIdentifier: "com.google.Chrome"),
+            CaptureEvent(time: 3.0, kind: .click, x: 440, y: 410, target: "Download report", application: "Google Chrome", bundleIdentifier: "com.google.Chrome")
+        ]
+        let report = WorkflowCompiler.compile(
+            events: reportEvents,
+            transcript: "Open the monthly report, use July 2026 and $2,500, then download it.",
+            name: "Download monthly report"
+        )
+        try expect(
+            report.steps.first(where: { $0.kind == .openURL })?.text == "https://reports.example.com/monthly",
+            "a demonstrated report URL should become stable navigation instead of a flexible input"
+        )
+        try expect(
+            report.steps.filter(\.isRunVariable).compactMap(\.target) == ["Report month", "Amount"],
+            "report inputs should retain their focused field roles"
+        )
+        try expect(
+            report.steps.first(where: { $0.target == "Download report" })?.requiresApproval == false,
+            "an ordinary report download should not create a consequential-action pause"
+        )
+
+        let formEvents = [
+            CaptureEvent(time: 0.4, kind: .text, text: "Acme", target: "Client name", application: "Safari", bundleIdentifier: "com.apple.Safari"),
+            CaptureEvent(time: 0.8, kind: .keyPress, keyCode: 48, application: "Safari", bundleIdentifier: "com.apple.Safari"),
+            CaptureEvent(time: 1.2, kind: .text, text: "$500", target: "Invoice amount", application: "Safari", bundleIdentifier: "com.apple.Safari"),
+            CaptureEvent(time: 1.6, kind: .keyPress, keyCode: 48, application: "Safari", bundleIdentifier: "com.apple.Safari"),
+            CaptureEvent(time: 2.0, kind: .text, text: "August 31", target: "Due date", application: "Safari", bundleIdentifier: "com.apple.Safari"),
+            CaptureEvent(time: 2.8, kind: .click, x: 500, y: 600, target: "Submit invoice", application: "Safari", bundleIdentifier: "com.apple.Safari")
+        ]
+        let form = WorkflowCompiler.compile(
+            events: formEvents,
+            transcript: "Enter Acme, invoice amount $500, and due date August 31, then submit the invoice.",
+            name: "Submit client invoice"
+        )
+        try expect(
+            form.steps.filter(\.isRunVariable).compactMap(\.target) == ["Client name", "Invoice amount", "Due date"],
+            "client and invoice forms should expose distinct named inputs"
+        )
+        let formInputs = form.steps.filter(\.isRunVariable)
+        let response = AgentPlanResponse(
+            summary: "Use Bluebird, $750, and September 15",
+            replacements: [
+                AgentReplacement(stepID: formInputs[0].id.uuidString, text: "Bluebird", reason: "Requested client"),
+                AgentReplacement(stepID: formInputs[1].id.uuidString, text: "$750", reason: "Requested amount"),
+                AgentReplacement(stepID: formInputs[2].id.uuidString, text: "September 15", reason: "Requested due date")
+            ]
+        )
+        let formPlan = RunPlanner.plan(
+            workflow: form,
+            instruction: "Use Bluebird, $750, and September 15",
+            agentResponse: response
+        )
+        try expect(
+            formPlan.changes.map(\.after) == ["Bluebird", "$750", "September 15"],
+            "one instruction should safely customize all named form values"
+        )
+        guard let submit = formPlan.steps.first(where: { $0.target == "Submit invoice" }) else {
+            throw Failure(description: "the form scenario should retain its captured submit action")
+        }
+        try expect(
+            AutomationRunner.approvalPrompt(for: submit) != nil,
+            "captured Submit actions should pause for approval even when the user did not narrate a gate"
+        )
+
+        let transfer = WorkflowCompiler.compile(events: [
+            CaptureEvent(time: 0.5, kind: .keyPress, keyCode: 8, flags: command, application: "Google Chrome", bundleIdentifier: "com.google.Chrome"),
+            CaptureEvent(time: 1.0, kind: .appSwitch, application: "TextEdit", bundleIdentifier: "com.apple.TextEdit"),
+            CaptureEvent(time: 1.5, kind: .keyPress, keyCode: 9, flags: command, application: "TextEdit", bundleIdentifier: "com.apple.TextEdit")
+        ], transcript: "Copy the known account number into TextEdit.", name: "Copy account number")
+        try expect(
+            transfer.steps.map(\.title) == ["Open Google Chrome", "Copy selected content", "Open TextEdit", "Paste copied content"],
+            "cross-app copy and paste should be reviewable as meaningful actions"
+        )
+
+        let narratedApproval = WorkflowCompiler.compile(
+            events: [CaptureEvent(time: 2, kind: .click, x: 10, y: 10, target: "Send", application: "Mail", bundleIdentifier: "com.apple.mail")],
+            transcript: "Always ask before sending.",
+            narrationSegments: [NarrationSegment(text: "Always ask before sending.", time: 1, duration: 0.8)]
+        )
+        let approvalPauses = narratedApproval.steps.filter {
+            AutomationRunner.approvalPrompt(for: $0) != nil
+        }
+        try expect(approvalPauses.count == 1, "a narrated gate and automatic Send protection should produce one approval pause, not two")
     }
 
     private static func googleDriveSpreadsheetSemanticCompilationCheck() throws {

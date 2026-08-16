@@ -6,13 +6,14 @@ import Foundation
 /// steps for replay; the semantic title, target, and variable role are what the
 /// review and one-off run planner expose.
 enum WorkflowSemanticEnricher {
-    static let currentVersion = 2
+    static let currentVersion = 3
 
     static func enrich(_ source: Workflow) -> Workflow {
         var workflow = source
         let narration = workflow.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         let lowercasedNarration = narration.lowercased()
 
+        stabilizeBrowserURLs(in: &workflow)
         if lowercasedNarration.contains("google drive") {
             replaceChromeNavigation(in: &workflow)
         }
@@ -22,6 +23,56 @@ enum WorkflowSemanticEnricher {
 
         workflow.semanticVersion = currentVersion
         return workflow
+    }
+
+    private static func stabilizeBrowserURLs(in workflow: inout Workflow) {
+        var index = workflow.steps.startIndex
+        while index < workflow.steps.endIndex {
+            let shortcut = workflow.steps[index]
+            guard isBrowserAddressShortcut(shortcut),
+                  workflow.steps.indices.contains(index + 2),
+                  workflow.steps[index + 1].kind == .typeText,
+                  workflow.steps[index + 2].kind == .keyPress,
+                  workflow.steps[index + 2].keyCode == 36,
+                  let typed = workflow.steps[index + 1].text,
+                  let address = normalizedWebAddress(typed) else {
+                index += 1
+                continue
+            }
+
+            var replacement = WorkflowStep(
+                kind: .openURL,
+                title: "Open \(URL(string: address)?.host() ?? address)",
+                detail: "Go to \(address)",
+                time: shortcut.time,
+                text: address,
+                application: shortcut.application,
+                bundleIdentifier: shortcut.bundleIdentifier,
+                displayID: shortcut.displayID
+            )
+            replacement.runVariable = false
+            workflow.steps.replaceSubrange(index...(index + 2), with: [replacement])
+            index += 1
+        }
+    }
+
+    private static func isBrowserAddressShortcut(_ step: WorkflowStep) -> Bool {
+        guard step.kind == .keyPress,
+              let flags = step.flags,
+              CGEventFlags(rawValue: flags).contains(.maskCommand) else { return false }
+        return step.keyCode == 37 || step.keyCode == 17
+    }
+
+    private static func normalizedWebAddress(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.contains(where: { $0.isWhitespace }) else { return nil }
+        let candidate = trimmed.range(of: #"(?i)^https?://"#, options: .regularExpression) != nil
+            ? trimmed
+            : "https://\(trimmed)"
+        guard let components = URLComponents(string: candidate),
+              let host = components.host,
+              host == "localhost" || host.contains(".") else { return nil }
+        return components.url?.absoluteString
     }
 
     private static func replaceChromeNavigation(in workflow: inout Workflow) {

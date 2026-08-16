@@ -102,9 +102,10 @@ struct WorkflowStep: Identifiable, Codable, Equatable, Sendable {
     var x: Double?
     var y: Double?
     var text: String?
-    /// A stable semantic destination such as `Sheet2!A1` when Neloa can
-    /// identify one. Replay may still use captured input events, but review and
-    /// run planning should describe the user's target instead of a coordinate.
+    /// A stable semantic destination such as `Invoice amount` or `Sheet2!A1`
+    /// when Neloa can identify one. Replay may still use captured input events,
+    /// but review and run planning should describe the user's target instead
+    /// of a coordinate.
     var target: String?
     /// `nil` preserves the behavior of workflows saved before semantic input
     /// roles were introduced. Navigation text explicitly opts out.
