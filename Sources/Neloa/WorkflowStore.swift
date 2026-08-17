@@ -19,9 +19,17 @@ final class WorkflowStore: ObservableObject {
     private let fileURL: URL
     private var retryAction: (() -> Void)?
 
-    init(fileURL: URL? = nil) {
-        if let fileURL {
-            self.fileURL = fileURL
+    init(
+        fileURL: URL? = nil,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) {
+        #if DEBUG
+        let resolvedFileURL = fileURL ?? Self.uiTestFileURL(environment: environment)
+        #else
+        let resolvedFileURL = fileURL
+        #endif
+        if let resolvedFileURL {
+            self.fileURL = resolvedFileURL
         } else {
             do {
                 try BrandMigration.migrateApplicationSupportIfNeeded()
@@ -39,6 +47,12 @@ final class WorkflowStore: ObservableObject {
         }
         load()
         loadActivity()
+    }
+
+    nonisolated static func uiTestFileURL(environment: [String: String]) -> URL? {
+        guard let path = environment["NELOA_UI_TEST_STORE_PATH"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: path)
     }
 
     func save(_ workflow: Workflow) {

@@ -24,14 +24,15 @@ final class TeachController: ObservableObject {
 
     init(
         arguments: [String] = CommandLine.arguments,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
         // Older development builds used a persistent default for this fixture.
         // That could leak into normal launches and make a real recording look like
         // a canned demo indefinitely. Keep UI fixtures launch-scoped instead.
         Self.clearLegacyReviewFixture(in: defaults)
         #if DEBUG
-        if Self.shouldLoadReviewFixture(arguments: arguments) {
+        if Self.shouldLoadReviewFixture(arguments: arguments, environment: environment) {
             draft = Workflow(
                 name: "Prepare weekly report",
                 transcript: "Open the report, enter this week’s amount, flag the large change, and ask before sharing it.",
@@ -56,8 +57,11 @@ final class TeachController: ObservableObject {
         #endif
     }
 
-    nonisolated static func shouldLoadReviewFixture(arguments: [String]) -> Bool {
-        arguments.contains("--ui-test-review")
+    nonisolated static func shouldLoadReviewFixture(
+        arguments: [String],
+        environment: [String: String] = [:]
+    ) -> Bool {
+        arguments.contains("--ui-test-review") || environment["NELOA_UI_TEST_REVIEW"] == "1"
     }
 
     nonisolated static func clearLegacyReviewFixture(in defaults: UserDefaults) {

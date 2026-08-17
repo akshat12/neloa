@@ -33,6 +33,8 @@ enum SelfTests {
         try screenPermissionBranchCheck()
         try appTourStructureCheck()
         try reviewFixtureLaunchCheck()
+        try reviewDraftLifetimeCheck()
+        try reviewFixtureIsolationCheck()
         try runPresentationCheck()
         try reviewTimelineSelectionCheck()
         try workflowInstructionCheck()
@@ -1201,6 +1203,13 @@ enum SelfTests {
             !TeachController.shouldLoadReviewFixture(arguments: ["Neloa"]),
             "a normal app launch must never substitute a canned movie for the user's recording"
         )
+        try expect(
+            TeachController.shouldLoadReviewFixture(
+                arguments: ["Neloa"],
+                environment: ["NELOA_UI_TEST_REVIEW": "1"]
+            ),
+            "a debug package should be able to opt into the review fixture without changing user defaults"
+        )
 
         let suiteName = "NeloaSelfTests.ReviewFixture.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
@@ -1212,6 +1221,37 @@ enum SelfTests {
         try expect(
             defaults.object(forKey: "NeloaUITestReview") == nil,
             "startup should remove the stale persistent review fixture preference"
+        )
+    }
+
+    private static func reviewDraftLifetimeCheck() throws {
+        let draft = Workflow(
+            name: "Save transition fixture",
+            transcript: "Type a value",
+            steps: [WorkflowStep(kind: .typeText, title: "Enter value", time: 1, text: "Example")]
+        )
+        try expect(
+            TeachReviewDraft.resolved(nil, fallback: draft) == draft,
+            "the review binding should remain readable while a saved draft is cleared"
+        )
+        try expect(
+            !TeachReviewDraft.acceptsUpdates(nil),
+            "a departing review should ignore late child-view writes instead of recreating its draft"
+        )
+    }
+
+    private static func reviewFixtureIsolationCheck() throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NeloaSaveTransitionTests")
+            .appendingPathComponent("workflows.json")
+            .path
+        try expect(
+            WorkflowStore.uiTestFileURL(environment: ["NELOA_UI_TEST_STORE_PATH": path])?.path == path,
+            "the save-transition UI fixture should use an isolated workflow store"
+        )
+        try expect(
+            WorkflowStore.uiTestFileURL(environment: [:]) == nil,
+            "normal launches must not redirect the user's workflow store"
         )
     }
 

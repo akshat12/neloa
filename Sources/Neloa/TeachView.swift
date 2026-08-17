@@ -7,6 +7,7 @@ struct TeachView: View {
     @EnvironmentObject private var store: WorkflowStore
     @EnvironmentObject private var permissions: PermissionCenter
     @State private var savedMessage = false
+    @State private var isSaving = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -327,30 +328,58 @@ struct TeachView: View {
             if let message = teacher.message {
                 Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
             }
-            if let draftBinding = Binding($teacher.draft) {
-                WorkflowReviewView(workflow: draftBinding)
+            if let draft = teacher.draft {
+                WorkflowReviewView(
+                    workflow: Binding(
+                        get: { TeachReviewDraft.resolved(teacher.draft, fallback: draft) },
+                        set: { updated in
+                            guard TeachReviewDraft.acceptsUpdates(teacher.draft) else { return }
+                            teacher.draft = updated
+                        }
+                    )
+                )
                 HStack {
                     Button("Teach again") { teacher.reset() }
                     Spacer()
-                    Button("Save automation") {
-                        if let workflow = teacher.draft {
-                            store.save(workflow)
-                            withAnimation { savedMessage = true }
-                            Task {
-                                try? await Task.sleep(for: .seconds(1.6))
-                                await MainActor.run {
-                                    withAnimation { savedMessage = false }
-                                    teacher.reset()
-                                    NotificationCenter.default.post(name: .showNeloaAutomations, object: nil)
-                                }
-                            }
-                        }
+                    Button(isSaving ? "Automation saved" : "Save automation") {
+                        saveAutomation(draft)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(teacher.draft?.steps.contains(where: { [.openURL, .click, .typeText, .keyPress].contains($0.kind) }) != true)
+                    .disabled(
+                        isSaving
+                            || teacher.draft?.steps.contains(where: { [.openURL, .click, .typeText, .keyPress].contains($0.kind) }) != true
+                    )
                 }
             }
         }
+    }
+
+    private func saveAutomation(_ workflow: Workflow) {
+        guard !isSaving else { return }
+        isSaving = true
+        store.save(workflow)
+        withAnimation { savedMessage = true }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.6))
+            withAnimation { savedMessage = false }
+            // Leave the review hierarchy before clearing its draft. The stable
+            // binding above keeps any final graph update readable while the
+            // navigation transaction completes.
+            NotificationCenter.default.post(name: .showNeloaAutomations, object: nil)
+            await Task.yield()
+            teacher.reset()
+            isSaving = false
+        }
+    }
+}
+
+enum TeachReviewDraft {
+    static func resolved(_ current: Workflow?, fallback: Workflow) -> Workflow {
+        current ?? fallback
+    }
+
+    static func acceptsUpdates(_ current: Workflow?) -> Bool {
+        current != nil
     }
 }
 
