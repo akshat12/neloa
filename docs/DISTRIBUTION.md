@@ -52,13 +52,19 @@ Version tags must match `CFBundleShortVersionString` in `Resources/Info.plist`.
 
 ## GitHub release automation
 
-`.github/workflows/release.yml` runs when a `v*` tag is pushed. It verifies the version, runs deterministic checks, packages the Apple silicon ZIP with Qwen support, and creates a GitHub Release. Public repositories can use [standard GitHub-hosted runners for free](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+`.github/workflows/release.yml` runs when a `v*` tag is pushed. It uses GitHub's Apple-silicon macOS 26 runner because the pinned MLX Swift package requires the current Swift toolchain. The job verifies the version, runs deterministic checks, packages the Apple silicon ZIP with Qwen support, and creates a GitHub Release. Public repositories can use [standard GitHub-hosted runners for free](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 
 A typical release is:
 
 ```sh
 git tag v0.2.18
 git push origin v0.2.18
+```
+
+If the runner or another transient service fails after the tag is accepted, retry that immutable tag from the Actions page or with:
+
+```sh
+gh workflow run release.yml --ref main -f release_tag=v0.2.18
 ```
 
 Before tagging:
