@@ -34,7 +34,7 @@ Run:
 
 ```sh
 make test
-make unsigned-release RELEASE_VERSION=0.2.17 BUILD_NUMBER=20
+make unsigned-release RELEASE_VERSION=0.2.18 BUILD_NUMBER=21
 ```
 
 The release script:
@@ -57,8 +57,8 @@ Version tags must match `CFBundleShortVersionString` in `Resources/Info.plist`.
 A typical release is:
 
 ```sh
-git tag v0.2.17
-git push origin v0.2.17
+git tag v0.2.18
+git push origin v0.2.18
 ```
 
 Before tagging:

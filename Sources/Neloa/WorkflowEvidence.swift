@@ -521,12 +521,17 @@ enum WorkflowEvidenceExtractor {
         ) else { return [UInt8](repeating: 0, count: width * height) }
         context.interpolationQuality = .low
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-        return stride(from: 0, to: rgba.count, by: 4).map { offset in
+        var luminance = [UInt8]()
+        luminance.reserveCapacity(width * height)
+        var offset = 0
+        while offset < rgba.count {
             let red = Int(rgba[offset])
             let green = Int(rgba[offset + 1])
             let blue = Int(rgba[offset + 2])
-            return UInt8((red * 54 + green * 183 + blue * 19) / 256)
+            luminance.append(UInt8((red * 54 + green * 183 + blue * 19) / 256))
+            offset += 4
         }
+        return luminance
     }
 
     private static func makeVisualChangeFrames(
