@@ -188,12 +188,25 @@ final class AutomationRunner: ObservableObject {
             CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
         case .typeText:
             guard let text = step.text else { return }
-            if let x = step.x, let y = step.y {
+            var focusedSemanticTarget = false
+            if let target = step.target,
+               let application = runningApplication(for: step) {
+                focusedSemanticTarget = AccessibilityTargetResolver.focusInput(
+                    target: target,
+                    in: application.processIdentifier
+                )
+                if focusedSemanticTarget {
+                    try? await Task.sleep(for: .milliseconds(120))
+                }
+            }
+            if !focusedSemanticTarget, let x = step.x, let y = step.y {
                 let point = CGPoint(x: x, y: y)
                 CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
                 CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
                 CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
                 try? await Task.sleep(for: .milliseconds(120))
+            } else if !focusedSemanticTarget, step.target != nil {
+                throw RunnerError.couldNotFocusTextField
             }
             let utf16 = Array(text.utf16)
             let down = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true)
@@ -257,12 +270,14 @@ final class AutomationRunner: ObservableObject {
         case invalidWebAddress
         case couldNotOpenWebAddress
         case unsupportedSpreadsheetNavigation
+        case couldNotFocusTextField
 
         var errorDescription: String? {
             switch self {
             case .invalidWebAddress: "This automation contains an invalid web address."
             case .couldNotOpenWebAddress: "Neloa could not open the saved web address."
             case .unsupportedSpreadsheetNavigation: "Neloa can only use structured cell navigation in a captured Google Sheets workflow."
+            case .couldNotFocusTextField: "Neloa could not find the saved text field. Review and re-teach this action before trying again."
             }
         }
     }

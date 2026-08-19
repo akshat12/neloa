@@ -69,6 +69,7 @@ private struct AutomationDetail: View {
     let workflow: Workflow
     @EnvironmentObject private var store: WorkflowStore
     @State private var showingRun = false
+    @State private var showingRepair = false
     @State private var confirmDelete = false
     @State private var exportMessage: String?
     @State private var showHowItWorks = false
@@ -84,6 +85,7 @@ private struct AutomationDetail: View {
                 }
                 Spacer()
                 Menu {
+                    Button("Review & repair…") { showingRepair = true }
                     Button("Export automation…") { exportSkill() }
                     Button("Delete automation", role: .destructive) { confirmDelete = true }
                 } label: {
@@ -91,6 +93,14 @@ private struct AutomationDetail: View {
                 }
                 .menuStyle(.borderlessButton)
                 .help("More automation actions")
+                Button {
+                    showingRepair = true
+                } label: {
+                    Label("Review & repair", systemImage: "scope")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .help("Re-teach one fragile action without rebuilding the workflow")
                 Button("Run again…") { showingRun = true }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
@@ -132,6 +142,25 @@ private struct AutomationDetail: View {
                 }
             }
 
+            if recommendedRepairCount > 0 {
+                HStack(alignment: .center, spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(recommendedRepairCount) action\(recommendedRepairCount == 1 ? "" : "s") use fragile grounding")
+                            .font(.system(size: 15, weight: .semibold))
+                        Text("Re-teach a position-only or visual action to capture a stronger target.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Repair") { showingRepair = true }
+                        .buttonStyle(.bordered)
+                }
+                .padding(14)
+                .background(Color.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 14))
+            }
+
             if !userInstructions.isEmpty {
                 detailCard(title: "Instructions you added", icon: "text.bubble.fill") {
                     ForEach(userInstructions) { step in
@@ -171,6 +200,11 @@ private struct AutomationDetail: View {
                 .frame(minWidth: 760, idealWidth: 940, minHeight: 650, idealHeight: 760)
                 .presentationSizing(.fitted)
         }
+        .sheet(isPresented: $showingRepair) {
+            WorkflowRepairView(workflow: workflow)
+                .frame(minWidth: 960, idealWidth: 1120, minHeight: 720, idealHeight: 820)
+                .presentationSizing(.fitted)
+        }
         .alert("Delete \(workflow.name)?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) { store.delete(workflow) }
             Button("Cancel", role: .cancel) {}
@@ -188,6 +222,7 @@ private struct AutomationDetail: View {
     private var flexibleInputs: [WorkflowStep] { workflow.steps.filter(\.isRunVariable) }
     private var approvalRules: [WorkflowStep] { workflow.steps.filter { $0.kind == .approval || $0.requiresApproval } }
     private var userInstructions: [WorkflowStep] { workflow.steps.filter(\.isUserInstruction) }
+    private var recommendedRepairCount: Int { workflow.steps.filter(StepRepairSupport.isRecommended).count }
     private var appsUsed: [String] {
         Array(Set(workflow.steps.compactMap(\.application).filter { !$0.isEmpty })).sorted()
     }

@@ -37,6 +37,7 @@ enum SelfTests {
         try reviewFixtureIsolationCheck()
         try runPresentationCheck()
         try runPreflightCheck()
+        try stepRepairCheck()
         try reviewTimelineSelectionCheck()
         try workflowInstructionCheck()
         try agentResponseSafetyCheck()
@@ -1422,6 +1423,147 @@ enum SelfTests {
         try expect(ReviewTimelineSelection.duration(videoDuration: 0, steps: steps) == 3.5, "steps should provide a review duration before the video reports its length")
         try expect(ReviewTimelineSelection.duration(videoDuration: 2, steps: steps) == 2, "the review timeline should clamp markers to the real video duration")
         try expect(ReviewTimelineSelection.duration(videoDuration: 10, steps: steps) == 10, "the review timeline should use the full recording duration")
+    }
+
+    private static func stepRepairCheck() throws {
+        let originalID = UUID()
+        let original = WorkflowStep(
+            id: originalID,
+            kind: .click,
+            title: "Click the old download position",
+            detail: "At 420, 260",
+            time: 7.5,
+            x: 420,
+            y: 260,
+            application: "Google Chrome",
+            bundleIdentifier: "com.google.Chrome",
+            requiresApproval: true,
+            origin: .visual
+        )
+        let linkedInstruction = WorkflowStep(
+            kind: .approval,
+            title: "Ask before downloading",
+            time: 7.4,
+            requiresApproval: true,
+            origin: .user,
+            instructionScope: .thisAction,
+            linkedStepID: originalID
+        )
+        let later = WorkflowStep(kind: .wait, title: "Wait for download", time: 9)
+
+        try expect(StepRepairSupport.isEligible(original), "captured click actions should support focused re-teaching")
+        try expect(StepRepairSupport.isRecommended(original), "a visually inferred position-only click should be recommended for repair")
+
+        let events = [
+            CaptureEvent(
+                time: 0,
+                kind: .appSwitch,
+                application: "Google Chrome",
+                bundleIdentifier: "com.google.Chrome"
+            ),
+            CaptureEvent(
+                time: 1,
+                kind: .click,
+                x: 610,
+                y: 315,
+                target: "Download report",
+                application: "Google Chrome",
+                bundleIdentifier: "com.google.Chrome",
+                displayID: 88
+            )
+        ]
+        let repaired = try StepRepairSupport.candidate(replacing: original, from: events)
+        try expect(repaired.id == originalID && repaired.time == 7.5, "repair must preserve action identity and timeline position")
+        try expect(repaired.target == "Download report" && repaired.x == 610 && repaired.y == 315, "repair should capture a new semantic target with coordinate fallback")
+        try expect(repaired.displayID == 88 && repaired.origin == .repaired, "repair should retain monitor metadata and remain visibly attributable")
+        try expect(repaired.requiresApproval, "re-teaching must never remove an existing approval requirement")
+        try expect(!StepRepairSupport.isRecommended(repaired), "a repaired semantic click should no longer be flagged as position-only")
+
+        let replacedSteps = StepRepairSupport.replacing(
+            stepID: originalID,
+            with: repaired,
+            in: [linkedInstruction, original, later]
+        )
+        try expect(replacedSteps.count == 3 && replacedSteps[1] == repaired, "repair should replace exactly one action without changing order")
+        try expect(replacedSteps[0].linkedStepID == originalID, "preserving the action ID should keep linked user instructions intact")
+
+        let beforeReadiness = RunPreflight.evaluate(
+            plan: RunPlan(instruction: "Run", steps: [original], changes: [], summary: "Before repair"),
+            accessibilityGranted: true,
+            applicationAvailable: { _ in true }
+        )
+        let afterReadiness = RunPreflight.evaluate(
+            plan: RunPlan(instruction: "Run", steps: [repaired], changes: [], summary: "After repair"),
+            accessibilityGranted: true,
+            applicationAvailable: { _ in true }
+        )
+        try expect(beforeReadiness.warnings.contains(where: { $0.kind == .coordinateFallback }), "the original position-only click should have a readiness warning")
+        try expect(!afterReadiness.warnings.contains(where: { $0.kind == .coordinateFallback }), "a semantic repair should clear the position-only warning")
+
+        let differences = StepRepairSupport.differences(from: original, to: repaired)
+        try expect(differences.map(\.field) == ["Target", "Position"], "repair preview should show only the grounding details that changed")
+
+        let inputID = UUID()
+        let originalInput = WorkflowStep(
+            id: inputID,
+            kind: .typeText,
+            title: "Enter old amount",
+            time: 12,
+            text: "$500",
+            target: "Invoice amount",
+            runVariable: false,
+            application: "Google Chrome",
+            bundleIdentifier: "com.google.Chrome"
+        )
+        let inputEvents = [
+            CaptureEvent(time: 1, kind: .click, x: 240, y: 360, application: "Google Chrome", bundleIdentifier: "com.google.Chrome", displayID: 17),
+            CaptureEvent(time: 1.2, kind: .text, text: "$", target: "Invoice amount", application: "Google Chrome", bundleIdentifier: "com.google.Chrome"),
+            CaptureEvent(time: 1.3, kind: .text, text: "7", target: "Invoice amount", application: "Google Chrome", bundleIdentifier: "com.google.Chrome"),
+            CaptureEvent(time: 1.4, kind: .text, text: "5", target: "Invoice amount", application: "Google Chrome", bundleIdentifier: "com.google.Chrome"),
+            CaptureEvent(time: 1.5, kind: .text, text: "0", target: "Invoice amount", application: "Google Chrome", bundleIdentifier: "com.google.Chrome")
+        ]
+        let repairedInput = try StepRepairSupport.candidate(replacing: originalInput, from: inputEvents)
+        try expect(repairedInput.text == "$750", "focused input repair should merge the complete captured example value")
+        try expect(repairedInput.x == 240 && repairedInput.y == 360 && repairedInput.displayID == 17, "focused input repair should retain the field click as a replay fallback")
+        try expect(repairedInput.target == "Invoice amount" && repairedInput.runVariable == false, "input repair should retain semantic field identity and the original variable policy")
+
+        let wrongAppEvents = [CaptureEvent(
+            time: 1,
+            kind: .click,
+            x: 20,
+            y: 20,
+            target: "Download report",
+            application: "Safari",
+            bundleIdentifier: "com.apple.Safari"
+        )]
+        do {
+            _ = try StepRepairSupport.candidate(replacing: original, from: wrongAppEvents)
+            throw Failure(description: "a replacement captured in another app should be rejected")
+        } catch let error as StepRepairError {
+            try expect(
+                error == .wrongApplication(expected: "Google Chrome", actual: "Safari"),
+                "wrong-app repair should explain both expected and captured applications"
+            )
+        }
+
+        let textOnlyEvents = [CaptureEvent(
+            time: 1,
+            kind: .text,
+            text: "$750",
+            target: "Invoice amount",
+            application: "Google Chrome",
+            bundleIdentifier: "com.google.Chrome"
+        )]
+        do {
+            _ = try StepRepairSupport.candidate(replacing: original, from: textOnlyEvents)
+            throw Failure(description: "capturing the wrong kind of action should be rejected")
+        } catch let error as StepRepairError {
+            try expect(error == .noMatchingAction, "wrong-kind repair should remain retryable without modifying the workflow")
+        }
+
+        let workflow = Workflow(name: "Repair persistence", transcript: "", steps: replacedSteps)
+        let persisted = try JSONDecoder.neloa.decode(Workflow.self, from: JSONEncoder.neloa.encode(workflow))
+        try expect(persisted.steps[1].origin == .repaired && persisted.steps[1].id == originalID, "repaired action attribution and identity should survive persistence")
     }
 
     private static func workflowInstructionCheck() throws {

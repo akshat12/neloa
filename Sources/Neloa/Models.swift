@@ -67,6 +67,7 @@ enum WorkflowStepOrigin: String, Codable, Sendable {
     case inferred
     case visual
     case user
+    case repaired
 }
 
 enum WorkflowInstructionScope: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -127,6 +128,8 @@ struct WorkflowStep: Identifiable, Codable, Equatable, Sendable {
         let base: String
         if isUserInstruction {
             base = "Your instruction"
+        } else if origin == .repaired {
+            base = "\(kind.label) · Re-taught"
         } else if origin == .visual {
             base = "\(kind.label) · Visual draft"
         } else {

@@ -2,7 +2,7 @@
 
 Neloa’s next features are ranked by whether they make a demonstrated automation more trustworthy, repairable, and broadly useful without turning the local model into an unbounded computer-use agent.
 
-## Now: know whether a workflow is ready
+## Now: know whether a workflow is ready and repair one action
 
 Before replay, Neloa performs a deterministic preflight over the exact reviewed plan. It checks:
 
@@ -16,9 +16,7 @@ Before replay, Neloa performs a deterministic preflight over the exact reviewed 
 
 Blocking problems prevent the countdown and explain what must be fixed. Warnings remain runnable but visible. “Run the original” also bypasses Qwen entirely because no model is needed to reproduce an unchanged, already reviewed plan.
 
-## Next: re-teach one broken step
-
-The highest-priority follow-up is a repair flow from the readiness card and workflow timeline:
+The workflow library and review timeline also offer focused re-teaching:
 
 1. Select a broken or coordinate-only action.
 2. Bring the target app to the front.
@@ -26,9 +24,9 @@ The highest-priority follow-up is a repair flow from the readiness card and work
 4. Compare the new semantic target with the old one.
 5. Preview and save the replacement without relearning the rest of the workflow.
 
-This should make application redesigns recoverable and steadily replace fragile coordinates with accessibility-backed targets.
+The replacement preserves the original action ID, timeline position, variable policy, and approval gate. For text fields, Neloa records both the accessible field identity and a click-position fallback, then attempts to focus the accessible field before replay. This makes application redesigns recoverable and steadily replaces fragile coordinates with accessibility-backed targets.
 
-## Then: schedules and triggers with explicit authority
+## Next: schedules and triggers with explicit authority
 
 Useful recurring automations should be able to start from a schedule, a file appearing in a folder, or a user-invoked shortcut. Triggers must create a prepared run—not silently take consequential actions. A scheduled run should still show its changed values, readiness, approval checkpoints, and a cancellation window.
 
@@ -59,4 +57,3 @@ Every roadmap feature must preserve these invariants:
 - Consequential actions retain approval checkpoints.
 - A user can inspect the exact plan before execution and stop at any time.
 - The default experience remains viable on a 16 GB Apple-silicon Mac.
-

@@ -158,14 +158,19 @@ final class ReviewPlaybackModel: ObservableObject {
 
 struct WorkflowReviewView: View {
     @Binding var workflow: Workflow
+    private let repairAction: ((WorkflowStep) -> Void)?
     @StateObject private var playback: ReviewPlaybackModel
     @State private var selectedStepID: UUID?
     @State private var pinnedStepID: UUID?
     @State private var pinnedTime: TimeInterval?
     @State private var instructionDraft: ReviewInstructionDraft?
 
-    init(workflow: Binding<Workflow>) {
+    init(
+        workflow: Binding<Workflow>,
+        repairAction: ((WorkflowStep) -> Void)? = nil
+    ) {
         _workflow = workflow
+        self.repairAction = repairAction
         _playback = StateObject(wrappedValue: ReviewPlaybackModel(recordingPath: workflow.wrappedValue.recordingPath))
     }
 
@@ -238,7 +243,8 @@ struct WorkflowReviewView: View {
                     steps: $workflow.steps,
                     selectedStepID: $selectedStepID,
                     select: selectStep,
-                    editInstruction: beginEditingInstruction
+                    editInstruction: beginEditingInstruction,
+                    repairAction: repairAction
                 )
                 .padding(.leading, 14)
                 .frame(minWidth: 300, idealWidth: 340, maxWidth: 390)
@@ -565,6 +571,7 @@ private struct ReviewActionsSidebar: View {
     @Binding var selectedStepID: UUID?
     let select: (WorkflowStep) -> Void
     let editInstruction: (WorkflowStep) -> Void
+    let repairAction: ((WorkflowStep) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -600,6 +607,10 @@ private struct ReviewActionsSidebar: View {
                                     Button("Edit instruction") {
                                         editInstruction(step)
                                     }
+                                } else if let repairAction, StepRepairSupport.isEligible(step) {
+                                    Button("Re-teach this action…") {
+                                        repairAction(step)
+                                    }
                                 }
                                 Button(step.isUserInstruction ? "Remove instruction" : "Remove action", role: .destructive) {
                                     steps = WorkflowInstructionSupport.removing(stepID: step.id, from: steps)
@@ -616,7 +627,27 @@ private struct ReviewActionsSidebar: View {
                 }
             }
 
-            Label("Select a moment to jump to it. Right-click your instructions to edit or remove them.", systemImage: "cursorarrow.click")
+            if let selectedStepID,
+               let selected = steps.first(where: { $0.id == selectedStepID }),
+               !selected.isUserInstruction,
+               let repairAction,
+               StepRepairSupport.isEligible(selected) {
+                Button {
+                    repairAction(selected)
+                } label: {
+                    Label("Re-teach selected action", systemImage: "scope")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .help("Capture only this action again and keep the rest of the workflow")
+            }
+
+            Label(
+                repairAction == nil
+                    ? "Select a moment to jump to it. Right-click your instructions to edit or remove them."
+                    : "Select a moment to jump to it. Re-teaching replaces only the selected action.",
+                systemImage: "cursorarrow.click"
+            )
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -668,6 +699,12 @@ private struct ReviewActionCard: View {
                 Text(step.displayKindLabel)
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(markerColor)
+                if let reliability = StepRepairSupport.reliabilityLabel(for: step) {
+                    Label(reliability, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .padding(11)
