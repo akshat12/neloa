@@ -45,7 +45,7 @@ enum RunPlanner {
 
     static func plan(workflow: Workflow, instruction: String, agentResponse: AgentPlanResponse? = nil) -> RunPlan {
         let cleanInstruction = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanInstruction.isEmpty, cleanInstruction.lowercased() != "run it the same way" else {
+        guard !isUnchangedInstruction(cleanInstruction) else {
             return RunPlan(instruction: cleanInstruction, steps: workflow.steps, changes: [], summary: "Run the saved workflow without changes")
         }
 
@@ -103,6 +103,11 @@ enum RunPlanner {
             ? "No safe value change was inferred; review the unchanged workflow"
             : "Apply \(changes.count) one-time change\(changes.count == 1 ? "" : "s")"
         return RunPlan(instruction: cleanInstruction, steps: steps, changes: changes, summary: summary)
+    }
+
+    static func isUnchangedInstruction(_ instruction: String) -> Bool {
+        let clean = instruction.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return clean.isEmpty || clean == "run it the same way" || clean == "run the original"
     }
 
     static func prompt(workflow: Workflow, instruction: String) -> String {

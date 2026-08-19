@@ -35,8 +35,18 @@ final class AutomationRunner: ObservableObject {
     func run(_ plan: RunPlan) {
         stop()
         completedStepIDs = []
-        guard stepExecutor != nil || AXIsProcessTrusted() else {
-            state = .failed("Accessibility permission is required to replay this automation. Open System Settings → Privacy & Security → Accessibility and enable Neloa.")
+        let preflight: RunReadinessReport
+        if stepExecutor != nil {
+            preflight = RunPreflight.evaluate(
+                plan: plan,
+                accessibilityGranted: true,
+                applicationAvailable: { _ in true }
+            )
+        } else {
+            preflight = RunPreflight.live(plan: plan, accessibilityGranted: AXIsProcessTrusted())
+        }
+        guard preflight.canRun else {
+            state = .failed(preflight.failureMessage)
             return
         }
         runTask = Task { [weak self] in

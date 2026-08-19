@@ -36,6 +36,7 @@ enum SelfTests {
         try reviewDraftLifetimeCheck()
         try reviewFixtureIsolationCheck()
         try runPresentationCheck()
+        try runPreflightCheck()
         try reviewTimelineSelectionCheck()
         try workflowInstructionCheck()
         try agentResponseSafetyCheck()
@@ -171,6 +172,23 @@ enum SelfTests {
             failureRunner.completedStepIDs == [completedStep.id],
             "reviewing a restart should preserve the completed-work warning"
         )
+
+        var invalidStepExecuted = false
+        let invalidRunner = AutomationRunner(countdownSeconds: 0) { _ in
+            invalidStepExecuted = true
+        }
+        let invalidReplayStep = WorkflowStep(kind: .click, title: "Missing replay target", time: 0)
+        invalidRunner.run(RunPlan(
+            instruction: "Run",
+            steps: [invalidReplayStep],
+            changes: [],
+            summary: "Invalid replay fixture"
+        ))
+        guard case .failed(let preflightMessage) = invalidRunner.state else {
+            throw Failure(description: "an invalid replay should fail before execution")
+        }
+        try expect(!invalidStepExecuted, "preflight blockers must prevent the executor from receiving an invalid step")
+        try expect(preflightMessage.contains("Step 1"), "the runner should explain which captured step needs repair")
 
         let failingStore = WorkflowStore(fileURL: URL(fileURLWithPath: "/dev/null/NeloaSelfTests/workflows.json"))
         failingStore.save(workflow)
@@ -1278,6 +1296,116 @@ enum SelfTests {
             RunPresentation.apps(in: [first, second, first]) == ["Numbers", "Safari"],
             "the trust summary should show a sorted, deduplicated app list"
         )
+        try expect(RunPlanner.isUnchangedInstruction("Run it the same way"), "the explicit original-run action should bypass model planning")
+        try expect(RunPlanner.isUnchangedInstruction(" run the original \n"), "equivalent original-run copy should bypass model planning")
+        try expect(!RunPlanner.isUnchangedInstruction("Use August"), "a real customization must still reach the planner")
+    }
+
+    private static func runPreflightCheck() throws {
+        let open = WorkflowStep(
+            kind: .openURL,
+            title: "Open report",
+            time: 0,
+            text: "https://example.com/report",
+            application: "Google Chrome",
+            bundleIdentifier: "com.google.Chrome"
+        )
+        let coordinateClick = WorkflowStep(
+            kind: .click,
+            title: "Choose report",
+            time: 1,
+            x: 420,
+            y: 260,
+            application: "Google Chrome",
+            bundleIdentifier: "com.google.Chrome"
+        )
+        let input = WorkflowStep(
+            kind: .typeText,
+            title: "Enter month",
+            time: 2,
+            text: "August",
+            target: "Report month",
+            application: "Google Chrome",
+            bundleIdentifier: "com.google.Chrome"
+        )
+        let approval = WorkflowStep(
+            kind: .approval,
+            title: "Ask before downloading",
+            time: 3,
+            requiresApproval: true
+        )
+        let plan = RunPlan(
+            instruction: "Use August",
+            steps: [open, coordinateClick, input, approval],
+            changes: [],
+            summary: "Fixture"
+        )
+
+        let ready = RunPreflight.evaluate(
+            plan: plan,
+            accessibilityGranted: true,
+            applicationAvailable: { _ in true }
+        )
+        try expect(ready.canRun, "a structurally valid workflow should pass preflight")
+        try expect(ready.applications == ["Google Chrome"], "preflight should summarize required apps")
+        try expect(ready.approvalCount == 1, "preflight should summarize approval pauses")
+        try expect(
+            ready.warnings.map(\.kind) == [.coordinateFallback],
+            "coordinate-only actions should be visible warnings rather than hidden replay assumptions"
+        )
+
+        let denied = RunPreflight.evaluate(plan: plan, accessibilityGranted: false)
+        try expect(
+            denied.blockingIssues.contains(where: { $0.kind == .accessibility }),
+            "missing control permission should block replay before the countdown"
+        )
+
+        let missingApp = RunPreflight.evaluate(
+            plan: plan,
+            accessibilityGranted: true,
+            applicationAvailable: { _ in false }
+        )
+        try expect(
+            missingApp.blockingIssues.contains(where: { $0.kind == .missingApplication }),
+            "an unavailable captured app should block replay instead of sending events to the wrong app"
+        )
+
+        let invalidURL = WorkflowStep(kind: .openURL, title: "Open unsafe address", time: 0, text: "file:///tmp/report")
+        let incompleteClick = WorkflowStep(kind: .click, title: "Unknown click", time: 1)
+        let missingKey = WorkflowStep(kind: .keyPress, title: "Unknown key", time: 2)
+        let emptyText = WorkflowStep(kind: .typeText, title: "Empty input", time: 3, text: "   ", target: "Amount")
+        let invalidPlan = RunPlan(
+            instruction: "Run",
+            steps: [invalidURL, incompleteClick, missingKey, emptyText],
+            changes: [],
+            summary: "Invalid fixture"
+        )
+        let invalid = RunPreflight.evaluate(plan: invalidPlan, accessibilityGranted: true)
+        try expect(!invalid.canRun, "malformed replay actions should fail preflight")
+        try expect(invalid.blockingIssues.count == 4, "every malformed replay action should receive a specific blocker")
+
+        let wrongSpreadsheet = WorkflowStep(
+            kind: .selectSpreadsheetCell,
+            title: "Go to a cell",
+            time: 0,
+            target: "row three",
+            application: "Safari",
+            bundleIdentifier: "com.apple.Safari"
+        )
+        let spreadsheetReport = RunPreflight.evaluate(
+            plan: RunPlan(instruction: "Run", steps: [wrongSpreadsheet], changes: [], summary: "Invalid cell"),
+            accessibilityGranted: true
+        )
+        try expect(
+            spreadsheetReport.blockingIssues.count == 2,
+            "structured spreadsheet navigation should require both Chrome grounding and a valid cell address"
+        )
+
+        let empty = RunPreflight.evaluate(
+            plan: RunPlan(instruction: "Run", steps: [], changes: [], summary: "Empty"),
+            accessibilityGranted: true
+        )
+        try expect(!empty.canRun, "an empty automation should never appear runnable")
     }
 
     private static func reviewTimelineSelectionCheck() throws {

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum RunPresentation {
@@ -167,6 +168,9 @@ struct RunView: View {
             cancelPlanning()
             runner.reset()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            permissions.refresh()
+        }
         .onChange(of: runner.state) { _, newState in handleStateChange(newState) }
     }
 
@@ -323,15 +327,16 @@ struct RunView: View {
     }
 
     private func trustSummary(_ plan: RunPlan) -> some View {
-        let apps = RunPresentation.apps(in: plan.steps)
-        let approvals = plan.steps.filter { $0.kind == .approval || $0.requiresApproval }.count
+        let readiness = readiness(for: plan)
         return VStack(alignment: .leading, spacing: 8) {
-            Text("Ready to run")
+            Text(readiness.canRun ? "Ready to run" : "Needs attention")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(readiness.canRun ? Color.secondary : Color.red)
                 .accessibilityAddTraits(.isHeader)
             Label(
-                apps.isEmpty ? "No app switches captured" : "Will use \(apps.joined(separator: ", "))",
+                readiness.applications.isEmpty
+                    ? "No app switches captured"
+                    : "Will use \(readiness.applications.joined(separator: ", "))",
                 systemImage: "square.grid.2x2"
             )
             Label(
@@ -340,13 +345,30 @@ struct RunView: View {
             )
             .foregroundStyle(permissions.accessibility == .granted ? Color.secondary : Color.red)
             Label(
-                approvals == 0 ? "No approval pauses were taught" : "Will pause for \(approvals) approval\(approvals == 1 ? "" : "s")",
+                readiness.approvalCount == 0
+                    ? "No approval pauses were taught"
+                    : "Will pause for \(readiness.approvalCount) approval\(readiness.approvalCount == 1 ? "" : "s")",
                 systemImage: "hand.raised.fill"
             )
             Label(
                 "\(plan.changes.count) requested change\(plan.changes.count == 1 ? "" : "s")",
                 systemImage: "arrow.left.arrow.right"
             )
+
+            if !readiness.blockingIssues.isEmpty {
+                Label(
+                    "\(readiness.blockingIssues.count) issue\(readiness.blockingIssues.count == 1 ? "" : "s") must be fixed",
+                    systemImage: "xmark.octagon.fill"
+                )
+                .foregroundStyle(.red)
+            }
+
+            ForEach(readiness.warnings) { issue in
+                Label(issue.title, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .help(issue.detail)
+                    .accessibilityHint(issue.detail)
+            }
         }
         .font(.system(size: 13))
         .foregroundStyle(.secondary)
@@ -390,9 +412,12 @@ struct RunView: View {
 
     @ViewBuilder
     private func stateControls(_ plan: RunPlan) -> some View {
+        let readiness = readiness(for: plan)
         switch runner.state {
         case .idle, .stopped:
-            if let restartWarningStepCount {
+            if !readiness.canRun {
+                preflightBlockerCard(readiness)
+            } else if let restartWarningStepCount {
                 VStack(alignment: .leading, spacing: 9) {
                     Label("Restarting will repeat completed work", systemImage: "arrow.counterclockwise.circle.fill")
                         .font(.system(size: 15, weight: .semibold))
@@ -493,6 +518,45 @@ struct RunView: View {
         }
     }
 
+    private func preflightBlockerCard(_ readiness: RunReadinessReport) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Fix these before running", systemImage: "wrench.and.screwdriver.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.red)
+                .accessibilityAddTraits(.isHeader)
+            ForEach(readiness.blockingIssues) { issue in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(issue.title)
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(issue.detail)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+            }
+            HStack {
+                if readiness.blockingIssues.contains(where: { $0.kind == .accessibility }) {
+                    Button("Grant control access") {
+                        permissions.requestAccessibility()
+                        permissions.refresh()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Button("Open Accessibility Settings") {
+                        openAccessibilitySettings()
+                    }
+                    .buttonStyle(.bordered)
+                } else {
+                    Button("Close and review automation") { dismiss() }
+                        .buttonStyle(.bordered)
+                }
+            }
+        }
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.red.opacity(0.22)))
+    }
+
     private var isRunning: Bool {
         switch runner.state {
         case .countdown, .running, .waitingForApproval, .waitingForInstruction: true
@@ -501,6 +565,23 @@ struct RunView: View {
     }
 
     private var isPreparingPlan: Bool { planningRequestID != nil }
+
+    private func readiness(for plan: RunPlan) -> RunReadinessReport {
+        RunPreflight.live(
+            plan: plan,
+            accessibilityGranted: permissions.accessibility == .granted
+        )
+    }
+
+    private func openAccessibilitySettings() {
+        if let modern = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility"),
+           NSWorkspace.shared.open(modern) {
+            return
+        }
+        if let legacy = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(legacy)
+        }
+    }
 
     private func prepare(startedByVoice: Bool) {
         let cleanInstruction = instruction.trimmingCharacters(in: .whitespacesAndNewlines)

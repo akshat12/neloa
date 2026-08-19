@@ -216,7 +216,8 @@ final class LocalAgentService: ObservableObject {
     }
 
     func makePlan(workflow: Workflow, instruction: String) async -> RunPlan {
-        guard !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !RunPlanner.isUnchangedInstruction(instruction) else {
+            status = "Ready to run the saved workflow"
             return RunPlanner.plan(workflow: workflow, instruction: instruction)
         }
         if let spreadsheetPlan = RunPlanner.spreadsheetCellPlan(workflow: workflow, instruction: instruction) {
