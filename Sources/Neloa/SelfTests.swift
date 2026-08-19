@@ -38,6 +38,7 @@ enum SelfTests {
         try runPresentationCheck()
         try runPreflightCheck()
         try stepRepairCheck()
+        try automationScheduleCheck()
         try reviewTimelineSelectionCheck()
         try workflowInstructionCheck()
         try agentResponseSafetyCheck()
@@ -1564,6 +1565,86 @@ enum SelfTests {
         let workflow = Workflow(name: "Repair persistence", transcript: "", steps: replacedSteps)
         let persisted = try JSONDecoder.neloa.decode(Workflow.self, from: JSONEncoder.neloa.encode(workflow))
         try expect(persisted.steps[1].origin == .repaired && persisted.steps[1].id == originalID, "repaired action attribution and identity should survive persistence")
+    }
+
+    private static func automationScheduleCheck() throws {
+        let workflowID = UUID()
+        let invalid = AutomationSchedule(
+            repeatMode: .weekly,
+            hour: 42,
+            minute: -8,
+            weekday: 12
+        )
+        let normalized = AutomationScheduleSupport.normalized(invalid)
+        try expect(
+            normalized.hour == 23 && normalized.minute == 0 && normalized.weekday == 7,
+            "saved reminder components should be clamped to valid calendar values"
+        )
+
+        let weekdaySchedule = AutomationSchedule(
+            repeatMode: .weekdays,
+            hour: 8,
+            minute: 30,
+            weekday: nil
+        )
+        let weekdayDrafts = AutomationScheduleSupport.reminderDrafts(
+            workflowID: workflowID,
+            schedule: weekdaySchedule
+        )
+        try expect(weekdayDrafts.count == 5, "a weekday reminder should register one local trigger for each weekday")
+        try expect(
+            weekdayDrafts.compactMap(\.weekday) == [2, 3, 4, 5, 6],
+            "weekday reminders should use Calendar's Monday-through-Friday values"
+        )
+        try expect(
+            Set(weekdayDrafts.map(\.identifier)).count == 5,
+            "each weekday reminder should have a stable unique identifier"
+        )
+
+        let daily = AutomationSchedule(repeatMode: .daily, hour: 9, minute: 15, weekday: 6)
+        let dailyDrafts = AutomationScheduleSupport.reminderDrafts(workflowID: workflowID, schedule: daily)
+        try expect(
+            dailyDrafts.count == 1 && dailyDrafts[0].weekday == nil,
+            "daily reminders should not accidentally inherit a saved weekday"
+        )
+        let disabled = AutomationSchedule(repeatMode: .daily, hour: 9, minute: 15, weekday: nil, isEnabled: false)
+        try expect(
+            AutomationScheduleSupport.reminderDrafts(workflowID: workflowID, schedule: disabled).isEmpty,
+            "disabled reminders should register no notification triggers"
+        )
+        let removableIdentifiers = AutomationScheduleSupport.allIdentifiers(for: workflowID)
+        try expect(
+            Set(removableIdentifiers).isSuperset(of: weekdayDrafts.map(\.identifier))
+                && Set(removableIdentifiers).isSuperset(of: dailyDrafts.map(\.identifier)),
+            "removing a workflow should cover every reminder identifier it may have registered"
+        )
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "en_US_POSIX")
+        let weekly = AutomationSchedule(repeatMode: .weekly, hour: 10, minute: 45, weekday: 2)
+        try expect(
+            AutomationScheduleSupport.summary(weekly, calendar: calendar, locale: calendar.locale ?? .current).contains("Monday"),
+            "weekly reminder copy should name the selected day"
+        )
+
+        let workflow = Workflow(
+            id: workflowID,
+            name: "Scheduled report",
+            transcript: "",
+            steps: [],
+            schedule: weekdaySchedule
+        )
+        let encoded = try JSONEncoder.neloa.encode(workflow)
+        let decoded = try JSONDecoder.neloa.decode(Workflow.self, from: encoded)
+        try expect(decoded.schedule == weekdaySchedule, "run reminders should survive workflow persistence")
+
+        guard var legacyObject = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] else {
+            throw Failure(description: "could not construct a legacy schedule fixture")
+        }
+        legacyObject.removeValue(forKey: "schedule")
+        let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
+        let legacy = try JSONDecoder.neloa.decode(Workflow.self, from: legacyData)
+        try expect(legacy.schedule == nil, "workflows saved before reminders existed should continue to decode")
     }
 
     private static func workflowInstructionCheck() throws {

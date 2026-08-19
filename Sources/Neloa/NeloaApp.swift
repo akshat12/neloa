@@ -1,13 +1,41 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 
 @MainActor
-final class NeloaAppDelegate: NSObject, NSApplicationDelegate {
+final class NeloaAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    private(set) static var pendingScheduledWorkflowID: UUID?
+
+    static func consumePendingScheduledWorkflowID() -> UUID? {
+        defer { pendingScheduledWorkflowID = nil }
+        return pendingScheduledWorkflowID
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         WorkflowEvidenceExtractor.purgeStaleTemporaryEvidence()
+        UNUserNotificationCenter.current().delegate = self
         guard let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
               let icon = NSImage(contentsOf: iconURL) else { return }
         NSApplication.shared.applicationIconImage = icon
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        guard let workflowID = response.notification.request.content.userInfo["workflowID"] as? String else { return }
+        await MainActor.run {
+            Self.pendingScheduledWorkflowID = UUID(uuidString: workflowID)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            NotificationCenter.default.post(name: .openScheduledAutomation, object: workflowID)
+        }
     }
 }
 
@@ -19,6 +47,7 @@ struct NeloaApp: App {
     @StateObject private var agent = LocalAgentService()
     @StateObject private var runner = AutomationRunner()
     @StateObject private var permissions = PermissionCenter()
+    @StateObject private var schedules = AutomationScheduleCenter()
 
     var body: some Scene {
         WindowGroup {
@@ -29,6 +58,7 @@ struct NeloaApp: App {
                 .environmentObject(runner)
                 .environmentObject(permissions)
                 .environmentObject(appearance)
+                .environmentObject(schedules)
                 .tint(NeloaPalette.accent)
                 .accentColor(NeloaPalette.accent)
                 .preferredColorScheme(appearance.colorScheme)

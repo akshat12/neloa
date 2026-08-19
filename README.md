@@ -31,6 +31,7 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 - Lets each change be used once, saved as a variant, or made the new default.
 - Checks the exact run plan before replay, blocking missing permissions, unavailable apps, malformed actions, and invalid spreadsheet targets while clearly warning about coordinate-only clicks and focus-dependent typing.
 - Lets users re-teach one fragile click, text entry, shortcut, or app switch in the original app, preview the replacement, and preserve the rest of the automation, its timing, variables, and approval gates.
+- Supports daily, weekday, or weekly local run reminders. Opening one prepares the normal reviewed run; reminders never replay clicks or typing on their own.
 - Runs an unchanged saved workflow without loading Qwen or waiting for model planning.
 - Uses one primary local model family—Qwen3-VL 4B—with a recommended 4-bit tier and an optional higher-precision 8-bit tier, plus Apple's on-device model and a narrow deterministic planner as safe fallbacks.
 - Pauses at spoken approval rules such as “always ask me before sending.”
@@ -58,7 +59,7 @@ open dist/Neloa.app
 
 For faster UI-only work, `make basic-app` creates a build without Qwen. Complete local builds and GitHub releases always enable Qwen and include the verified MLX GPU shader.
 
-The app asks for Screen Recording, Accessibility, Microphone, and Speech Recognition permissions. Accessibility lets Neloa learn clicks and typing during a demonstration and replay only the actions you approve. macOS may require reopening Neloa after it is granted.
+The app asks for Screen Recording, Accessibility, Microphone, and Speech Recognition permissions. Accessibility lets Neloa learn clicks and typing during a demonstration and replay only the actions you approve. macOS may require reopening Neloa after it is granted. Notifications are optional and requested only when you save an enabled run reminder.
 
 ## Install an unsigned preview
 
@@ -93,7 +94,7 @@ If the model is skipped or unavailable, Neloa still records and replays captured
 
 See the [model strategy](docs/MODELS.md) for tier guidance, measured resource use, and the visual models being evaluated.
 See [supported scenarios](docs/SCENARIOS.md) for current product-fit boundaries and the deferred live research-and-synthesis milestone.
-See the [product roadmap](docs/ROADMAP.md) for the prioritized path from run readiness and single-step repair to safe triggers and bounded live work.
+See the [product roadmap](docs/ROADMAP.md) for the prioritized path from run readiness, repair, and safe reminders to bounded live work.
 See the [research paper plan](paper/README.md) and [conference venue strategy](docs/CONFERENCE_VENUES.md) for the proposed evaluation and publication path.
 
 ## Privacy and safety

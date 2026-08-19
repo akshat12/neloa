@@ -2,7 +2,7 @@
 
 Neloa’s next features are ranked by whether they make a demonstrated automation more trustworthy, repairable, and broadly useful without turning the local model into an unbounded computer-use agent.
 
-## Now: know whether a workflow is ready and repair one action
+## Now: readiness, repair, and reviewed run reminders
 
 Before replay, Neloa performs a deterministic preflight over the exact reviewed plan. It checks:
 
@@ -26,9 +26,11 @@ The workflow library and review timeline also offer focused re-teaching:
 
 The replacement preserves the original action ID, timeline position, variable policy, and approval gate. For text fields, Neloa records both the accessible field identity and a click-position fallback, then attempts to focus the accessible field before replay. This makes application redesigns recoverable and steadily replaces fragile coordinates with accessibility-backed targets.
 
-## Next: schedules and triggers with explicit authority
+Neloa also supports daily, weekday, and weekly local reminders. A reminder notification carries only the saved workflow ID and opens the normal “What should change this time?” sheet. It does not plan or execute in the background, so the exact changes, readiness checks, approvals, and cancellation countdown remain mandatory.
 
-Useful recurring automations should be able to start from a schedule, a file appearing in a folder, or a user-invoked shortcut. Triggers must create a prepared run—not silently take consequential actions. A scheduled run should still show its changed values, readiness, approval checkpoints, and a cancellation window.
+## Next: more triggers with explicit authority
+
+Useful recurring automations should also be invokable from a file appearing in a folder or a user-invoked shortcut. Triggers must create a prepared run—not silently take consequential actions. Every trigger should still show its changed values, readiness, approval checkpoints, and a cancellation window.
 
 ## Defining milestone: bounded live work
 

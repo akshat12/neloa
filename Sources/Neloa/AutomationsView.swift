@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AutomationsView: View {
     @EnvironmentObject private var store: WorkflowStore
+    @Binding var requestedRunWorkflowID: UUID?
     @State private var selectedID: UUID?
 
     var body: some View {
@@ -54,6 +55,29 @@ struct AutomationsView: View {
             }
         }
         .padding(32)
+        .onChange(of: requestedRunWorkflowID) { _, workflowID in
+            if let workflowID { selectedID = workflowID }
+        }
+        .sheet(isPresented: scheduledRunIsPresented) {
+            if let workflowID = requestedRunWorkflowID,
+               let workflow = store.workflows.first(where: { $0.id == workflowID }) {
+                RunView(workflow: workflow)
+                    .frame(minWidth: 760, idealWidth: 940, minHeight: 650, idealHeight: 760)
+                    .presentationSizing(.fitted)
+            }
+        }
+    }
+
+    private var scheduledRunIsPresented: Binding<Bool> {
+        Binding(
+            get: {
+                guard let requestedRunWorkflowID else { return false }
+                return store.workflows.contains { $0.id == requestedRunWorkflowID }
+            },
+            set: { isPresented in
+                if !isPresented { requestedRunWorkflowID = nil }
+            }
+        )
     }
 
     private func lastRunDescription(for workflow: Workflow) -> String {
@@ -68,8 +92,10 @@ struct AutomationsView: View {
 private struct AutomationDetail: View {
     let workflow: Workflow
     @EnvironmentObject private var store: WorkflowStore
+    @EnvironmentObject private var schedules: AutomationScheduleCenter
     @State private var showingRun = false
     @State private var showingRepair = false
+    @State private var showingSchedule = false
     @State private var confirmDelete = false
     @State private var exportMessage: String?
     @State private var showHowItWorks = false
@@ -133,6 +159,8 @@ private struct AutomationDetail: View {
                 .padding(14)
                 .background(.quaternary.opacity(0.34), in: RoundedRectangle(cornerRadius: 14))
             }
+
+            scheduleCard
 
             if !approvalRules.isEmpty {
                 detailCard(title: "When Neloa asks", icon: "hand.raised.fill") {
@@ -205,8 +233,16 @@ private struct AutomationDetail: View {
                 .frame(minWidth: 960, idealWidth: 1120, minHeight: 720, idealHeight: 820)
                 .presentationSizing(.fitted)
         }
+        .sheet(isPresented: $showingSchedule) {
+            AutomationScheduleEditor(workflow: workflow)
+                .frame(width: 560, height: 590)
+                .presentationSizing(.fitted)
+        }
         .alert("Delete \(workflow.name)?", isPresented: $confirmDelete) {
-            Button("Delete", role: .destructive) { store.delete(workflow) }
+            Button("Delete", role: .destructive) {
+                schedules.remove(workflowID: workflow.id)
+                store.delete(workflow)
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This permanently removes the automation and its saved teaching recordings from this Mac. This cannot be undone.")
@@ -225,6 +261,60 @@ private struct AutomationDetail: View {
     private var recommendedRepairCount: Int { workflow.steps.filter(StepRepairSupport.isRecommended).count }
     private var appsUsed: [String] {
         Array(Set(workflow.steps.compactMap(\.application).filter { !$0.isEmpty })).sorted()
+    }
+
+    @ViewBuilder
+    private var scheduleCard: some View {
+        if let schedule = workflow.schedule {
+            detailCard(title: "Run reminder", icon: "calendar.badge.clock") {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(AutomationScheduleSupport.summary(schedule))
+                            .font(.system(size: 15, weight: .medium))
+                        Text("Opens a reviewed run; it never starts the automation automatically.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    scheduleStatus(schedule)
+                    Button("Edit") { showingSchedule = true }
+                        .buttonStyle(.bordered)
+                }
+            }
+        } else {
+            HStack(spacing: 12) {
+                Image(systemName: "calendar.badge.plus")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Run this on a routine?")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text("Add a private reminder that opens a reviewed run when you are ready.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Add reminder") { showingSchedule = true }
+                    .buttonStyle(.bordered)
+            }
+            .padding(14)
+            .background(.quaternary.opacity(0.28), in: RoundedRectangle(cornerRadius: 14))
+        }
+    }
+
+    @ViewBuilder
+    private func scheduleStatus(_ schedule: AutomationSchedule) -> some View {
+        if !schedule.isEnabled {
+            Label("Off", systemImage: "pause.circle.fill")
+                .foregroundStyle(.secondary)
+        } else if schedules.canDeliverReminders {
+            Label("Ready", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        } else {
+            Label("Permission needed", systemImage: "exclamationmark.circle.fill")
+                .foregroundStyle(.red)
+                .help("Allow Neloa notifications so this local reminder can appear.")
+        }
     }
 
     private func inputName(_ step: WorkflowStep, index: Int) -> String {
@@ -263,5 +353,172 @@ private struct AutomationDetail: View {
         } catch {
             exportMessage = "The skill could not be exported: \(error.localizedDescription)"
         }
+    }
+}
+
+private struct AutomationScheduleEditor: View {
+    let workflow: Workflow
+
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var store: WorkflowStore
+    @EnvironmentObject private var schedules: AutomationScheduleCenter
+    @State private var repeatMode: AutomationScheduleRepeat
+    @State private var reminderTime: Date
+    @State private var weekday: Int
+    @State private var isEnabled: Bool
+    @State private var isSaving = false
+    @State private var permissionNeeded = false
+
+    init(workflow: Workflow) {
+        self.workflow = workflow
+        let schedule = workflow.schedule ?? AutomationSchedule(
+            repeatMode: .weekdays,
+            hour: 9,
+            minute: 0,
+            weekday: 2
+        )
+        let normalized = AutomationScheduleSupport.normalized(schedule)
+        _repeatMode = State(initialValue: normalized.repeatMode)
+        _reminderTime = State(initialValue: Self.time(hour: normalized.hour, minute: normalized.minute))
+        _weekday = State(initialValue: normalized.weekday ?? 2)
+        _isEnabled = State(initialValue: normalized.isEnabled)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: "calendar.badge.clock")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 50, height: 50)
+                    .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Run reminder")
+                        .font(.system(size: 25, weight: .bold, design: .rounded))
+                    Text(workflow.name)
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle("Enabled", isOn: $isEnabled)
+                    .toggleStyle(.switch)
+            }
+
+            VStack(alignment: .leading, spacing: 15) {
+                Text("When should Neloa remind you?")
+                    .font(.system(size: 16, weight: .semibold))
+
+                Picker("Repeat", selection: $repeatMode) {
+                    ForEach(AutomationScheduleRepeat.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(!isEnabled)
+
+                HStack {
+                    if repeatMode == .weekly {
+                        Picker("Day", selection: $weekday) {
+                            ForEach(Array(Calendar.current.weekdaySymbols.enumerated()), id: \.offset) { index, name in
+                                Text(name).tag(index + 1)
+                            }
+                        }
+                        .frame(maxWidth: 220)
+                    }
+                    Spacer()
+                    Text("Time")
+                        .font(.system(size: 14, weight: .medium))
+                    DatePicker("Time", selection: $reminderTime, displayedComponents: .hourAndMinute)
+                        .labelsHidden()
+                }
+                .disabled(!isEnabled)
+            }
+            .padding(16)
+            .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 15))
+
+            VStack(alignment: .leading, spacing: 8) {
+                Label("A reminder, not unattended automation", systemImage: "hand.raised.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                Text("At the scheduled time, macOS shows a private notification. Opening it takes you to Neloa’s normal change preview, readiness check, and cancellation countdown. No clicks or typing happen until you explicitly start the run.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .background(Color.accentColor.opacity(0.07), in: RoundedRectangle(cornerRadius: 15))
+
+            if permissionNeeded {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(.red)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Notification permission is needed")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text(schedules.lastError ?? "Allow notifications for Neloa, then save again. The automation itself remains off until you start it.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Open Settings") { schedules.openNotificationSettings() }
+                        .buttonStyle(.bordered)
+                }
+                .padding(13)
+                .background(Color.red.opacity(0.07), in: RoundedRectangle(cornerRadius: 13))
+            }
+
+            Spacer(minLength: 0)
+
+            HStack {
+                if workflow.schedule != nil {
+                    Button("Remove reminder", role: .destructive) { removeReminder() }
+                }
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button(isSaving ? "Saving…" : "Save reminder") { saveReminder() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(isSaving)
+            }
+        }
+        .padding(26)
+        .interactiveDismissDisabled(isSaving)
+        .task { await schedules.refreshAuthorization() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await schedules.refreshAuthorization() }
+        }
+    }
+
+    private func saveReminder() {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: reminderTime)
+        let schedule = AutomationSchedule(
+            repeatMode: repeatMode,
+            hour: components.hour ?? 9,
+            minute: components.minute ?? 0,
+            weekday: repeatMode == .weekly ? weekday : nil,
+            isEnabled: isEnabled
+        )
+        var updated = workflow
+        updated.schedule = schedule
+        store.save(updated)
+        isSaving = true
+        Task {
+            let applied = await schedules.apply(schedule: schedule, to: updated)
+            isSaving = false
+            permissionNeeded = isEnabled && !applied
+            if applied || !isEnabled { dismiss() }
+        }
+    }
+
+    private func removeReminder() {
+        schedules.remove(workflowID: workflow.id)
+        var updated = workflow
+        updated.schedule = nil
+        store.save(updated)
+        dismiss()
+    }
+
+    private static func time(hour: Int, minute: Int) -> Date {
+        Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: Date()) ?? Date()
     }
 }

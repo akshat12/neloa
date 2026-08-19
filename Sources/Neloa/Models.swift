@@ -94,6 +94,34 @@ enum WorkflowInstructionScope: String, Codable, CaseIterable, Identifiable, Send
     }
 }
 
+enum AutomationScheduleRepeat: String, Codable, CaseIterable, Identifiable, Sendable {
+    case daily
+    case weekdays
+    case weekly
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .daily: "Every day"
+        case .weekdays: "Weekdays"
+        case .weekly: "Every week"
+        }
+    }
+}
+
+/// A local reminder to prepare an automation for review. A schedule never
+/// grants authority to replay the workflow without the user opening Neloa and
+/// approving the normal run preview.
+struct AutomationSchedule: Codable, Equatable, Sendable {
+    var repeatMode: AutomationScheduleRepeat
+    var hour: Int
+    var minute: Int
+    /// Calendar weekday where Sunday is 1 and Saturday is 7.
+    var weekday: Int?
+    var isEnabled = true
+}
+
 struct WorkflowStep: Identifiable, Codable, Equatable, Sendable {
     var id = UUID()
     var kind: WorkflowStepKind
@@ -152,6 +180,8 @@ struct Workflow: Identifiable, Codable, Equatable, Sendable {
     var narrationPath: String?
     var steps: [WorkflowStep]
     var defaultInstruction = "Run it the same way"
+    /// Optional so existing saved workflows decode without a migration.
+    var schedule: AutomationSchedule? = nil
     /// Optional so existing on-disk workflows decode without a migration shim.
     var semanticVersion: Int? = nil
 }

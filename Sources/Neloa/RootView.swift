@@ -33,6 +33,7 @@ struct RootView: View {
     @EnvironmentObject private var store: WorkflowStore
     @EnvironmentObject private var permissions: PermissionCenter
     @EnvironmentObject private var agent: LocalAgentService
+    @EnvironmentObject private var schedules: AutomationScheduleCenter
     @State private var selection: NavigationItem? = .teach
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     @State private var choseInitialDestination = false
@@ -40,6 +41,7 @@ struct RootView: View {
     @State private var tourStepIndex = 0
     @State private var scheduledInitialTour = false
     @State private var showStoreIssueDetails = false
+    @State private var scheduledRunWorkflowID: UUID?
 
     var body: some View {
         NavigationSplitView {
@@ -78,7 +80,7 @@ struct RootView: View {
             Group {
                 switch selection ?? .teach {
                 case .teach: TeachView()
-                case .automations: AutomationsView()
+                case .automations: AutomationsView(requestedRunWorkflowID: $scheduledRunWorkflowID)
                 case .activity: ActivityView()
                 case .settings: SettingsPage()
                 }
@@ -156,14 +158,29 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showNeloaTeach)) { _ in
             selection = .teach
         }
+        .onReceive(NotificationCenter.default.publisher(for: .openScheduledAutomation)) { notification in
+            guard let rawID = notification.object as? String,
+                  let workflowID = UUID(uuidString: rawID) else { return }
+            _ = NeloaAppDelegate.consumePendingScheduledWorkflowID()
+            selection = .automations
+            scheduledRunWorkflowID = workflowID
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             permissions.refresh()
         }
         .onAppear {
             permissions.refresh()
+            Task { await schedules.reconcile(workflows: store.workflows) }
+            let pendingWorkflowID = NeloaAppDelegate.consumePendingScheduledWorkflowID()
+            if let workflowID = pendingWorkflowID {
+                selection = .automations
+                scheduledRunWorkflowID = workflowID
+            }
             guard !choseInitialDestination else { return }
             choseInitialDestination = true
-            selection = store.workflows.isEmpty ? .teach : .automations
+            if pendingWorkflowID == nil {
+                selection = store.workflows.isEmpty ? .teach : .automations
+            }
             scheduleInitialTourIfNeeded()
         }
     }
@@ -313,4 +330,5 @@ extension Notification.Name {
     static let showNeloaTour = Notification.Name("showNeloaTour")
     static let showNeloaAutomations = Notification.Name("showNeloaAutomations")
     static let showNeloaTeach = Notification.Name("showNeloaTeach")
+    static let openScheduledAutomation = Notification.Name("openScheduledAutomation")
 }
