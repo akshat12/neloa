@@ -29,6 +29,8 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 - Converts demonstrated browser addresses into stable URL steps and presents captured cross-app shortcuts as Copy and Paste actions.
 - Handles exact new-cell requests such as “set C3 to 3” with a previewed target change and Google Sheets’ structured Go to range navigation, rather than a guessed click.
 - Lets each change be used once, saved as a variant, or made the new default.
+- Checks the exact run plan before replay, blocking missing permissions, unavailable apps, malformed actions, and invalid spreadsheet targets while clearly warning about coordinate-only clicks and focus-dependent typing.
+- Runs an unchanged saved workflow without loading Qwen or waiting for model planning.
 - Uses one primary local model family—Qwen3-VL 4B—with a recommended 4-bit tier and an optional higher-precision 8-bit tier, plus Apple's on-device model and a narrow deterministic planner as safe fallbacks.
 - Pauses at spoken approval rules such as “always ask me before sending.”
 - Automatically pauses before captured Send, Share, Submit, Publish, Purchase, Pay, Delete, Remove, and Upload controls even if no gate was narrated.
@@ -90,6 +92,8 @@ If the model is skipped or unavailable, Neloa still records and replays captured
 
 See the [model strategy](docs/MODELS.md) for tier guidance, measured resource use, and the visual models being evaluated.
 See [supported scenarios](docs/SCENARIOS.md) for current product-fit boundaries and the deferred live research-and-synthesis milestone.
+See the [product roadmap](docs/ROADMAP.md) for the prioritized path from run readiness to single-step repair, safe triggers, and bounded live work.
+See the [research paper plan](paper/README.md) and [conference venue strategy](docs/CONFERENCE_VENUES.md) for the proposed evaluation and publication path.
 
 ## Privacy and safety
 
