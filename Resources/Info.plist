@@ -18,6 +18,19 @@
     <string>Neloa</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>ai.neloa.desktop.run</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>neloa</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleShortVersionString</key>
 	<string>0.2.18</string>
 	<key>CFBundleVersion</key>

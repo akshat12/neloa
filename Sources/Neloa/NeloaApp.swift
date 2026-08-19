@@ -4,11 +4,16 @@ import UserNotifications
 
 @MainActor
 final class NeloaAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
-    private(set) static var pendingScheduledWorkflowID: UUID?
+    private(set) static var pendingRunWorkflowID: UUID?
 
-    static func consumePendingScheduledWorkflowID() -> UUID? {
-        defer { pendingScheduledWorkflowID = nil }
-        return pendingScheduledWorkflowID
+    static func consumePendingRunWorkflowID() -> UUID? {
+        defer { pendingRunWorkflowID = nil }
+        return pendingRunWorkflowID
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let workflowID = urls.lazy.compactMap(NeloaDeepLink.runWorkflowID).first else { return }
+        routeToReviewedRun(workflowID)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -32,10 +37,15 @@ final class NeloaAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificatio
     ) async {
         guard let workflowID = response.notification.request.content.userInfo["workflowID"] as? String else { return }
         await MainActor.run {
-            Self.pendingScheduledWorkflowID = UUID(uuidString: workflowID)
-            NSApplication.shared.activate(ignoringOtherApps: true)
-            NotificationCenter.default.post(name: .openScheduledAutomation, object: workflowID)
+            guard let workflowID = UUID(uuidString: workflowID) else { return }
+            self.routeToReviewedRun(workflowID)
         }
+    }
+
+    private func routeToReviewedRun(_ workflowID: UUID) {
+        Self.pendingRunWorkflowID = workflowID
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        NotificationCenter.default.post(name: .openRequestedAutomation, object: workflowID.uuidString)
     }
 }
 

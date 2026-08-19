@@ -98,6 +98,7 @@ private struct AutomationDetail: View {
     @State private var showingSchedule = false
     @State private var confirmDelete = false
     @State private var exportMessage: String?
+    @State private var actionMessageTitle = "Export"
     @State private var showHowItWorks = false
 
     var body: some View {
@@ -112,6 +113,7 @@ private struct AutomationDetail: View {
                 Spacer()
                 Menu {
                     Button("Review & repair…") { showingRepair = true }
+                    Button("Copy run link for Shortcuts") { copyRunLink() }
                     Button("Export automation…") { exportSkill() }
                     Button("Delete automation", role: .destructive) { confirmDelete = true }
                 } label: {
@@ -247,7 +249,7 @@ private struct AutomationDetail: View {
         } message: {
             Text("This permanently removes the automation and its saved teaching recordings from this Mac. This cannot be undone.")
         }
-        .alert("Export", isPresented: Binding(
+        .alert(actionMessageTitle, isPresented: Binding(
             get: { exportMessage != nil },
             set: { if !$0 { exportMessage = nil } }
         )) {
@@ -349,10 +351,20 @@ private struct AutomationDetail: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try SkillExporter.markdown(for: workflow).write(to: url, atomically: true, encoding: .utf8)
+            actionMessageTitle = "Export"
             exportMessage = "The automation was exported to \(url.lastPathComponent)."
         } catch {
+            actionMessageTitle = "Export"
             exportMessage = "The skill could not be exported: \(error.localizedDescription)"
         }
+    }
+
+    private func copyRunLink() {
+        let url = NeloaDeepLink.runURL(workflowID: workflow.id).absoluteString
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url, forType: .string)
+        actionMessageTitle = "Run link copied"
+        exportMessage = "Paste this link into Apple Shortcuts, Raycast, or another launcher. Opening it shows Neloa’s reviewed run screen; it never starts the automation by itself."
     }
 }
 

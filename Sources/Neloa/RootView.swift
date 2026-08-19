@@ -158,10 +158,10 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showNeloaTeach)) { _ in
             selection = .teach
         }
-        .onReceive(NotificationCenter.default.publisher(for: .openScheduledAutomation)) { notification in
+        .onReceive(NotificationCenter.default.publisher(for: .openRequestedAutomation)) { notification in
             guard let rawID = notification.object as? String,
                   let workflowID = UUID(uuidString: rawID) else { return }
-            _ = NeloaAppDelegate.consumePendingScheduledWorkflowID()
+            _ = NeloaAppDelegate.consumePendingRunWorkflowID()
             selection = .automations
             scheduledRunWorkflowID = workflowID
         }
@@ -171,7 +171,7 @@ struct RootView: View {
         .onAppear {
             permissions.refresh()
             Task { await schedules.reconcile(workflows: store.workflows) }
-            let pendingWorkflowID = NeloaAppDelegate.consumePendingScheduledWorkflowID()
+            let pendingWorkflowID = NeloaAppDelegate.consumePendingRunWorkflowID()
             if let workflowID = pendingWorkflowID {
                 selection = .automations
                 scheduledRunWorkflowID = workflowID
@@ -330,5 +330,5 @@ extension Notification.Name {
     static let showNeloaTour = Notification.Name("showNeloaTour")
     static let showNeloaAutomations = Notification.Name("showNeloaAutomations")
     static let showNeloaTeach = Notification.Name("showNeloaTeach")
-    static let openScheduledAutomation = Notification.Name("openScheduledAutomation")
+    static let openRequestedAutomation = Notification.Name("openRequestedAutomation")
 }

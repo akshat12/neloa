@@ -26,11 +26,11 @@ The workflow library and review timeline also offer focused re-teaching:
 
 The replacement preserves the original action ID, timeline position, variable policy, and approval gate. For text fields, Neloa records both the accessible field identity and a click-position fallback, then attempts to focus the accessible field before replay. This makes application redesigns recoverable and steadily replaces fragile coordinates with accessibility-backed targets.
 
-Neloa also supports daily, weekday, and weekly local reminders. A reminder notification carries only the saved workflow ID and opens the normal “What should change this time?” sheet. It does not plan or execute in the background, so the exact changes, readiness checks, approvals, and cancellation countdown remain mandatory.
+Neloa also supports daily, weekday, and weekly local reminders. A reminder notification carries only the saved workflow ID and opens the normal “What should change this time?” sheet. User-invoked `neloa://run/…` links provide the same reviewed entry point for Apple Shortcuts and launchers. Neither path plans or executes in the background, so the exact changes, readiness checks, approvals, and cancellation countdown remain mandatory.
 
 ## Next: more triggers with explicit authority
 
-Useful recurring automations should also be invokable from a file appearing in a folder or a user-invoked shortcut. Triggers must create a prepared run—not silently take consequential actions. Every trigger should still show its changed values, readiness, approval checkpoints, and a cancellation window.
+Useful recurring automations should also be invokable from a file appearing in a folder. Triggers must create a prepared run—not silently take consequential actions. Every trigger should still show its changed values, readiness, approval checkpoints, and a cancellation window.
 
 ## Defining milestone: bounded live work
 

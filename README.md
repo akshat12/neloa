@@ -32,6 +32,7 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 - Checks the exact run plan before replay, blocking missing permissions, unavailable apps, malformed actions, and invalid spreadsheet targets while clearly warning about coordinate-only clicks and focus-dependent typing.
 - Lets users re-teach one fragile click, text entry, shortcut, or app switch in the original app, preview the replacement, and preserve the rest of the automation, its timing, variables, and approval gates.
 - Supports daily, weekday, or weekly local run reminders. Opening one prepares the normal reviewed run; reminders never replay clicks or typing on their own.
+- Creates private `neloa://run/…` links for Apple Shortcuts, Raycast, and other user-invoked launchers; these links open the same reviewed run boundary.
 - Runs an unchanged saved workflow without loading Qwen or waiting for model planning.
 - Uses one primary local model family—Qwen3-VL 4B—with a recommended 4-bit tier and an optional higher-precision 8-bit tier, plus Apple's on-device model and a narrow deterministic planner as safe fallbacks.
 - Pauses at spoken approval rules such as “always ask me before sending.”
@@ -81,6 +82,12 @@ make unsigned-release RELEASE_VERSION=0.2.18 BUILD_NUMBER=21
 Release packaging stages its ad-hoc app separately and does not overwrite `dist/Neloa.app`. The local app therefore keeps its stable development signature and its macOS privacy permissions.
 
 See the [distribution plan](docs/DISTRIBUTION.md) for the release workflow, limitations, and the future path to signed builds.
+
+## Run from Apple Shortcuts
+
+Open an automation’s **More** menu and choose **Copy run link for Shortcuts**. In Apple Shortcuts, create a shortcut with an **Open URLs** action, paste the copied `neloa://run/…` link, and give the shortcut any name you like. The same link can be opened from Raycast or with `open 'neloa://run/…'` in Terminal.
+
+A run link contains only the local workflow ID. Opening it brings Neloa forward and shows **What should change this time?** It does not load a model, click, type, or execute anything until you review and explicitly start the run. Deleting the automation makes its old link inert.
 
 ## Local visual intelligence
 

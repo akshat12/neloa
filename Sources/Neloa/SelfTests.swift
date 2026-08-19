@@ -39,6 +39,7 @@ enum SelfTests {
         try runPreflightCheck()
         try stepRepairCheck()
         try automationScheduleCheck()
+        try deepLinkCheck()
         try reviewTimelineSelectionCheck()
         try workflowInstructionCheck()
         try agentResponseSafetyCheck()
@@ -1645,6 +1646,37 @@ enum SelfTests {
         let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
         let legacy = try JSONDecoder.neloa.decode(Workflow.self, from: legacyData)
         try expect(legacy.schedule == nil, "workflows saved before reminders existed should continue to decode")
+    }
+
+    private static func deepLinkCheck() throws {
+        let workflowID = UUID()
+        let url = NeloaDeepLink.runURL(workflowID: workflowID)
+        try expect(
+            url.absoluteString == "neloa://run/\(workflowID.uuidString)",
+            "copied run links should use the registered Neloa URL scheme"
+        )
+        try expect(
+            NeloaDeepLink.runWorkflowID(from: url) == workflowID,
+            "a valid run link should route to exactly one saved workflow"
+        )
+
+        let unsafeOrMalformed = [
+            "https://run/\(workflowID.uuidString)",
+            "neloa://delete/\(workflowID.uuidString)",
+            "neloa://run/not-a-workflow",
+            "neloa://run/\(workflowID.uuidString)/extra",
+            "neloa://run/\(workflowID.uuidString)?start=true",
+            "neloa://run/\(workflowID.uuidString)#execute"
+        ]
+        for rawURL in unsafeOrMalformed {
+            guard let malformedURL = URL(string: rawURL) else {
+                throw Failure(description: "could not construct deep-link rejection fixture")
+            }
+            try expect(
+                NeloaDeepLink.runWorkflowID(from: malformedURL) == nil,
+                "run-link routing should reject unsupported or authority-expanding URL: \(rawURL)"
+            )
+        }
     }
 
     private static func workflowInstructionCheck() throws {
