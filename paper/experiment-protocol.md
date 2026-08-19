@@ -133,4 +133,3 @@ The submission artifact should include:
 - study materials, questionnaires, codebook, and de-identified data when consent and policy allow.
 
 The existing `make model-eval` suite is the seed, not the finished research benchmark. Before paper collection it needs a larger frozen task set, independent ground truth, repeated trials, baseline/ablation selection, and analysis scripts with confidence intervals.
-

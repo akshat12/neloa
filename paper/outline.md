@@ -115,4 +115,3 @@ The novelty review must explicitly distinguish Neloa from SUGILITE: voice plus d
 - Hu et al. “PrivAuto: Practical Insights of On-Device Privacy-Preserving Agentic Systems for Mobile GUI Automation.” UISE at ICSE 2026.
 
 These are starting points, not a complete literature review.
-

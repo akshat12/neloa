@@ -257,4 +257,3 @@ private extension View {
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(color.opacity(0.18)))
     }
 }
-
