@@ -1,4 +1,4 @@
-.PHONY: build build-mlx test trigger-test agent-test qwen-test qwen-8bit-test model-eval model-eval-8bit product-video product-video-frames setup-signing app basic-app unsigned-release run clean
+.PHONY: build build-mlx test trigger-test agent-test qwen-test qwen-8bit-test model-eval model-eval-8bit model-eval-compare product-video product-video-frames setup-signing app basic-app unsigned-release run clean
 
 build:
 	swift build
@@ -36,6 +36,11 @@ model-eval-8bit:
 	NELOA_EXECUTABLE_PATH="$(CURDIR)/.build/arm64-apple-macosx/debug/Neloa" NELOA_APP_OUTPUT_PATH="$(CURDIR)/.build/model-eval/Neloa.app" NELOA_FORCE_ADHOC=1 NELOA_EXPECT_MLX_RESOURCES=1 sh scripts/package-app.sh
 	mkdir -p .build/model-eval/reports
 	NELOA_EVAL_COMMIT="$$(git rev-parse HEAD 2>/dev/null || true)" NELOA_MODEL_EVAL_REPORT="$(CURDIR)/.build/model-eval/reports/qwen3-vl-4b-8bit.json" .build/model-eval/Neloa.app/Contents/MacOS/Neloa --model-eval-8bit
+
+model-eval-compare:
+	@test -n "$(BASELINE)" || (echo "BASELINE=/path/to/baseline.json is required" >&2; exit 1)
+	@test -n "$(CANDIDATE)" || (echo "CANDIDATE=/path/to/candidate.json is required" >&2; exit 1)
+	NELOA_MODEL_EVAL_BASELINE="$(abspath $(BASELINE))" NELOA_MODEL_EVAL_CANDIDATE="$(abspath $(CANDIDATE))" NELOA_MODEL_EVAL_COMPARISON_REPORT="$(CURDIR)/.build/model-eval/reports/comparison.json" swift run Neloa --compare-model-evals
 
 product-video:
 	swift scripts/render-product-video.swift

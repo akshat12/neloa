@@ -31,6 +31,32 @@ NELOA_MODEL_EVAL_VERBOSE=1 \
 make model-eval
 ```
 
+## Compare two runs
+
+Keep a baseline JSON report before changing a prompt, model revision, quantization, evidence selector, or planner. After running the candidate, compare them directly:
+
+```sh
+make model-eval-compare \
+  BASELINE=/path/to/baseline.json \
+  CANDIDATE=/path/to/candidate.json
+```
+
+The command writes:
+
+- `.build/model-eval/reports/comparison.json`
+- `.build/model-eval/reports/comparison.md`
+
+The comparison includes overall and per-case score changes, runtime changes, newly failing assertions, and resolved failures. It exits nonzero when:
+
+- the candidate fails its own evaluation gate;
+- the overall score drops;
+- a previously passing case or assertion fails; or
+- the reports use different schemas, case selections, categories, assertion names, weights, critical gates, or expected values.
+
+Different Git commits, model repositories, revisions, and precision tiers are deliberately allowed. This makes 4-bit versus 8-bit and before-versus-after prompt comparisons useful while preventing an altered test contract from being presented as a model improvement. Stored totals are recomputed from the assertions, so a malformed or manually altered report is rejected as incompatible. Runtime changes are reported but are not quality failures.
+
+GitHub Actions exercises the complete comparison command with synthetic reports on every push. The real Qwen suite remains a local maintainer gate because it downloads several gigabytes and runs GPU inference.
+
 ## What it covers
 
 The suite recreates the demonstrated Drive/Sheets workflow without touching a real Google account:
@@ -73,4 +99,4 @@ Run `make test` on every ordinary code change. Run `make model-eval` before merg
 - workflow learning or run planning;
 - semantic compilation and variable roles.
 
-For a release candidate or a model-tier comparison, run both model-eval targets. Keep the generated JSON reports as CI artifacts or attach them to the pull request so scores and failures can be compared over time. The evaluation never performs replay, opens Google Drive, or changes external data.
+For a release candidate or a model-tier comparison, run both model-eval targets and compare their reports. Keep the generated JSON and comparison reports as CI artifacts or attach them to the pull request so scores and failures can be audited over time. The evaluation never performs replay, opens Google Drive, or changes external data.

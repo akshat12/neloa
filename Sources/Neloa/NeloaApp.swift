@@ -136,6 +136,15 @@ enum NeloaMain {
                 }
             }
             dispatchMain()
+        } else if CommandLine.arguments.contains("--compare-model-evals") {
+            do {
+                let written = try ModelEvaluationComparison.run()
+                print(ModelEvaluationComparison.consoleSummary(written))
+                if !written.report.passed { Foundation.exit(1) }
+            } catch {
+                fputs("Neloa model comparison could not run: \(error)\n", stderr)
+                Foundation.exit(1)
+            }
         } else if CommandLine.arguments.contains("--model-eval") || CommandLine.arguments.contains("--model-eval-8bit") {
             Task { @MainActor in
                 do {

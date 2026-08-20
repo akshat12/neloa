@@ -52,6 +52,7 @@ enum SelfTests {
         try evidenceCoordinateMappingCheck()
         try qwenResponseRepairCheck()
         try modelEvaluationScoringCheck()
+        try modelEvaluationComparisonCheck()
     }
 
     private static func modelEvaluationScoringCheck() throws {
@@ -112,6 +113,177 @@ enum SelfTests {
         let encodedCases = object?["cases"] as? [[String: Any]]
         try expect(object?["score"] != nil && object?["passed"] != nil, "machine-readable model reports should include aggregate outcome fields")
         try expect(encodedCases?.first?["score"] != nil && encodedCases?.first?["passed"] != nil, "machine-readable model reports should include per-case outcome fields")
+    }
+
+    private static func modelEvaluationComparisonCheck() throws {
+        let structuralPass = ModelEvaluationAssertion(
+            name: "preserve replay graph",
+            passed: true,
+            critical: true,
+            weight: 4,
+            expected: "unchanged",
+            actual: "unchanged"
+        )
+        let groundingPass = ModelEvaluationAssertion(
+            name: "ground the target",
+            passed: true,
+            critical: false,
+            weight: 1,
+            expected: "semantic target",
+            actual: "semantic target"
+        )
+        let groundingFailure = ModelEvaluationAssertion(
+            name: "ground the target",
+            passed: false,
+            critical: false,
+            weight: 1,
+            expected: "semantic target",
+            actual: "coordinate only"
+        )
+
+        func report(
+            commit: String,
+            model: String = "fixture/model",
+            precision: String = "4-bit",
+            duration: Double,
+            assertions: [ModelEvaluationAssertion],
+            caseID: String = "comparison-fixture"
+        ) -> ModelEvaluationReport {
+            ModelEvaluationReport(
+                generatedAt: Date(timeIntervalSince1970: duration),
+                gitCommit: commit,
+                modelID: model,
+                modelRevision: "fixture-revision",
+                precision: precision,
+                operatingSystem: "fixture macOS",
+                physicalMemoryBytes: 16,
+                minimumScore: 0.80,
+                durationSeconds: duration,
+                cases: [ModelEvaluationCase(
+                    id: caseID,
+                    category: "self-test",
+                    durationSeconds: duration,
+                    assertions: assertions
+                )]
+            )
+        }
+
+        let baseline = report(
+            commit: "baseline",
+            duration: 10,
+            assertions: [structuralPass, groundingPass]
+        )
+        let otherTier = report(
+            commit: "candidate",
+            model: "fixture/other-quantization",
+            precision: "8-bit",
+            duration: 12,
+            assertions: [structuralPass, groundingPass]
+        )
+        let tierComparison = ModelEvaluationComparison.compare(
+            baseline: baseline,
+            candidate: otherTier,
+            generatedAt: Date(timeIntervalSince1970: 100)
+        )
+        try expect(tierComparison.compatible, "different commits and quantization tiers should remain comparable when the evaluation contract is identical")
+        try expect(tierComparison.passed && tierComparison.regressions.isEmpty, "an equally accurate candidate tier should pass comparison")
+        try expect(tierComparison.durationDeltaSeconds == 2, "comparison should report runtime changes without treating them as quality failures")
+
+        let regressed = report(
+            commit: "regressed",
+            duration: 9,
+            assertions: [structuralPass, groundingFailure]
+        )
+        let regression = ModelEvaluationComparison.compare(
+            baseline: baseline,
+            candidate: regressed,
+            generatedAt: Date(timeIntervalSince1970: 101)
+        )
+        try expect(regression.compatible && !regression.passed, "a comparable candidate with a newly failing assertion should fail")
+        try expect(
+            regression.regressions.contains { $0.kind == .assertionRegressed && $0.assertionName == "ground the target" },
+            "comparison should identify the exact newly failing assertion"
+        )
+        try expect(
+            regression.regressions.contains { $0.kind == .overallScoreDropped },
+            "comparison should report an aggregate score drop"
+        )
+
+        let previouslySoftFailure = report(
+            commit: "soft-failure",
+            duration: 14,
+            assertions: [structuralPass, groundingFailure]
+        )
+        let improved = ModelEvaluationComparison.compare(
+            baseline: previouslySoftFailure,
+            candidate: baseline,
+            generatedAt: Date(timeIntervalSince1970: 102)
+        )
+        try expect(improved.passed, "resolving a noncritical miss without adding regressions should pass")
+        try expect(
+            improved.cases.first?.improvedAssertions == ["ground the target"],
+            "comparison should preserve the exact resolved assertion"
+        )
+
+        var changedExpected = groundingPass
+        changedExpected.expected = "different contract"
+        let changedDefinition = report(
+            commit: "changed-definition",
+            duration: 10,
+            assertions: [structuralPass, changedExpected]
+        )
+        let incompatible = ModelEvaluationComparison.compare(
+            baseline: baseline,
+            candidate: changedDefinition,
+            generatedAt: Date(timeIntervalSince1970: 103)
+        )
+        try expect(!incompatible.compatible && !incompatible.passed, "changed assertion definitions must not produce a misleading historical comparison")
+        try expect(
+            incompatible.regressions.contains { $0.kind == .incompatibleReports },
+            "incompatible reports should explain that both runs need the same evaluation contract"
+        )
+
+        var tampered = baseline
+        tampered.score = 0.99
+        let inconsistent = ModelEvaluationComparison.compare(
+            baseline: baseline,
+            candidate: tampered,
+            generatedAt: Date(timeIntervalSince1970: 104)
+        )
+        try expect(
+            !inconsistent.compatible && !inconsistent.passed,
+            "comparison must reject reports whose stored totals disagree with their assertions"
+        )
+
+        let temporary = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Neloa-model-comparison-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        let baselineURL = temporary.appendingPathComponent("baseline.json")
+        let candidateURL = temporary.appendingPathComponent("candidate.json")
+        let comparisonURL = temporary.appendingPathComponent("comparison.json")
+        try JSONEncoder.neloa.encode(baseline).write(to: baselineURL, options: .atomic)
+        try JSONEncoder.neloa.encode(otherTier).write(to: candidateURL, options: .atomic)
+        let written = try ModelEvaluationComparison.run(environment: [
+            "NELOA_MODEL_EVAL_BASELINE": baselineURL.path,
+            "NELOA_MODEL_EVAL_CANDIDATE": candidateURL.path,
+            "NELOA_MODEL_EVAL_COMPARISON_REPORT": comparisonURL.path
+        ])
+        try expect(written.report.passed, "the file-based comparison command should preserve a passing comparison")
+        try expect(FileManager.default.fileExists(atPath: comparisonURL.path), "comparison should write machine-readable JSON")
+        try expect(
+            FileManager.default.fileExists(atPath: comparisonURL.deletingPathExtension().appendingPathExtension("md").path),
+            "comparison should write a human-readable Markdown report"
+        )
+        let decoded = try JSONDecoder.neloa.decode(
+            ModelEvaluationComparisonReport.self,
+            from: Data(contentsOf: comparisonURL)
+        )
+        try expect(decoded == written.report, "the comparison report should round-trip through its public JSON format")
+        try expect(
+            ModelEvaluationComparison.markdown(regression).contains("ground the target"),
+            "the Markdown report should identify assertion regressions"
+        )
     }
 
     private static func appearanceCheck() throws {

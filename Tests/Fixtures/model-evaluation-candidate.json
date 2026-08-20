@@ -1,0 +1,45 @@
+{
+  "schemaVersion" : 1,
+  "generatedAt" : "2026-08-19T00:05:00Z",
+  "gitCommit" : "candidate-fixture",
+  "modelID" : "fixture/qwen",
+  "modelRevision" : "fixture-revision",
+  "precision" : "4-bit",
+  "operatingSystem" : "fixture macOS",
+  "physicalMemoryBytes" : 17179869184,
+  "minimumScore" : 0.8,
+  "durationSeconds" : 9,
+  "cases" : [
+    {
+      "id" : "grounding-fixture",
+      "category" : "visual-learning",
+      "durationSeconds" : 9,
+      "assertions" : [
+        {
+          "name" : "preserve replay graph",
+          "passed" : true,
+          "critical" : true,
+          "weight" : 4,
+          "expected" : "unchanged",
+          "actual" : "unchanged"
+        },
+        {
+          "name" : "ground the target",
+          "passed" : true,
+          "critical" : false,
+          "weight" : 1,
+          "expected" : "semantic target",
+          "actual" : "semantic target"
+        }
+      ],
+      "earnedScore" : 5,
+      "maximumScore" : 5,
+      "score" : 1,
+      "passed" : true
+    }
+  ],
+  "earnedScore" : 5,
+  "maximumScore" : 5,
+  "score" : 1,
+  "passed" : true
+}

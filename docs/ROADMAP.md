@@ -2,7 +2,7 @@
 
 Neloa’s next features are ranked by whether they make a demonstrated automation more trustworthy, repairable, and broadly useful without turning the local model into an unbounded computer-use agent.
 
-## Now: readiness, repair, reviewed triggers, and diagnostics
+## Now: readiness, repair, reviewed triggers, diagnostics, and evaluation
 
 Before replay, Neloa performs a deterministic preflight over the exact reviewed plan. It checks:
 
@@ -32,6 +32,8 @@ For workflows with a demonstrated flexible file input, Neloa can watch one selec
 
 For early support and issue reports, Settings can generate a local diagnostics report that the user inspects before saving. It includes only versions, permission and model state, safe structural counts, readiness categories, and aggregate run outcomes. Recordings, OCR, user-authored content, paths, coordinates, application identities, UUIDs, timestamps from saved work, and raw failures are excluded by construction and regression tests.
 
+Model, prompt, quantization, evidence, and planning changes use a comprehensive local Qwen benchmark. Baseline and candidate JSON reports can now be compared case by case, with newly failing assertions, resolved failures, score changes, and runtime changes preserved in JSON and Markdown. Comparisons reject altered test contracts instead of presenting incomparable scores as an improvement.
+
 ## Defining milestone: bounded live work
 
 Neloa should eventually support a reviewed runtime step such as “summarize the article that is open now” or “extract the total from this month’s report.” This is different from static replay and requires:
@@ -44,10 +46,9 @@ Neloa should eventually support a reviewed runtime step such as “summarize the
 
 The first version should support one bounded read/transform/write step inside an otherwise deterministic workflow, not unrestricted autonomous browsing.
 
-## Later: sharing and diagnostics
+## Later: sharing
 
 - Importable automation templates that contain no recordings, secrets, or machine-specific coordinates.
-- Historical model-evaluation comparisons for prompts, quantization tiers, and visual-grounding changes.
 
 ## Product gates
 
