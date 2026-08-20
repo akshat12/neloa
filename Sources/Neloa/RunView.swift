@@ -48,11 +48,13 @@ private enum RunDisposition: String, CaseIterable, Identifiable {
 
 struct RunView: View {
     let workflow: Workflow
+    let onClose: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var agent: LocalAgentService
     @EnvironmentObject private var runner: AutomationRunner
     @EnvironmentObject private var store: WorkflowStore
     @EnvironmentObject private var permissions: PermissionCenter
+    @EnvironmentObject private var runRouter: AutomationRunRouter
     @StateObject private var voice = VoiceService()
     @State private var instruction = ""
     @State private var plan: RunPlan?
@@ -68,14 +70,35 @@ struct RunView: View {
     @State private var requestBeganByVoice = false
     @State private var restartWarningStepCount: Int?
 
+    init(
+        workflow: Workflow,
+        initialInstruction: String = "",
+        onClose: (() -> Void)? = nil
+    ) {
+        self.workflow = workflow
+        self.onClose = onClose
+        _instruction = State(initialValue: initialInstruction)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top, spacing: 16) {
                 PageHeader(title: "What should change this time?", subtitle: workflow.name)
+                if onClose != nil, runRouter.queuedRequestCount > 0 {
+                    Label(
+                        "\(runRouter.queuedRequestCount) more prepared",
+                        systemImage: "tray.full.fill"
+                    )
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel(
+                        "\(runRouter.queuedRequestCount) more reviewed run \(runRouter.queuedRequestCount == 1 ? "request" : "requests") queued"
+                    )
+                }
                 Button {
                     cancelPlanning()
                     runner.stop()
-                    dismiss()
+                    close()
                 } label: {
                     Image(systemName: "xmark.circle.fill").font(.title2)
                 }
@@ -162,7 +185,9 @@ struct RunView: View {
         }
         .padding(24)
         .tint(NeloaPalette.accent)
-        .interactiveDismissDisabled(isRunning)
+        // Prepared requests must leave through the explicit Close/Done path so
+        // the FIFO router can reveal the next review instead of hiding it.
+        .interactiveDismissDisabled(isRunning || onClose != nil)
         .onAppear { runner.reset() }
         .onDisappear {
             cancelPlanning()
@@ -495,7 +520,7 @@ struct RunView: View {
         case .completed:
             VStack(spacing: 10) {
                 Label("Run complete", systemImage: "checkmark.circle.fill").font(.headline).foregroundStyle(.green)
-                Button("Done") { dismiss() }.buttonStyle(.borderedProminent)
+                Button("Done") { close() }.buttonStyle(.borderedProminent)
             }.frame(maxWidth: .infinity)
         case .failed(let message):
             VStack(alignment: .leading, spacing: 10) {
@@ -546,7 +571,7 @@ struct RunView: View {
                     }
                     .buttonStyle(.bordered)
                 } else {
-                    Button("Close and review automation") { dismiss() }
+                    Button("Close and review automation") { close() }
                         .buttonStyle(.bordered)
                 }
             }
@@ -615,6 +640,14 @@ struct RunView: View {
         planningTask = nil
         planningRequestID = nil
         if agent.isPlanning { agent.status = "Planning cancelled" }
+    }
+
+    private func close() {
+        if let onClose {
+            onClose()
+        } else {
+            dismiss()
+        }
     }
 
     private func toggleVoice() async {

@@ -1,4 +1,4 @@
-.PHONY: build build-mlx test agent-test qwen-test qwen-8bit-test model-eval model-eval-8bit product-video product-video-frames setup-signing app basic-app unsigned-release run clean
+.PHONY: build build-mlx test trigger-test agent-test qwen-test qwen-8bit-test model-eval model-eval-8bit product-video product-video-frames setup-signing app basic-app unsigned-release run clean
 
 build:
 	swift build
@@ -8,6 +8,9 @@ build-mlx:
 
 test:
 	swift run Neloa --self-test
+
+trigger-test:
+	swift run Neloa --file-trigger-smoke-test
 
 agent-test:
 	swift run Neloa --agent-smoke-test

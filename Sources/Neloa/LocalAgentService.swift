@@ -224,6 +224,10 @@ final class LocalAgentService: ObservableObject {
             status = "Planned with safe spreadsheet navigation"
             return spreadsheetPlan
         }
+        if let filePlan = RunPlanner.watchedFilePlan(workflow: workflow, instruction: instruction) {
+            status = "Planned with watched-folder safety checks"
+            return filePlan
+        }
         isPlanning = true
         defer { isPlanning = false }
 

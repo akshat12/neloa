@@ -34,6 +34,14 @@ Neloa is designed for demonstrated work whose route stays mostly stable while a 
 - Present Command-C and Command-V as Copy selected content and Paste copied content in review.
 - Move the content currently selected by the demonstrated workflow; Neloa does not invent or transform that content.
 
+### Incoming-file workflows
+
+- Watch one user-selected local folder while Neloa is open.
+- Filter for CSV, PDF, spreadsheet, text, image, or any complete file.
+- Wait for a newly arrived or replaced file to stop changing before preparing a run.
+- Substitute only the demonstrated flexible file field and require the normal preview before replay.
+- Ignore files that existed when monitoring began, hidden files, and common partial downloads.
+
 ## Reliability boundary
 
 These workflows still depend on the demonstrated applications exposing useful accessibility labels or retaining compatible layouts. Neloa prefers semantic control labels when available and falls back to captured coordinates. Coordinate-only actions should be reviewed carefully after an app redesign.

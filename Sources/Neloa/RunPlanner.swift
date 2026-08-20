@@ -52,6 +52,9 @@ enum RunPlanner {
         if let spreadsheetPlan = spreadsheetCellPlan(workflow: workflow, instruction: cleanInstruction) {
             return spreadsheetPlan
         }
+        if let filePlan = watchedFilePlan(workflow: workflow, instruction: cleanInstruction) {
+            return filePlan
+        }
 
         var steps = workflow.steps
         var changes: [PlannedChange] = []
@@ -248,6 +251,50 @@ enum RunPlanner {
             steps: steps,
             changes: changes,
             summary: "Set \(target) to \(short(safeValue)) for this run"
+        )
+    }
+
+    /// Applies only the exact local path supplied by Neloa's watched-folder
+    /// trigger to an already demonstrated flexible file input. It cannot add a
+    /// picker interaction, upload, or any other action.
+    static func watchedFilePlan(workflow: Workflow, instruction: String) -> RunPlan? {
+        guard instruction.lowercased().hasPrefix(FileTriggerSupport.instructionPrefix.lowercased()),
+              let trigger = workflow.fileTrigger else {
+            return nil
+        }
+        let path = String(instruction.dropFirst(FileTriggerSupport.instructionPrefix.count))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard path.hasPrefix("/"), path.count <= 1_024,
+              !path.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else { return nil }
+
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue else {
+            return nil
+        }
+
+        let fileURL = URL(fileURLWithPath: path).standardizedFileURL
+        guard FileTriggerSupport.contains(fileURL, in: trigger),
+              let inputIndex = FileTriggerSupport.fileInputIndex(
+                in: workflow,
+                preferredStepID: trigger.inputStepID
+              ) else { return nil }
+        var steps = workflow.steps
+        let before = steps[inputIndex].text ?? ""
+        guard before != fileURL.path else { return nil }
+        steps[inputIndex].text = fileURL.path
+        steps[inputIndex].title = "Use \(short(fileURL.lastPathComponent))"
+        steps[inputIndex].detail = "New file from watched folder · Changed for this run"
+
+        return RunPlan(
+            instruction: instruction,
+            steps: steps,
+            changes: [PlannedChange(
+                stepID: steps[inputIndex].id,
+                before: before,
+                after: fileURL.path,
+                reason: "Use the new file from the watched folder"
+            )],
+            summary: "Use \(short(fileURL.lastPathComponent)) for this run"
         )
     }
 

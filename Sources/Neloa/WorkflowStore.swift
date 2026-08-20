@@ -47,12 +47,22 @@ final class WorkflowStore: ObservableObject {
         }
         load()
         loadActivity()
+        #if DEBUG
+        seedFileTriggerUITestIfRequested(environment: environment)
+        #endif
     }
 
     nonisolated static func uiTestFileURL(environment: [String: String]) -> URL? {
         guard let path = environment["NELOA_UI_TEST_STORE_PATH"]?.trimmingCharacters(in: .whitespacesAndNewlines),
               !path.isEmpty else { return nil }
         return URL(fileURLWithPath: path)
+    }
+
+    nonisolated static func uiTestFileTriggerFolder(environment: [String: String]) -> URL? {
+        guard let path = environment["NELOA_UI_TEST_FILE_TRIGGER_FOLDER"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
     }
 
     func save(_ workflow: Workflow) {
@@ -294,6 +304,55 @@ final class WorkflowStore: ObservableObject {
         }
         if changed { persist() }
     }
+
+    #if DEBUG
+    private func seedFileTriggerUITestIfRequested(environment: [String: String]) {
+        guard workflows.isEmpty,
+              let folder = Self.uiTestFileTriggerFolder(environment: environment) else { return }
+        let fileInput = WorkflowStep(
+            kind: .typeText,
+            title: "Choose source file",
+            detail: "Upload document path",
+            time: 1,
+            text: "/Reports/July report.pdf",
+            target: "Source file",
+            runVariable: true,
+            application: "Report Importer",
+            bundleIdentifier: "ai.neloa.fixture.report-importer"
+        )
+        let workflow = Workflow(
+            name: "Import monthly report",
+            transcript: "Use the new report file for this run.",
+            steps: [
+                WorkflowStep(
+                    kind: .openApp,
+                    title: "Open Report Importer",
+                    time: 0,
+                    application: "Report Importer",
+                    bundleIdentifier: "ai.neloa.fixture.report-importer"
+                ),
+                fileInput,
+                WorkflowStep(
+                    kind: .click,
+                    title: "Import report",
+                    time: 2,
+                    x: 520,
+                    y: 410,
+                    target: "Import",
+                    application: "Report Importer",
+                    bundleIdentifier: "ai.neloa.fixture.report-importer",
+                    requiresApproval: true
+                )
+            ],
+            fileTrigger: AutomationFileTrigger(
+                folderPath: folder.path,
+                kind: .pdf,
+                inputStepID: fileInput.id
+            )
+        )
+        save(workflow)
+    }
+    #endif
 }
 
 extension JSONEncoder {

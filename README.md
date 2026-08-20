@@ -35,6 +35,7 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 - Lets users re-teach one fragile click, text entry, shortcut, or app switch in the original app, preview the replacement, and preserve the rest of the automation, its timing, variables, and approval gates.
 - Supports daily, weekday, or weekly local run reminders. Opening one prepares the normal reviewed run; reminders never replay clicks or typing on their own.
 - Creates private `neloa://run/…` links for Apple Shortcuts, Raycast, and other user-invoked launchers; these links open the same reviewed run boundary.
+- Watches one user-selected local folder while Neloa is open, waits for a new or replaced matching file to finish copying, and prepares its demonstrated file input for review without adding actions or loading a model.
 - Runs an unchanged saved workflow without loading Qwen or waiting for model planning.
 - Uses one primary local model family—Qwen3-VL 4B—with a recommended 4-bit tier and an optional higher-precision 8-bit tier, plus Apple's on-device model and a narrow deterministic planner as safe fallbacks.
 - Pauses at spoken approval rules such as “always ask me before sending.”
@@ -49,12 +50,13 @@ Requirements for the complete app: macOS 15 or newer, Apple silicon, 16 GB of me
 ```sh
 make setup-signing
 make test
+make trigger-test
 make agent-test
 make app
 open dist/Neloa.app
 ```
 
-`make setup-signing` is a one-time development setup that creates a local signing identity in your login Keychain. The first signed build may ask for your Mac login password; choose **Always Allow** so later builds can sign without prompting. Keeping the same identity across builds lets macOS retain Neloa’s privacy permissions. `make test` runs deterministic workflow checks. `make agent-test` makes a real request to Apple's on-device model and verifies the resulting executable change plan.
+`make setup-signing` is a one-time development setup that creates a local signing identity in your login Keychain. The first signed build may ask for your Mac login password; choose **Always Allow** so later builds can sign without prompting. Keeping the same identity across builds lets macOS retain Neloa’s privacy permissions. `make test` runs deterministic workflow checks. `make trigger-test` exercises a real watched-folder event from file creation through a queued reviewed run. `make agent-test` makes a real request to Apple's on-device model and verifies the resulting executable change plan.
 
 `make qwen-test` performs the end-to-end direct MLX model check, including real GPU inference. Its first run downloads the same 3.1 GB 4-bit model used by the app; later runs reuse Neloa's private local cache. `make qwen-8bit-test` performs the equivalent check for the optional 5.1 GB 8-bit tier.
 
@@ -91,6 +93,20 @@ Open an automation’s **More** menu and choose **Copy run link for Shortcuts**.
 
 A run link contains only the local workflow ID. Opening it brings Neloa forward and shows **What should change this time?** It does not load a model, click, type, or execute anything until you review and explicitly start the run. Deleting the automation makes its old link inert.
 
+Daily reminders, shortcut links, and watched folders all use the same serialized reviewed-run queue. See [reviewed run triggers](docs/TRIGGERS.md) for the safety boundary and watched-folder behavior.
+
+### Prepare a run when a file arrives
+
+For an automation that already has a flexible file field:
+
+1. Open **My automations**, select the automation, and choose **More → Configure watched folder…**. You can also use **Choose folder** on its detail page.
+2. Choose the local folder, matching file type, and exact demonstrated field Neloa should fill.
+3. Select **Save watched folder** and leave Neloa open.
+4. Add a matching file, or move a newer copy over a file with the same name. After it stops changing, Neloa opens **What should change this time?** with the exact local path filled in.
+5. Select **Preview changes**. Neloa shows the single before/after value, checks replay readiness, and waits for you to start—or close—the run.
+
+This path is deterministic: it does not load Qwen or Apple’s language model. It accepts only a complete matching file directly inside the selected folder, changes only the chosen demonstrated input, and never replays in the background. If several files arrive, Neloa shows the queue count and presents each review in order.
+
 ## Local visual intelligence
 
 Neloa offers two precisions of the same Qwen3-VL 4B Instruct model. **Balanced · 4-bit** is the 3.1 GB default and is recommended for 16 GB Macs. **Higher precision · 8-bit** is an optional 5.1 GB download and is best with 24 GB or more. People can switch tiers in Settings; only the selected tier is loaded into memory.
@@ -103,7 +119,7 @@ If the model is skipped or unavailable, Neloa still records and replays captured
 
 See the [model strategy](docs/MODELS.md) for tier guidance, measured resource use, and the visual models being evaluated.
 See [supported scenarios](docs/SCENARIOS.md) for current product-fit boundaries and the deferred live research-and-synthesis milestone.
-See the [product roadmap](docs/ROADMAP.md) for the prioritized path from run readiness, repair, and safe reminders to bounded live work.
+See the [product roadmap](docs/ROADMAP.md) for the prioritized path from run readiness, repair, and reviewed triggers to bounded live work.
 See the [research paper plan](paper/README.md) and [conference venue strategy](docs/CONFERENCE_VENUES.md) for the proposed evaluation and publication path.
 
 ## Privacy and safety

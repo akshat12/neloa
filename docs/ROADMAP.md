@@ -2,7 +2,7 @@
 
 Neloa’s next features are ranked by whether they make a demonstrated automation more trustworthy, repairable, and broadly useful without turning the local model into an unbounded computer-use agent.
 
-## Now: readiness, repair, and reviewed run reminders
+## Now: readiness, repair, and reviewed triggers
 
 Before replay, Neloa performs a deterministic preflight over the exact reviewed plan. It checks:
 
@@ -26,11 +26,9 @@ The workflow library and review timeline also offer focused re-teaching:
 
 The replacement preserves the original action ID, timeline position, variable policy, and approval gate. For text fields, Neloa records both the accessible field identity and a click-position fallback, then attempts to focus the accessible field before replay. This makes application redesigns recoverable and steadily replaces fragile coordinates with accessibility-backed targets.
 
-Neloa also supports daily, weekday, and weekly local reminders. A reminder notification carries only the saved workflow ID and opens the normal “What should change this time?” sheet. User-invoked `neloa://run/…` links provide the same reviewed entry point for Apple Shortcuts and launchers. Neither path plans or executes in the background, so the exact changes, readiness checks, approvals, and cancellation countdown remain mandatory.
+Neloa also supports daily, weekday, and weekly local reminders. A reminder notification carries only the saved workflow ID and opens the normal “What should change this time?” sheet. User-invoked `neloa://run/…` links provide the same reviewed entry point for Apple Shortcuts and launchers.
 
-## Next: more triggers with explicit authority
-
-Useful recurring automations should also be invokable from a file appearing in a folder. Triggers must create a prepared run—not silently take consequential actions. Every trigger should still show its changed values, readiness, approval checkpoints, and a cancellation window.
+For workflows with a demonstrated flexible file input, Neloa can watch one selected local folder while the app is open. It filters partial downloads, waits for a matching file to settle, and queues the exact path as a proposed one-time input change. Reminders, shortcut links, and file arrivals share one FIFO queue; none plans or executes in the background. The exact changes, readiness checks, approvals, and cancellation countdown remain mandatory.
 
 ## Defining milestone: bounded live work
 

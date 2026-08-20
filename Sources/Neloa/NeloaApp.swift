@@ -4,16 +4,9 @@ import UserNotifications
 
 @MainActor
 final class NeloaAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
-    private(set) static var pendingRunWorkflowID: UUID?
-
-    static func consumePendingRunWorkflowID() -> UUID? {
-        defer { pendingRunWorkflowID = nil }
-        return pendingRunWorkflowID
-    }
-
     func application(_ application: NSApplication, open urls: [URL]) {
         guard let workflowID = urls.lazy.compactMap(NeloaDeepLink.runWorkflowID).first else { return }
-        routeToReviewedRun(workflowID)
+        routeToReviewedRun(workflowID, source: .shortcut)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -38,14 +31,16 @@ final class NeloaAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificatio
         guard let workflowID = response.notification.request.content.userInfo["workflowID"] as? String else { return }
         await MainActor.run {
             guard let workflowID = UUID(uuidString: workflowID) else { return }
-            self.routeToReviewedRun(workflowID)
+            self.routeToReviewedRun(workflowID, source: .reminder)
         }
     }
 
-    private func routeToReviewedRun(_ workflowID: UUID) {
-        Self.pendingRunWorkflowID = workflowID
+    private func routeToReviewedRun(_ workflowID: UUID, source: AutomationRunSource) {
+        AutomationRunRouter.shared.enqueue(AutomationRunRequest(
+            workflowID: workflowID,
+            source: source
+        ))
         NSApplication.shared.activate(ignoringOtherApps: true)
-        NotificationCenter.default.post(name: .openRequestedAutomation, object: workflowID.uuidString)
     }
 }
 
@@ -58,6 +53,8 @@ struct NeloaApp: App {
     @StateObject private var runner = AutomationRunner()
     @StateObject private var permissions = PermissionCenter()
     @StateObject private var schedules = AutomationScheduleCenter()
+    @StateObject private var runRouter = AutomationRunRouter.shared
+    @StateObject private var fileTriggers = FileTriggerCenter()
 
     var body: some Scene {
         WindowGroup {
@@ -69,6 +66,8 @@ struct NeloaApp: App {
                 .environmentObject(permissions)
                 .environmentObject(appearance)
                 .environmentObject(schedules)
+                .environmentObject(runRouter)
+                .environmentObject(fileTriggers)
                 .tint(NeloaPalette.accent)
                 .accentColor(NeloaPalette.accent)
                 .preferredColorScheme(appearance.colorScheme)
@@ -121,6 +120,18 @@ enum NeloaMain {
                     Foundation.exit(0)
                 } catch {
                     fputs("Neloa on-device agent smoke test failed: \(error)\n", stderr)
+                    Foundation.exit(1)
+                }
+            }
+            dispatchMain()
+        } else if CommandLine.arguments.contains("--file-trigger-smoke-test") {
+            Task { @MainActor in
+                do {
+                    try await SelfTests.fileTriggerSmokeTest()
+                    print("Neloa watched-folder smoke test passed")
+                    Foundation.exit(0)
+                } catch {
+                    fputs("Neloa watched-folder smoke test failed: \(error)\n", stderr)
                     Foundation.exit(1)
                 }
             }

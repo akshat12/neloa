@@ -122,6 +122,50 @@ struct AutomationSchedule: Codable, Equatable, Sendable {
     var isEnabled = true
 }
 
+enum AutomationFileTriggerKind: String, Codable, CaseIterable, Identifiable, Sendable {
+    case any
+    case csv
+    case pdf
+    case spreadsheet
+    case text
+    case image
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .any: "Any file"
+        case .csv: "CSV"
+        case .pdf: "PDF"
+        case .spreadsheet: "Spreadsheet"
+        case .text: "Text"
+        case .image: "Image"
+        }
+    }
+
+    var fileExtensions: Set<String>? {
+        switch self {
+        case .any: nil
+        case .csv: ["csv"]
+        case .pdf: ["pdf"]
+        case .spreadsheet: ["csv", "numbers", "ods", "xls", "xlsx"]
+        case .text: ["md", "rtf", "txt"]
+        case .image: ["gif", "heic", "jpeg", "jpg", "png", "tiff", "webp"]
+        }
+    }
+}
+
+/// Watches a user-selected local folder only while Neloa is running. A match
+/// prepares the normal reviewed run and never grants replay authority.
+struct AutomationFileTrigger: Codable, Equatable, Sendable {
+    var folderPath: String
+    var kind: AutomationFileTriggerKind
+    /// The demonstrated flexible text field that receives the arrived path.
+    /// Optional so early trigger fixtures and workflows continue to decode.
+    var inputStepID: UUID? = nil
+    var isEnabled = true
+}
+
 struct WorkflowStep: Identifiable, Codable, Equatable, Sendable {
     var id = UUID()
     var kind: WorkflowStepKind
@@ -182,6 +226,8 @@ struct Workflow: Identifiable, Codable, Equatable, Sendable {
     var defaultInstruction = "Run it the same way"
     /// Optional so existing saved workflows decode without a migration.
     var schedule: AutomationSchedule? = nil
+    /// Optional so workflows saved before watched folders continue to decode.
+    var fileTrigger: AutomationFileTrigger? = nil
     /// Optional so existing on-disk workflows decode without a migration shim.
     var semanticVersion: Int? = nil
 }

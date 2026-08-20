@@ -33,6 +33,9 @@ jobs:
       - name: Run deterministic tests
         run: make test
 
+      - name: Exercise watched-folder event flow
+        run: make trigger-test
+
       - name: Build production executable
         run: swift build -c release --product Neloa
 

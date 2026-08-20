@@ -3,7 +3,7 @@ import SwiftUI
 
 struct AutomationsView: View {
     @EnvironmentObject private var store: WorkflowStore
-    @Binding var requestedRunWorkflowID: UUID?
+    @EnvironmentObject private var runRouter: AutomationRunRouter
     @State private var selectedID: UUID?
 
     var body: some View {
@@ -55,27 +55,33 @@ struct AutomationsView: View {
             }
         }
         .padding(32)
-        .onChange(of: requestedRunWorkflowID) { _, workflowID in
-            if let workflowID { selectedID = workflowID }
+        .onAppear {
+            if let workflowID = runRouter.currentRequest?.workflowID { selectedID = workflowID }
         }
-        .sheet(isPresented: scheduledRunIsPresented) {
-            if let workflowID = requestedRunWorkflowID,
-               let workflow = store.workflows.first(where: { $0.id == workflowID }) {
-                RunView(workflow: workflow)
+        .onChange(of: runRouter.currentRequest) { _, request in
+            if let workflowID = request?.workflowID { selectedID = workflowID }
+        }
+        .sheet(item: runRequestBinding) { request in
+            if let workflow = store.workflows.first(where: { $0.id == request.workflowID }) {
+                RunView(
+                    workflow: workflow,
+                    initialInstruction: request.initialInstruction ?? "",
+                    onClose: runRouter.finishCurrent
+                )
+                    .id(request.id)
                     .frame(minWidth: 760, idealWidth: 940, minHeight: 650, idealHeight: 760)
                     .presentationSizing(.fitted)
+            } else {
+                MissingAutomationRunView(finish: runRouter.finishCurrent)
             }
         }
     }
 
-    private var scheduledRunIsPresented: Binding<Bool> {
+    private var runRequestBinding: Binding<AutomationRunRequest?> {
         Binding(
-            get: {
-                guard let requestedRunWorkflowID else { return false }
-                return store.workflows.contains { $0.id == requestedRunWorkflowID }
-            },
-            set: { isPresented in
-                if !isPresented { requestedRunWorkflowID = nil }
+            get: { runRouter.currentRequest },
+            set: { request in
+                if request == nil { runRouter.finishCurrent() }
             }
         )
     }
@@ -89,13 +95,38 @@ struct AutomationsView: View {
     }
 }
 
+private struct MissingAutomationRunView: View {
+    let finish: () -> Void
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "questionmark.folder.fill")
+                .font(.system(size: 38))
+                .foregroundStyle(.secondary)
+            Text("This automation is no longer available")
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+            Text("The reminder, watched-folder event, or run link refers to an automation that was removed from this Mac.")
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 390)
+            Button("Done", action: finish)
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(32)
+        .frame(width: 520, height: 330)
+    }
+}
+
 private struct AutomationDetail: View {
     let workflow: Workflow
     @EnvironmentObject private var store: WorkflowStore
     @EnvironmentObject private var schedules: AutomationScheduleCenter
+    @EnvironmentObject private var fileTriggers: FileTriggerCenter
     @State private var showingRun = false
     @State private var showingRepair = false
     @State private var showingSchedule = false
+    @State private var showingFileTrigger = false
     @State private var confirmDelete = false
     @State private var exportMessage: String?
     @State private var actionMessageTitle = "Export"
@@ -113,6 +144,7 @@ private struct AutomationDetail: View {
                 Spacer()
                 Menu {
                     Button("Review & repair…") { showingRepair = true }
+                    Button("Configure watched folder…") { showingFileTrigger = true }
                     Button("Copy run link for Shortcuts") { copyRunLink() }
                     Button("Export automation…") { exportSkill() }
                     Button("Delete automation", role: .destructive) { confirmDelete = true }
@@ -163,6 +195,7 @@ private struct AutomationDetail: View {
             }
 
             scheduleCard
+            fileTriggerCard
 
             if !approvalRules.isEmpty {
                 detailCard(title: "When Neloa asks", icon: "hand.raised.fill") {
@@ -240,9 +273,15 @@ private struct AutomationDetail: View {
                 .frame(width: 560, height: 590)
                 .presentationSizing(.fitted)
         }
+        .sheet(isPresented: $showingFileTrigger) {
+            FileTriggerEditor(workflow: workflow)
+                .frame(width: 590, height: 640)
+                .presentationSizing(.fitted)
+        }
         .alert("Delete \(workflow.name)?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) {
                 schedules.remove(workflowID: workflow.id)
+                fileTriggers.remove(workflowID: workflow.id)
                 store.delete(workflow)
             }
             Button("Cancel", role: .cancel) {}
@@ -316,6 +355,63 @@ private struct AutomationDetail: View {
             Label("Permission needed", systemImage: "exclamationmark.circle.fill")
                 .foregroundStyle(.red)
                 .help("Allow Neloa notifications so this local reminder can appear.")
+        }
+    }
+
+    @ViewBuilder
+    private var fileTriggerCard: some View {
+        if let trigger = workflow.fileTrigger {
+            detailCard(title: "Watched folder", icon: "folder.badge.gearshape") {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("\(FileTriggerSupport.displayFolder(trigger)) · \(trigger.kind.label)")
+                            .font(.system(size: 15, weight: .medium))
+                        Text("A new or replaced matching file prepares a reviewed run while Neloa is open.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    fileTriggerStatus(trigger)
+                    Button("Edit") { showingFileTrigger = true }
+                        .buttonStyle(.bordered)
+                }
+            }
+        } else if FileTriggerSupport.fileInputIndex(in: workflow) != nil {
+            HStack(spacing: 12) {
+                Image(systemName: "folder.badge.plus")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Start when a file arrives?")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text("Watch one local folder and prepare this automation for review.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Choose folder") { showingFileTrigger = true }
+                    .buttonStyle(.bordered)
+            }
+            .padding(14)
+            .background(.quaternary.opacity(0.28), in: RoundedRectangle(cornerRadius: 14))
+        }
+    }
+
+    @ViewBuilder
+    private func fileTriggerStatus(_ trigger: AutomationFileTrigger) -> some View {
+        if !trigger.isEnabled {
+            Label("Off", systemImage: "pause.circle.fill")
+                .foregroundStyle(.secondary)
+        } else if let issue = fileTriggers.issues[workflow.id] {
+            Label("Needs attention", systemImage: "exclamationmark.circle.fill")
+                .foregroundStyle(.red)
+                .help(issue)
+        } else if fileTriggers.watchingWorkflowIDs.contains(workflow.id) {
+            Label("Watching", systemImage: "eye.circle.fill")
+                .foregroundStyle(.green)
+        } else {
+            Label("Starting…", systemImage: "clock.fill")
+                .foregroundStyle(.secondary)
         }
     }
 

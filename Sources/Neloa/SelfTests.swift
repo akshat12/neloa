@@ -40,6 +40,8 @@ enum SelfTests {
         try stepRepairCheck()
         try automationScheduleCheck()
         try deepLinkCheck()
+        try automationRunQueueCheck()
+        try fileTriggerCheck()
         try reviewTimelineSelectionCheck()
         try workflowInstructionCheck()
         try agentResponseSafetyCheck()
@@ -200,6 +202,101 @@ enum SelfTests {
             "storage failures should become visible and offer recovery"
         )
         failingStore.dismissIssue()
+    }
+
+    @MainActor
+    static func fileTriggerSmokeTest() async throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NeloaFileTriggerSmoke-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let fileInput = WorkflowStep(
+            kind: .typeText,
+            title: "Choose source file",
+            detail: "Upload document path",
+            time: 1,
+            text: "/tmp/old.pdf",
+            target: "Source file"
+        )
+        let workflow = Workflow(
+            name: "Import new PDF",
+            transcript: "",
+            steps: [fileInput],
+            fileTrigger: AutomationFileTrigger(
+                folderPath: folder.path,
+                kind: .pdf,
+                inputStepID: fileInput.id
+            )
+        )
+        let router = AutomationRunRouter()
+        let center = FileTriggerCenter(runRouter: router)
+        center.reconcile(workflows: [workflow])
+        try expect(center.watchingWorkflowIDs == [workflow.id], "the file-trigger smoke fixture should begin watching its selected folder")
+
+        let ignored = folder.appendingPathComponent("ignore.csv")
+        try Data("ignored".utf8).write(to: ignored)
+        try? await Task.sleep(for: .seconds(2))
+        try expect(router.currentRequest == nil, "a watched-folder trigger should ignore files outside its selected type")
+
+        let arriving = folder.appendingPathComponent("August report.pdf")
+        try Data("first chunk".utf8).write(to: arriving)
+        try? await Task.sleep(for: .milliseconds(350))
+        if let handle = try? FileHandle(forWritingTo: arriving) {
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data(" second chunk".utf8))
+            try handle.close()
+        }
+
+        for _ in 0..<80 where router.currentRequest == nil {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        guard let request = router.currentRequest else {
+            throw Failure(description: "a settled matching file should prepare a reviewed run")
+        }
+        try expect(request.workflowID == workflow.id && request.source == .watchedFolder, "the folder event should route to the correct saved automation")
+        try expect(request.initialInstruction == FileTriggerSupport.instruction(for: arriving), "the prepared run should carry the exact arrived file path")
+
+        let plan = RunPlanner.plan(workflow: workflow, instruction: request.initialInstruction ?? "")
+        try expect(plan.changes.count == 1 && plan.changes[0].after == arriving.path, "the event-level trigger should produce one reviewable file change")
+        try expect(plan.steps.map(\.id) == workflow.steps.map(\.id), "the event-level trigger must not add replay actions")
+
+        let agent = LocalAgentService()
+        let servicePlan = await agent.makePlan(
+            workflow: workflow,
+            instruction: request.initialInstruction ?? ""
+        )
+        try expect(
+            agent.status == "Planned with watched-folder safety checks",
+            "an exact watched-folder event should not load Qwen or the Apple fallback"
+        )
+        try expect(
+            servicePlan.steps == plan.steps
+                && servicePlan.changes.map { ($0.stepID, $0.before, $0.after, $0.reason) }
+                    .elementsEqual(
+                        plan.changes.map { ($0.stepID, $0.before, $0.after, $0.reason) },
+                        by: ==
+                    )
+                && servicePlan.summary == plan.summary,
+            "the model service should preserve the deterministic watched-folder plan"
+        )
+
+        try Data("replacement file".utf8).write(to: arriving, options: .atomic)
+        for _ in 0..<40 where router.queuedRequestCount == 0 {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        try expect(
+            router.queuedRequestCount == 1,
+            "replacing a settled file under the same name should prepare one new reviewed run"
+        )
+        router.finishCurrent()
+        try expect(
+            router.currentRequest?.initialInstruction == FileTriggerSupport.instruction(for: arriving),
+            "a replacement should preserve the same exact, reviewable path"
+        )
+
+        center.remove(workflowID: workflow.id)
+        try expect(center.watchingWorkflowIDs.isEmpty && router.currentRequest == nil, "removing a watched folder should stop monitoring and clear its queued run")
     }
 
     @MainActor
@@ -1677,6 +1774,180 @@ enum SelfTests {
                 "run-link routing should reject unsupported or authority-expanding URL: \(rawURL)"
             )
         }
+    }
+
+    private static func automationRunQueueCheck() throws {
+        let firstWorkflowID = UUID()
+        let secondWorkflowID = UUID()
+        let first = AutomationRunRequest(workflowID: firstWorkflowID, source: .reminder)
+        let second = AutomationRunRequest(
+            workflowID: secondWorkflowID,
+            initialInstruction: "Use the new file at: /tmp/report.csv",
+            source: .watchedFolder
+        )
+        let third = AutomationRunRequest(workflowID: firstWorkflowID, source: .shortcut)
+
+        var queue = AutomationRunQueue()
+        queue.enqueue(first)
+        queue.enqueue(second)
+        queue.enqueue(third)
+        try expect(queue.current == first, "the first external run request should be reviewed first")
+        try expect(queue.queued == [second, third], "later triggers should queue instead of replacing a visible run")
+
+        queue.finishCurrent()
+        try expect(queue.current == second && queue.queued == [third], "finishing a run sheet should reveal the next queued trigger")
+        queue.removeRequests(for: firstWorkflowID)
+        try expect(queue.current == second && queue.queued.isEmpty, "deleting a workflow should remove all of its queued run links and reminders")
+        queue.finishCurrent()
+        try expect(queue.current == nil, "the external run queue should become idle after every request is reviewed")
+    }
+
+    private static func fileTriggerCheck() throws {
+        let fixtureFolder = WorkflowStore.uiTestFileTriggerFolder(environment: [
+            "NELOA_UI_TEST_FILE_TRIGGER_FOLDER": "  /tmp/Neloa Trigger Fixture  "
+        ])
+        try expect(
+            fixtureFolder?.path == "/tmp/Neloa Trigger Fixture",
+            "the opt-in UI fixture should use a trimmed, isolated watched folder"
+        )
+        try expect(
+            WorkflowStore.uiTestFileTriggerFolder(environment: [:]) == nil,
+            "normal launches must never seed the watched-folder UI fixture"
+        )
+
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NeloaFileTriggerTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let existingCSV = folder.appendingPathComponent("existing.csv")
+        let hiddenCSV = folder.appendingPathComponent(".private.csv")
+        let partialDownload = folder.appendingPathComponent("report.crdownload")
+        try Data("account,total\nAcme,10\n".utf8).write(to: existingCSV)
+        try Data("hidden".utf8).write(to: hiddenCSV)
+        try Data("partial".utf8).write(to: partialDownload)
+
+        let initial = try FileTriggerSupport.snapshot(folderURL: folder, kind: .csv)
+        try expect(Set(initial.keys) == [existingCSV.standardizedFileURL], "watched folders should ignore hidden and partial-download files")
+        try expect(FileTriggerSupport.accepts(existingCSV, kind: .spreadsheet), "spreadsheet triggers should accept CSV input")
+        try expect(!FileTriggerSupport.accepts(existingCSV, kind: .pdf), "file-type filters should reject unrelated extensions")
+
+        let arrivingPDF = folder.appendingPathComponent("August report.pdf")
+        try Data("PDF fixture".utf8).write(to: arrivingPDF)
+        let current = try FileTriggerSupport.snapshot(folderURL: folder, kind: .any)
+        let newFiles = Set(current.keys).subtracting(initial.keys)
+        try expect(newFiles.contains(arrivingPDF.standardizedFileURL), "a newly arrived regular file should be distinguishable from the initial folder snapshot")
+
+        let instruction = FileTriggerSupport.instruction(for: arrivingPDF)
+        try expect(
+            instruction == "Use the new file at: \(arrivingPDF.standardizedFileURL.path)",
+            "a folder event should produce one exact, inspectable local-path instruction"
+        )
+
+        let addressBar = WorkflowStep(
+            kind: .typeText,
+            title: "Enter address",
+            time: 0,
+            text: "https://example.com",
+            target: "Address and search bar"
+        )
+        let fileInput = WorkflowStep(
+            kind: .typeText,
+            title: "Choose source file",
+            detail: "Upload document path",
+            time: 1,
+            text: "/tmp/old-report.pdf",
+            target: "Source file"
+        )
+        let secondFileInput = WorkflowStep(
+            kind: .typeText,
+            title: "Choose backup attachment",
+            detail: "Upload backup file path",
+            time: 2,
+            text: "/tmp/backup.pdf",
+            target: "Backup attachment"
+        )
+        let workflow = Workflow(
+            name: "Import a report",
+            transcript: "",
+            steps: [addressBar, fileInput, secondFileInput],
+            fileTrigger: AutomationFileTrigger(
+                folderPath: folder.path,
+                kind: .pdf,
+                inputStepID: fileInput.id
+            )
+        )
+        try expect(FileTriggerSupport.fileInputIndex(in: workflow) == 1, "watched folders should target the demonstrated file field, not a browser address")
+        try expect(
+            FileTriggerSupport.fileInputIndex(in: workflow, preferredStepID: secondFileInput.id) == 2,
+            "a user-selected demonstrated file field should win when a workflow has several candidates"
+        )
+
+        let plan = RunPlanner.plan(workflow: workflow, instruction: instruction)
+        try expect(plan.changes.count == 1, "an arriving file should create one reviewed value change")
+        try expect(plan.changes[0].stepID == fileInput.id, "the watched-folder plan should update only the grounded file input")
+        try expect(plan.changes[0].after == arrivingPDF.path, "the watched-folder plan should preserve the exact local path")
+        try expect(plan.steps[1].text == arrivingPDF.path, "the prepared plan should use the new file without adding actions")
+        try expect(plan.steps.map(\.id) == workflow.steps.map(\.id), "a file trigger must not expand the captured workflow authority")
+
+        let outsideFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("outside-\(UUID().uuidString).pdf")
+        try Data("outside".utf8).write(to: outsideFolder)
+        defer { try? FileManager.default.removeItem(at: outsideFolder) }
+        let outsidePlan = RunPlanner.plan(
+            workflow: workflow,
+            instruction: FileTriggerSupport.instruction(for: outsideFolder)
+        )
+        try expect(outsidePlan.changes.isEmpty, "a path outside the selected folder must not impersonate a watched-folder event")
+
+        let wrongType = folder.appendingPathComponent("notes.txt")
+        try Data("notes".utf8).write(to: wrongType)
+        let wrongTypePlan = RunPlanner.plan(
+            workflow: workflow,
+            instruction: FileTriggerSupport.instruction(for: wrongType)
+        )
+        try expect(wrongTypePlan.changes.isEmpty, "a path outside the selected file type must not enter the reviewed plan")
+
+        let linkedOutsideFile = folder.appendingPathComponent("linked-outside.pdf")
+        try FileManager.default.createSymbolicLink(at: linkedOutsideFile, withDestinationURL: outsideFolder)
+        let linkedOutsidePlan = RunPlanner.plan(
+            workflow: workflow,
+            instruction: FileTriggerSupport.instruction(for: linkedOutsideFile)
+        )
+        try expect(
+            linkedOutsidePlan.changes.isEmpty,
+            "a symbolic link must not escape the user-selected watched folder"
+        )
+
+        var disabledWorkflow = workflow
+        disabledWorkflow.fileTrigger?.isEnabled = false
+        try expect(
+            RunPlanner.plan(workflow: disabledWorkflow, instruction: instruction).changes.isEmpty,
+            "a disabled watched folder must not authorize its deterministic file substitution"
+        )
+
+        var missingFieldWorkflow = workflow
+        missingFieldWorkflow.fileTrigger?.inputStepID = UUID()
+        try expect(
+            RunPlanner.plan(workflow: missingFieldWorkflow, instruction: instruction).changes.isEmpty,
+            "a removed or re-taught selected file field must stop the trigger until the user chooses again"
+        )
+
+        let missingInstruction = FileTriggerSupport.instruction(for: folder.appendingPathComponent("missing.pdf"))
+        let missingPlan = RunPlanner.plan(workflow: workflow, instruction: missingInstruction)
+        try expect(missingPlan.changes.isEmpty, "a file removed before review should not be inserted into the run plan")
+
+        let encoded = try JSONEncoder.neloa.encode(workflow)
+        let decoded = try JSONDecoder.neloa.decode(Workflow.self, from: encoded)
+        try expect(decoded.fileTrigger == workflow.fileTrigger, "watched-folder settings should survive workflow persistence")
+
+        guard var legacyObject = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] else {
+            throw Failure(description: "could not construct a legacy watched-folder fixture")
+        }
+        legacyObject.removeValue(forKey: "fileTrigger")
+        let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
+        let legacy = try JSONDecoder.neloa.decode(Workflow.self, from: legacyData)
+        try expect(legacy.fileTrigger == nil, "workflows saved before watched folders existed should continue to decode")
     }
 
     private static func workflowInstructionCheck() throws {
