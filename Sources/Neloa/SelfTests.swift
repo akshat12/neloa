@@ -42,6 +42,7 @@ enum SelfTests {
         try deepLinkCheck()
         try automationRunQueueCheck()
         try fileTriggerCheck()
+        try diagnosticsPrivacyCheck()
         try reviewTimelineSelectionCheck()
         try workflowInstructionCheck()
         try agentResponseSafetyCheck()
@@ -2009,6 +2010,171 @@ enum SelfTests {
         try expect(RunPlanner.prompt(workflow: workflow, instruction: "Use $750").contains("Always ask me before sharing."), "the local planner should receive explicit saved instructions")
         try expect(SkillExporter.markdown(for: workflow).contains("Explicit user instructions"), "portable skills should preserve user-authored timeline instructions")
         try expect(WorkflowInstructionSupport.makeStep(text: "   ", time: 1, scope: .fromHere, existingSteps: originalSteps) == nil, "blank timeline instructions should not be saved")
+    }
+
+    private static func diagnosticsPrivacyCheck() throws {
+        let generatedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let permissions = DiagnosticsPermissionSummary(
+            screenRecording: "granted",
+            clicksAndTyping: "denied",
+            microphone: "unknown",
+            speechRecognition: "granted",
+            screenRestartNeeded: false
+        )
+        let app = DiagnosticsAppSummary(version: "0.2.18", build: "21", buildMode: "test")
+        let system = DiagnosticsSystemSummary(
+            operatingSystem: "Fixture macOS",
+            architecture: "arm64",
+            memoryGB: 16
+        )
+
+        func fixture(secret: String) -> (Workflow, AutomationRunReceipt, DiagnosticsModelSummary) {
+            let approval = WorkflowStep(
+                kind: .approval,
+                title: "PRIVATE_APPROVAL_\(secret)",
+                detail: "PRIVATE_APPROVAL_DETAIL_\(secret)",
+                time: 3,
+                text: "PRIVATE_APPROVAL_TEXT_\(secret)",
+                target: "PRIVATE_APPROVAL_TARGET_\(secret)",
+                application: "PRIVATE_APP_\(secret)",
+                bundleIdentifier: "private.bundle.\(secret)",
+                requiresApproval: true
+            )
+            let typed = WorkflowStep(
+                kind: .typeText,
+                title: "PRIVATE_INPUT_\(secret)",
+                detail: "PRIVATE_INPUT_DETAIL_\(secret)",
+                time: 2,
+                x: secret == "ALPHA" ? 123.456 : 987.654,
+                y: secret == "ALPHA" ? 234.567 : 876.543,
+                text: "PRIVATE_TYPED_VALUE_\(secret)",
+                target: "PRIVATE_FIELD_\(secret)",
+                runVariable: true,
+                application: "PRIVATE_APP_\(secret)",
+                bundleIdentifier: "private.bundle.\(secret)",
+                displayID: secret == "ALPHA" ? 41 : 99,
+                origin: .visual
+            )
+            let web = WorkflowStep(
+                kind: .openURL,
+                title: "PRIVATE_WEB_\(secret)",
+                time: 1,
+                text: "https://private.example/\(secret)",
+                application: "PRIVATE_BROWSER_\(secret)",
+                bundleIdentifier: "private.browser.\(secret)"
+            )
+            let workflow = Workflow(
+                id: UUID(),
+                name: "PRIVATE_WORKFLOW_NAME_\(secret)",
+                createdAt: Date(timeIntervalSince1970: secret == "ALPHA" ? 100 : 200),
+                updatedAt: Date(timeIntervalSince1970: secret == "ALPHA" ? 300 : 400),
+                transcript: "PRIVATE_TRANSCRIPT_\(secret)",
+                narrationSegments: [NarrationSegment(
+                    text: "PRIVATE_NARRATION_\(secret)",
+                    time: 1,
+                    duration: 2,
+                    confidence: 0.91
+                )],
+                recordingPath: "/Users/private/\(secret)/recording.mp4",
+                narrationPath: "/Users/private/\(secret)/narration.m4a",
+                steps: [web, typed, approval],
+                defaultInstruction: "PRIVATE_DEFAULT_\(secret)",
+                schedule: AutomationSchedule(repeatMode: .weekly, hour: 9, minute: 37, weekday: 4),
+                fileTrigger: AutomationFileTrigger(
+                    folderPath: "/Users/private/\(secret)/Incoming",
+                    kind: .pdf,
+                    inputStepID: typed.id
+                ),
+                semanticVersion: 3
+            )
+            let change = PlannedChange(
+                stepID: typed.id,
+                before: "PRIVATE_BEFORE_\(secret)",
+                after: "PRIVATE_AFTER_\(secret)",
+                reason: "PRIVATE_REASON_\(secret)"
+            )
+            let receipt = AutomationRunReceipt(
+                id: UUID(),
+                workflowID: workflow.id,
+                workflowName: workflow.name,
+                startedAt: Date(timeIntervalSince1970: secret == "ALPHA" ? 500 : 600),
+                finishedAt: Date(timeIntervalSince1970: secret == "ALPHA" ? 700 : 800),
+                instruction: "PRIVATE_RUN_INSTRUCTION_\(secret)",
+                summary: "PRIVATE_RUN_SUMMARY_\(secret)",
+                changes: [change],
+                stepCount: 3,
+                status: .failed,
+                message: "PRIVATE_FAILURE_MESSAGE_\(secret)"
+            )
+            let model = DiagnosticsModelSummary.sanitized(
+                tier: .balanced4Bit,
+                status: .failed("PRIVATE_MODEL_FAILURE_\(secret)"),
+                runtimeBundled: true,
+                installed: true,
+                eligible: true
+            )
+            return (workflow, receipt, model)
+        }
+
+        func report(for secret: String) -> DiagnosticsReport {
+            let fixture = fixture(secret: secret)
+            return DiagnosticsReportBuilder.make(
+                workflows: [fixture.0],
+                activities: [fixture.1],
+                storeIssuePresent: true,
+                permissions: permissions,
+                model: fixture.2,
+                generatedAt: generatedAt,
+                app: app,
+                system: system,
+                readiness: { workflow in
+                    RunPreflight.evaluate(
+                        plan: RunPlan(
+                            instruction: "",
+                            steps: workflow.steps,
+                            changes: [],
+                            summary: ""
+                        ),
+                        accessibilityGranted: false,
+                        applicationAvailable: { _ in false }
+                    )
+                }
+            )
+        }
+
+        let alpha = report(for: "ALPHA")
+        let beta = report(for: "BETA")
+        try expect(
+            alpha == beta,
+            "diagnostics should depend on safe structure and health, not user-authored content or identifiers"
+        )
+        let data = try alpha.jsonData()
+        let betaData = try beta.jsonData()
+        try expect(
+            data == betaData,
+            "equivalent safe structure should produce byte-for-byte identical diagnostics despite different secrets"
+        )
+        let text = String(decoding: data, as: UTF8.self)
+        let forbidden = [
+            "PRIVATE_", "/Users/private", "private.example", "private.bundle",
+            "123.456", "234.567", "987.654", "876.543"
+        ]
+        for value in forbidden {
+            try expect(!text.contains(value), "diagnostics must not contain redacted value: \(value)")
+        }
+        try expect(!text.contains("workflowID") && !text.contains("stepID"), "diagnostics must not serialize automation or action identifiers")
+        try expect(
+            text.range(
+                of: #"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}"#,
+                options: .regularExpression
+            ) == nil,
+            "diagnostics must not serialize UUID-shaped automation, action, or run identifiers"
+        )
+        try expect(alpha.workflows.first?.stepKinds == ["approval": 1, "openURL": 1, "typeText": 1], "diagnostics should retain safe action-type counts")
+        try expect(alpha.workflows.first?.readiness.blockerCount == 3, "diagnostics should retain readiness blocker counts without their private wording")
+        try expect(alpha.activity == DiagnosticsActivitySummary(total: 1, completed: 0, stopped: 0, failed: 1), "diagnostics should retain aggregate run outcomes only")
+        let decoded = try JSONDecoder.neloa.decode(DiagnosticsReport.self, from: data)
+        try expect(decoded == alpha, "the redacted diagnostics report should round-trip as portable JSON")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {

@@ -2,7 +2,7 @@
 
 Neloa’s next features are ranked by whether they make a demonstrated automation more trustworthy, repairable, and broadly useful without turning the local model into an unbounded computer-use agent.
 
-## Now: readiness, repair, and reviewed triggers
+## Now: readiness, repair, reviewed triggers, and diagnostics
 
 Before replay, Neloa performs a deterministic preflight over the exact reviewed plan. It checks:
 
@@ -30,6 +30,8 @@ Neloa also supports daily, weekday, and weekly local reminders. A reminder notif
 
 For workflows with a demonstrated flexible file input, Neloa can watch one selected local folder while the app is open. It filters partial downloads, waits for a matching file to settle, and queues the exact path as a proposed one-time input change. Reminders, shortcut links, and file arrivals share one FIFO queue; none plans or executes in the background. The exact changes, readiness checks, approvals, and cancellation countdown remain mandatory.
 
+For early support and issue reports, Settings can generate a local diagnostics report that the user inspects before saving. It includes only versions, permission and model state, safe structural counts, readiness categories, and aggregate run outcomes. Recordings, OCR, user-authored content, paths, coordinates, application identities, UUIDs, timestamps from saved work, and raw failures are excluded by construction and regression tests.
+
 ## Defining milestone: bounded live work
 
 Neloa should eventually support a reviewed runtime step such as “summarize the article that is open now” or “extract the total from this month’s report.” This is different from static replay and requires:
@@ -45,7 +47,6 @@ The first version should support one bounded read/transform/write step inside an
 ## Later: sharing and diagnostics
 
 - Importable automation templates that contain no recordings, secrets, or machine-specific coordinates.
-- A privacy-reviewed diagnostics bundle containing workflow structure, readiness results, model version, and redacted failure details.
 - Historical model-evaluation comparisons for prompts, quantization tiers, and visual-grounding changes.
 
 ## Product gates

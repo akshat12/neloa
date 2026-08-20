@@ -36,6 +36,7 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 - Supports daily, weekday, or weekly local run reminders. Opening one prepares the normal reviewed run; reminders never replay clicks or typing on their own.
 - Creates private `neloa://run/…` links for Apple Shortcuts, Raycast, and other user-invoked launchers; these links open the same reviewed run boundary.
 - Watches one user-selected local folder while Neloa is open, waits for a new or replaced matching file to finish copying, and prepares its demonstrated file input for review without adding actions or loading a model.
+- Builds an inspect-before-save diagnostics report with versions, health, and structural counts while excluding recordings, user content, paths, coordinates, identifiers, and raw failures.
 - Runs an unchanged saved workflow without loading Qwen or waiting for model planning.
 - Uses one primary local model family—Qwen3-VL 4B—with a recommended 4-bit tier and an optional higher-precision 8-bit tier, plus Apple's on-device model and a narrow deterministic planner as safe fallbacks.
 - Pauses at spoken approval rules such as “always ask me before sending.”
@@ -106,6 +107,12 @@ For an automation that already has a flexible file field:
 5. Select **Preview changes**. Neloa shows the single before/after value, checks replay readiness, and waits for you to start—or close—the run.
 
 This path is deterministic: it does not load Qwen or Apple’s language model. It accepts only a complete matching file directly inside the selected folder, changes only the chosen demonstrated input, and never replays in the background. If several files arrive, Neloa shows the queue count and presents each review in order.
+
+### Create a privacy-safe diagnostics report
+
+Open **Settings → Support & diagnostics → Preview diagnostics**. Neloa shows the included categories, the data it guarantees is absent, and the exact selectable JSON before a file can be saved. Nothing is uploaded automatically.
+
+The report contains app and system versions, permission and local-model state, safe automation structure and readiness counts, and aggregate run outcomes. It excludes recordings, OCR, workflow names, transcripts, instructions, typed values, URLs, paths, control labels, coordinates, app identities, UUIDs, raw failures, and storage locations. See the [diagnostics privacy contract](docs/DIAGNOSTICS.md) for the complete schema boundary and verification strategy.
 
 ## Local visual intelligence
 

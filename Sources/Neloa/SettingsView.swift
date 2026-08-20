@@ -8,6 +8,7 @@ struct SettingsView: View {
     @EnvironmentObject private var appearance: AppearanceController
     @State private var confirmDeleteRecordings = false
     @State private var confirmRemoveModel = false
+    @State private var diagnosticsReport: DiagnosticsReport?
 
     var body: some View {
         ScrollView {
@@ -27,6 +28,7 @@ struct SettingsView: View {
                 }
 
                 localModelCard
+                diagnosticsCard
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 2)
@@ -47,6 +49,11 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Neloa will keep your automations, recordings, and any other model tier. The selected tier can be downloaded again later.")
+        }
+        .sheet(item: $diagnosticsReport) { report in
+            DiagnosticsPreviewView(report: report)
+                .frame(width: 820, height: 680)
+                .presentationSizing(.fitted)
         }
     }
 
@@ -306,6 +313,49 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private var diagnosticsCard: some View {
+        SettingsCard(title: "Support & diagnostics", icon: "stethoscope") {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 18) {
+                    diagnosticsDescription
+                    Spacer(minLength: 20)
+                    diagnosticsButton
+                }
+                VStack(alignment: .leading, spacing: 14) {
+                    diagnosticsDescription
+                    diagnosticsButton
+                }
+            }
+        }
+    }
+
+    private var diagnosticsDescription: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Create a report you can inspect before sharing")
+                .font(.system(size: 15, weight: .semibold))
+            Text("Includes versions, health, and structural counts. Never includes recordings, transcripts, typed values, paths, workflow names, click positions, or failure messages.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var diagnosticsButton: some View {
+        Button {
+            permissions.refresh()
+            agent.refreshModelStatus()
+            diagnosticsReport = DiagnosticsReportBuilder.makeLive(
+                store: store,
+                permissions: permissions,
+                agent: agent
+            )
+        } label: {
+            Label("Preview diagnostics", systemImage: "doc.text.magnifyingglass")
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
     }
 
     @ViewBuilder
