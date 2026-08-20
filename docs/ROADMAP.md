@@ -16,6 +16,8 @@ Before replay, Neloa performs a deterministic preflight over the exact reviewed 
 
 Blocking problems prevent the countdown and explain what must be fixed. Warnings remain runnable but visible. “Run the original” also bypasses Qwen entirely because no model is needed to reproduce an unchanged, already reviewed plan.
 
+The automation library now runs that same preflight proactively. Every saved automation shows a green, orange, or red health indicator, and its detail page explains the exact issues before planning or model loading. Permission blockers route to permission setup; application, action, target, positioning, and focus issues route to focused repair. The run sheet evaluates the customized plan again, preserving the final safety boundary.
+
 The workflow library and review timeline also offer focused re-teaching:
 
 1. Select a broken or coordinate-only action.

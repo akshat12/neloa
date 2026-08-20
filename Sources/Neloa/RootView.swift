@@ -160,6 +160,9 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showNeloaTeach)) { _ in
             selection = .teach
         }
+        .onReceive(NotificationCenter.default.publisher(for: .showNeloaSettings)) { _ in
+            selection = .settings
+        }
         .onReceive(runRouter.$currentRequest) { request in
             if request != nil { selection = .automations }
         }
@@ -330,4 +333,5 @@ extension Notification.Name {
     static let showNeloaTour = Notification.Name("showNeloaTour")
     static let showNeloaAutomations = Notification.Name("showNeloaAutomations")
     static let showNeloaTeach = Notification.Name("showNeloaTeach")
+    static let showNeloaSettings = Notification.Name("showNeloaSettings")
 }

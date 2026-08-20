@@ -37,6 +37,7 @@ enum SelfTests {
         try reviewFixtureIsolationCheck()
         try runPresentationCheck()
         try runPreflightCheck()
+        try automationHealthCheck()
         try stepRepairCheck()
         try automationScheduleCheck()
         try deepLinkCheck()
@@ -1741,6 +1742,83 @@ enum SelfTests {
             accessibilityGranted: true
         )
         try expect(!empty.canRun, "an empty automation should never appear runnable")
+    }
+
+    private static func automationHealthCheck() throws {
+        let readyWorkflow = Workflow(
+            name: "Ready fixture",
+            transcript: "",
+            steps: [
+                WorkflowStep(
+                    kind: .openURL,
+                    title: "Open report",
+                    time: 0,
+                    text: "https://example.com/report",
+                    application: "Google Chrome",
+                    bundleIdentifier: "com.google.Chrome"
+                ),
+                WorkflowStep(
+                    kind: .typeText,
+                    title: "Enter month",
+                    time: 1,
+                    text: "August",
+                    target: "Report month",
+                    application: "Google Chrome",
+                    bundleIdentifier: "com.google.Chrome"
+                ),
+                WorkflowStep(
+                    kind: .approval,
+                    title: "Ask before downloading",
+                    time: 2,
+                    requiresApproval: true
+                )
+            ]
+        )
+        let ready = AutomationHealth.evaluate(
+            workflow: readyWorkflow,
+            accessibilityGranted: true,
+            applicationAvailable: { _ in true }
+        )
+        try expect(ready.level == .ready && ready.title == "Ready", "a healthy saved automation should be identified before opening its run sheet")
+        try expect(ready.report.applications == ["Google Chrome"], "library health should use the same required-app summary as run preflight")
+        try expect(ready.report.approvalCount == 1, "library health should preserve approval counts")
+
+        let coordinateWorkflow = Workflow(
+            name: "Coordinate fixture",
+            transcript: "",
+            steps: [WorkflowStep(kind: .click, title: "Choose report", time: 0, x: 420, y: 260)]
+        )
+        let caution = AutomationHealth.evaluate(
+            workflow: coordinateWorkflow,
+            accessibilityGranted: true
+        )
+        try expect(caution.level == .caution, "a runnable position-only click should receive an advance review warning")
+        try expect(caution.report.warnings.map(\.kind) == [.coordinateFallback], "health warnings should retain the exact preflight repair category")
+
+        let denied = AutomationHealth.evaluate(
+            workflow: readyWorkflow,
+            accessibilityGranted: false,
+            applicationAvailable: { _ in true }
+        )
+        try expect(denied.level == .blocked, "missing control permission should make the library health state red")
+        try expect(denied.report.blockingIssues.first?.kind == .accessibility, "the library should route a permission blocker to the correct recovery action")
+
+        let missingApp = AutomationHealth.evaluate(
+            workflow: readyWorkflow,
+            accessibilityGranted: true,
+            applicationAvailable: { _ in false }
+        )
+        try expect(missingApp.level == .blocked, "a missing captured application should be visible before planning a run")
+        try expect(missingApp.report.blockingIssues.first?.kind == .missingApplication, "missing applications should route users toward workflow review")
+
+        let malformed = Workflow(
+            name: "Malformed fixture",
+            transcript: "",
+            steps: [WorkflowStep(kind: .typeText, title: "Enter missing value", time: 0, text: nil)]
+        )
+        let invalid = AutomationHealth.evaluate(workflow: malformed, accessibilityGranted: true)
+        try expect(invalid.level == .blocked, "an incomplete saved action should not be labeled ready in the library")
+        try expect(invalid.report.blockingIssues.first?.kind == .invalidStep, "incomplete actions should retain their repairable preflight category")
     }
 
     private static func reviewTimelineSelectionCheck() throws {

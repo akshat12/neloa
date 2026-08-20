@@ -6,6 +6,7 @@ struct AutomationsView: View {
     @EnvironmentObject private var store: WorkflowStore
     @EnvironmentObject private var runRouter: AutomationRunRouter
     @EnvironmentObject private var teacher: TeachController
+    @EnvironmentObject private var permissions: PermissionCenter
     @State private var selectedID: UUID?
     @State private var templateImport: AutomationTemplateImportDraft?
     @State private var templateImportError: String?
@@ -58,15 +59,22 @@ struct AutomationsView: View {
             } else {
                 HSplitView {
                     List(store.workflows, selection: $selectedID) { workflow in
+                        let summary = health(for: workflow)
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(workflow.name).fontWeight(.semibold)
+                            HStack(spacing: 8) {
+                                Text(workflow.name)
+                                    .fontWeight(.semibold)
+                                    .lineLimit(1)
+                                Spacer(minLength: 4)
+                                AutomationHealthBadge(summary: summary)
+                            }
                             Text(lastRunDescription(for: workflow))
                                 .font(.system(size: 14)).foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 7)
                         .tag(workflow.id)
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("\(workflow.name), \(lastRunDescription(for: workflow))")
+                        .accessibilityLabel("\(workflow.name), \(summary.title), \(lastRunDescription(for: workflow))")
                     }
                     .frame(minWidth: 240, idealWidth: 280, maxWidth: 320)
                     .onAppear { selectedID = selectedID ?? store.workflows.first?.id }
@@ -81,6 +89,7 @@ struct AutomationsView: View {
         }
         .padding(32)
         .onAppear {
+            permissions.refresh()
             if let workflowID = runRouter.currentRequest?.workflowID { selectedID = workflowID }
         }
         .onChange(of: runRouter.currentRequest) { _, request in
@@ -129,10 +138,17 @@ struct AutomationsView: View {
 
     private func lastRunDescription(for workflow: Workflow) -> String {
         guard let run = store.activities.first(where: { $0.workflowID == workflow.id }) else {
-            return "Ready to run · Updated \(workflow.updatedAt.formatted(date: .abbreviated, time: .omitted))"
+            return "Updated \(workflow.updatedAt.formatted(date: .abbreviated, time: .omitted))"
         }
         let status = run.status == .completed ? "Finished" : run.status.rawValue.capitalized
         return "Last ran \(run.finishedAt.formatted(date: .abbreviated, time: .omitted)) · \(status)"
+    }
+
+    private func health(for workflow: Workflow) -> AutomationHealthSummary {
+        AutomationHealth.live(
+            workflow: workflow,
+            accessibilityGranted: permissions.accessibility == .granted
+        )
     }
 
     private var templateImportHelp: String {
@@ -197,11 +213,148 @@ private struct MissingAutomationRunView: View {
     }
 }
 
+private struct AutomationHealthBadge: View {
+    let summary: AutomationHealthSummary
+
+    var body: some View {
+        Label(summary.title, systemImage: icon)
+            .labelStyle(.iconOnly)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(color)
+            .padding(5)
+            .background(color.opacity(0.1), in: Circle())
+            .help("\(summary.title): \(summary.detail)")
+            .accessibilityLabel("Automation health: \(summary.title)")
+            .accessibilityHint(summary.detail)
+    }
+
+    private var icon: String {
+        switch summary.level {
+        case .ready: "checkmark.circle.fill"
+        case .caution: "exclamationmark.triangle.fill"
+        case .blocked: "exclamationmark.octagon.fill"
+        }
+    }
+
+    private var color: Color {
+        switch summary.level {
+        case .ready: .green
+        case .caution: .orange
+        case .blocked: .red
+        }
+    }
+}
+
+private struct AutomationHealthCard: View {
+    let summary: AutomationHealthSummary
+    let grantControlAccess: () -> Void
+    let openNeloaSettings: () -> Void
+    let reviewAndRepair: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(summary.title, systemImage: icon)
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(color)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                Text(checkSummary)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            if summary.report.issues.isEmpty {
+                Text(summary.detail)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(summary.report.issues.prefix(4))) { issue in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: issue.severity == .blocker ? "xmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .foregroundStyle(issue.severity == .blocker ? Color.red : Color.orange)
+                            .frame(width: 16)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(issue.title)
+                                .font(.system(size: 13, weight: .semibold))
+                            Text(issue.detail)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+                if summary.report.issues.count > 4 {
+                    Text("+ \(summary.report.issues.count - 4) more issue\(summary.report.issues.count - 4 == 1 ? "" : "s") shown during run review")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if summary.level != .ready {
+                HStack(spacing: 8) {
+                    if hasAccessibilityBlocker {
+                        Button("Grant control access", action: grantControlAccess)
+                            .buttonStyle(.borderedProminent)
+                        Button("Open Neloa Settings", action: openNeloaSettings)
+                            .buttonStyle(.bordered)
+                    }
+                    if hasRepairableIssue {
+                        Button("Review & repair", action: reviewAndRepair)
+                            .buttonStyle(.bordered)
+                    }
+                }
+                .controlSize(.small)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.065), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(color.opacity(0.18)))
+    }
+
+    private var hasAccessibilityBlocker: Bool {
+        summary.report.blockingIssues.contains { $0.kind == .accessibility }
+    }
+
+    private var hasRepairableIssue: Bool {
+        summary.report.issues.contains { $0.kind != .accessibility }
+    }
+
+    private var checkSummary: String {
+        let apps = summary.report.applications.isEmpty
+            ? "No captured apps"
+            : "\(summary.report.applications.count) app\(summary.report.applications.count == 1 ? "" : "s")"
+        let approvals = summary.report.approvalCount == 0
+            ? "No approvals"
+            : "\(summary.report.approvalCount) approval\(summary.report.approvalCount == 1 ? "" : "s")"
+        return "\(apps) · \(approvals)"
+    }
+
+    private var icon: String {
+        switch summary.level {
+        case .ready: "checkmark.shield.fill"
+        case .caution: "exclamationmark.triangle.fill"
+        case .blocked: "exclamationmark.octagon.fill"
+        }
+    }
+
+    private var color: Color {
+        switch summary.level {
+        case .ready: .green
+        case .caution: .orange
+        case .blocked: .red
+        }
+    }
+}
+
 private struct AutomationDetail: View {
     let workflow: Workflow
     @EnvironmentObject private var store: WorkflowStore
     @EnvironmentObject private var schedules: AutomationScheduleCenter
     @EnvironmentObject private var fileTriggers: FileTriggerCenter
+    @EnvironmentObject private var permissions: PermissionCenter
     @State private var showingRun = false
     @State private var showingRepair = false
     @State private var showingSchedule = false
@@ -250,6 +403,18 @@ private struct AutomationDetail: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    AutomationHealthCard(
+                        summary: health,
+                        grantControlAccess: {
+                            permissions.requestAccessibility()
+                            permissions.refresh()
+                        },
+                        openNeloaSettings: {
+                            NotificationCenter.default.post(name: .showNeloaSettings, object: nil)
+                        },
+                        reviewAndRepair: { showingRepair = true }
+                    )
+
             if !flexibleInputs.isEmpty {
                 VStack(alignment: .leading, spacing: 9) {
                     HStack {
@@ -284,25 +449,6 @@ private struct AutomationDetail: View {
                         Text(step.title).font(.system(size: 15))
                     }
                 }
-            }
-
-            if recommendedRepairCount > 0 {
-                HStack(alignment: .center, spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(recommendedRepairCount) action\(recommendedRepairCount == 1 ? "" : "s") use fragile grounding")
-                            .font(.system(size: 15, weight: .semibold))
-                        Text("Re-teach a position-only or visual action to capture a stronger target.")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("Repair") { showingRepair = true }
-                        .buttonStyle(.bordered)
-                }
-                .padding(14)
-                .background(Color.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 14))
             }
 
             if !userInstructions.isEmpty {
@@ -385,9 +531,14 @@ private struct AutomationDetail: View {
     private var flexibleInputs: [WorkflowStep] { workflow.steps.filter(\.isRunVariable) }
     private var approvalRules: [WorkflowStep] { workflow.steps.filter { $0.kind == .approval || $0.requiresApproval } }
     private var userInstructions: [WorkflowStep] { workflow.steps.filter(\.isUserInstruction) }
-    private var recommendedRepairCount: Int { workflow.steps.filter(StepRepairSupport.isRecommended).count }
     private var appsUsed: [String] {
         Array(Set(workflow.steps.compactMap(\.application).filter { !$0.isEmpty })).sorted()
+    }
+    private var health: AutomationHealthSummary {
+        AutomationHealth.live(
+            workflow: workflow,
+            accessibilityGranted: permissions.accessibility == .granted
+        )
     }
 
     @ViewBuilder

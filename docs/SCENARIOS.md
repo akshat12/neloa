@@ -53,6 +53,8 @@ Neloa is designed for demonstrated work whose route stays mostly stable while a 
 
 These workflows still depend on the demonstrated applications exposing useful accessibility labels or retaining compatible layouts. Neloa prefers semantic control labels when available and falls back to captured coordinates. Coordinate-only actions should be reviewed carefully after an app redesign.
 
+**My automations** surfaces these dependencies before a run is planned. Green indicates that required permissions, applications, and saved action data pass the current local checks. Orange warns about coordinate or focus dependencies. Red blocks replay until the named permission, app, or action problem is addressed. This is a structural readiness check, not a guarantee that an external app’s layout or data has remained unchanged.
+
 ## Deferred: live research and synthesis
 
 A workflow such as “open a different article, read it, create a new summary, and paste that summary into TextEdit” is intentionally not claimed as supported yet. Today, the run agent customizes reviewed typed inputs; it does not inspect arbitrary live content and generate a new value midway through replay.

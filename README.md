@@ -32,6 +32,7 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 - Handles exact new-cell requests such as “set C3 to 3” with a previewed target change and Google Sheets’ structured Go to range navigation, rather than a guessed click.
 - Lets each change be used once, saved as a variant, or made the new default.
 - Checks the exact run plan before replay, blocking missing permissions, unavailable apps, malformed actions, and invalid spreadsheet targets while clearly warning about coordinate-only clicks and focus-dependent typing.
+- Shows the same deterministic health check in the automation library before planning: green means structurally ready, orange identifies fragile positioning or focus, and red identifies a blocker with a direct permission or repair action.
 - Lets users re-teach one fragile click, text entry, shortcut, or app switch in the original app, preview the replacement, and preserve the rest of the automation, its timing, variables, and approval gates.
 - Supports daily, weekday, or weekly local run reminders. Opening one prepares the normal reviewed run; reminders never replay clicks or typing on their own.
 - Creates private `neloa://run/…` links for Apple Shortcuts, Raycast, and other user-invoked launchers; these links open the same reviewed run boundary.
@@ -130,6 +131,16 @@ To share the shape of an automation without sharing its private contents:
 To use one, choose **Import template…** in **My automations**, inspect its generic outline, then choose **Teach this template**. Neloa opens a guided teaching session. You must perform the task on your own Mac, review the newly captured actions and values, and save a new local automation. Importing a template never opens its original apps, visits an address, types a value, or creates a runnable workflow.
 
 See the [reusable-template privacy contract](docs/TEMPLATES.md) for the exact schema, hostile-file protections, and test guarantees.
+
+### Check an automation before running
+
+Each saved automation has a health indicator in **My automations**. Selecting it shows the complete local check before a model is loaded or a run is planned:
+
+- **Ready** means control permission, captured apps, and saved replay data pass the deterministic checks.
+- **Review recommended** means the automation can run but relies on saved screen positions or the field focused by an earlier action.
+- **Needs attention** means a required permission or app is unavailable, or a saved action, web address, key, or spreadsheet target is incomplete.
+
+The health card links directly to control-permission setup or **Review & repair**. The run preview repeats the check against the exact customized plan, so a later change cannot bypass it. See [automation health](docs/HEALTH.md) for the checks and limits.
 
 ## Local visual intelligence
 
