@@ -15,6 +15,7 @@ final class TeachController: ObservableObject {
     @Published var draft: Workflow?
     @Published var message: String?
     @Published private(set) var requiredPermission: RequiredPermission?
+    @Published private(set) var templateGuide: AutomationTemplate?
 
     let screen = ScreenRecorder()
     let voice = VoiceService()
@@ -127,6 +128,9 @@ final class TeachController: ObservableObject {
             recordingURL: screenURL,
             captureFrame: screen.captureFrame
         )
+        if let templateGuide {
+            draft?.name = templateGuide.title
+        }
         if captureScreen,
            draft?.steps.contains(where: { [.openURL, .click, .typeText, .keyPress].contains($0.kind) }) != true {
             message = "Qwen could not ground any repeatable actions in this recording. Play it back to confirm the correct app was visible, then teach the task again."
@@ -136,13 +140,32 @@ final class TeachController: ObservableObject {
         phase = .review
     }
 
-    func reset() {
+    func reset(preserveTemplate: Bool = false) {
+        let preservedTemplate = preserveTemplate ? templateGuide : nil
         draft = nil
         screenURL = nil
         narrationURL = nil
         message = nil
         requiredPermission = nil
         phase = .ready
+        templateGuide = preservedTemplate
+    }
+
+    var canPrepareTemplate: Bool {
+        phase == .ready
+    }
+
+    @discardableResult
+    func prepare(template: AutomationTemplate) -> Bool {
+        guard canPrepareTemplate else { return false }
+        reset()
+        templateGuide = template
+        return true
+    }
+
+    func clearTemplateGuide() {
+        guard phase == .ready else { return }
+        templateGuide = nil
     }
 
     func useMicrophoneOnly() {

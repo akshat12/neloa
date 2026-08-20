@@ -42,6 +42,13 @@ Neloa is designed for demonstrated work whose route stays mostly stable while a 
 - Substitute only the demonstrated flexible file field and require the normal preview before replay.
 - Ignore files that existed when monitoring began, hidden files, and common partial downloads.
 
+### Sharing a workflow shape
+
+- Export a deliberately generic teaching outline without recordings, instructions, values, app identities, addresses, paths, or replay targets.
+- Inspect the exact JSON before saving or sending it.
+- Import an outline as a guide, then demonstrate and review a fresh workflow on the recipient’s Mac.
+- Never turn an imported template directly into runnable clicks or typing.
+
 ## Reliability boundary
 
 These workflows still depend on the demonstrated applications exposing useful accessibility labels or retaining compatible layouts. Neloa prefers semantic control labels when available and falls back to captured coordinates. Coordinate-only actions should be reviewed carefully after an app redesign.

@@ -1,14 +1,30 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct AutomationsView: View {
     @EnvironmentObject private var store: WorkflowStore
     @EnvironmentObject private var runRouter: AutomationRunRouter
+    @EnvironmentObject private var teacher: TeachController
     @State private var selectedID: UUID?
+    @State private var templateImport: AutomationTemplateImportDraft?
+    @State private var templateImportError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            PageHeader(title: "My automations", subtitle: "Run one again — or tell Neloa what should be different this time.")
+            HStack(alignment: .top, spacing: 16) {
+                PageHeader(title: "My automations", subtitle: "Run one again — or tell Neloa what should be different this time.")
+                Spacer()
+                Button {
+                    importTemplate()
+                } label: {
+                    Label("Import template…", systemImage: "doc.badge.arrow.up")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(!teacher.canPrepareTemplate)
+                .help(templateImportHelp)
+            }
             if store.workflows.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "repeat.circle.fill").font(.system(size: 50)).foregroundStyle(Color.accentColor)
@@ -16,10 +32,19 @@ struct AutomationsView: View {
                     Text("Teach Neloa one real task. The next time, you’ll only need to say what changed.")
                         .font(.system(size: 16))
                         .foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 470)
-                    Button("Teach my first automation") {
-                        NotificationCenter.default.post(name: .showNeloaTeach, object: nil)
+                    HStack(spacing: 10) {
+                        Button("Teach my first automation") {
+                            NotificationCenter.default.post(name: .showNeloaTeach, object: nil)
+                        }
+                        .buttonStyle(.borderedProminent).controlSize(.large)
+                        Button("Import a template…") {
+                            importTemplate()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .disabled(!teacher.canPrepareTemplate)
+                        .help(templateImportHelp)
                     }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
                     VStack(spacing: 4) {
                         Text("Good first examples: a monthly report, an invoice, or a form you fill repeatedly.")
                         Text("Usually takes 2–5 minutes · Your recording stays on this Mac")
@@ -75,6 +100,22 @@ struct AutomationsView: View {
                 MissingAutomationRunView(finish: runRouter.finishCurrent)
             }
         }
+        .sheet(item: $templateImport) { draft in
+            AutomationTemplateImportView(
+                template: draft.template,
+                startTeaching: { startTeaching(draft.template) }
+            )
+            .frame(width: 760, height: 640)
+            .presentationSizing(.fitted)
+        }
+        .alert("Template couldn’t be imported", isPresented: Binding(
+            get: { templateImportError != nil },
+            set: { if !$0 { templateImportError = nil } }
+        )) {
+            Button("OK") { templateImportError = nil }
+        } message: {
+            Text(templateImportError ?? "")
+        }
     }
 
     private var runRequestBinding: Binding<AutomationRunRequest?> {
@@ -92,6 +133,44 @@ struct AutomationsView: View {
         }
         let status = run.status == .completed ? "Finished" : run.status.rawValue.capitalized
         return "Last ran \(run.finishedAt.formatted(date: .abbreviated, time: .omitted)) · \(status)"
+    }
+
+    private var templateImportHelp: String {
+        teacher.canPrepareTemplate
+            ? "Preview a privacy-safe teaching guide before demonstrating it on this Mac."
+            : "Finish the current teaching session before importing another template."
+    }
+
+    private func importTemplate() {
+        guard teacher.canPrepareTemplate else {
+            templateImportError = "Finish or discard the current teaching session before importing a template."
+            return
+        }
+        let panel = NSOpenPanel()
+        panel.title = "Import Neloa Reusable Template"
+        panel.prompt = "Preview Template"
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let template = try AutomationTemplateCodec.read(from: url)
+            templateImport = AutomationTemplateImportDraft(template: template)
+        } catch {
+            templateImportError = error.localizedDescription
+        }
+    }
+
+    private func startTeaching(_ template: AutomationTemplate) {
+        guard teacher.prepare(template: template) else {
+            templateImportError = "Finish or discard the current teaching session before using this template."
+            return
+        }
+        templateImport = nil
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .showNeloaTeach, object: nil)
+        }
     }
 }
 
@@ -127,6 +206,7 @@ private struct AutomationDetail: View {
     @State private var showingRepair = false
     @State private var showingSchedule = false
     @State private var showingFileTrigger = false
+    @State private var showingTemplateExport = false
     @State private var confirmDelete = false
     @State private var exportMessage: String?
     @State private var actionMessageTitle = "Export"
@@ -146,7 +226,8 @@ private struct AutomationDetail: View {
                     Button("Review & repair…") { showingRepair = true }
                     Button("Configure watched folder…") { showingFileTrigger = true }
                     Button("Copy run link for Shortcuts") { copyRunLink() }
-                    Button("Export automation…") { exportSkill() }
+                    Button("Share reusable template…") { showingTemplateExport = true }
+                    Button("Export Markdown skill…") { exportSkill() }
                     Button("Delete automation", role: .destructive) { confirmDelete = true }
                 } label: {
                     Label("More", systemImage: "ellipsis.circle")
@@ -276,6 +357,11 @@ private struct AutomationDetail: View {
         .sheet(isPresented: $showingFileTrigger) {
             FileTriggerEditor(workflow: workflow)
                 .frame(width: 590, height: 640)
+                .presentationSizing(.fitted)
+        }
+        .sheet(isPresented: $showingTemplateExport) {
+            AutomationTemplateExportView(workflow: workflow)
+                .frame(width: 820, height: 680)
                 .presentationSizing(.fitted)
         }
         .alert("Delete \(workflow.name)?", isPresented: $confirmDelete) {

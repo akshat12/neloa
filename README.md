@@ -37,6 +37,7 @@ Neloa is a private, voice-first Mac app for automating work that changes a littl
 - Creates private `neloa://run/…` links for Apple Shortcuts, Raycast, and other user-invoked launchers; these links open the same reviewed run boundary.
 - Watches one user-selected local folder while Neloa is open, waits for a new or replaced matching file to finish copying, and prepares its demonstrated file input for review without adding actions or loading a model.
 - Builds an inspect-before-save diagnostics report with versions, health, and structural counts while excluding recordings, user content, paths, coordinates, identifiers, and raw failures.
+- Shares reusable, privacy-safe teaching templates that contain only a public title, generic action types, flexible-input flags, and approval gates. Imported templates cannot run; the recipient must demonstrate the task locally and review the newly captured workflow.
 - Runs an unchanged saved workflow without loading Qwen or waiting for model planning.
 - Uses one primary local model family—Qwen3-VL 4B—with a recommended 4-bit tier and an optional higher-precision 8-bit tier, plus Apple's on-device model and a narrow deterministic planner as safe fallbacks.
 - Pauses at spoken approval rules such as “always ask me before sending.”
@@ -52,12 +53,13 @@ Requirements for the complete app: macOS 15 or newer, Apple silicon, 16 GB of me
 make setup-signing
 make test
 make trigger-test
+make template-test
 make agent-test
 make app
 open dist/Neloa.app
 ```
 
-`make setup-signing` is a one-time development setup that creates a local signing identity in your login Keychain. The first signed build may ask for your Mac login password; choose **Always Allow** so later builds can sign without prompting. Keeping the same identity across builds lets macOS retain Neloa’s privacy permissions. `make test` runs deterministic workflow checks. `make trigger-test` exercises a real watched-folder event from file creation through a queued reviewed run. `make agent-test` makes a real request to Apple's on-device model and verifies the resulting executable change plan.
+`make setup-signing` is a one-time development setup that creates a local signing identity in your login Keychain. The first signed build may ask for your Mac login password; choose **Always Allow** so later builds can sign without prompting. Keeping the same identity across builds lets macOS retain Neloa’s privacy permissions. `make test` runs deterministic workflow checks. `make trigger-test` exercises a real watched-folder event from file creation through a queued reviewed run. `make template-test` writes, imports, and prepares a privacy-safe teaching guide while proving that it creates no executable actions. `make agent-test` makes a real request to Apple's on-device model and verifies the resulting executable change plan.
 
 `make qwen-test` performs the end-to-end direct MLX model check, including real GPU inference. Its first run downloads the same 3.1 GB 4-bit model used by the app; later runs reuse Neloa's private local cache. `make qwen-8bit-test` performs the equivalent check for the optional 5.1 GB 8-bit tier.
 
@@ -115,6 +117,19 @@ This path is deterministic: it does not load Qwen or Apple’s language model. I
 Open **Settings → Support & diagnostics → Preview diagnostics**. Neloa shows the included categories, the data it guarantees is absent, and the exact selectable JSON before a file can be saved. Nothing is uploaded automatically.
 
 The report contains app and system versions, permission and local-model state, safe automation structure and readiness counts, and aggregate run outcomes. It excludes recordings, OCR, workflow names, transcripts, instructions, typed values, URLs, paths, control labels, coordinates, app identities, UUIDs, raw failures, and storage locations. See the [diagnostics privacy contract](docs/DIAGNOSTICS.md) for the complete schema boundary and verification strategy.
+
+### Share a reusable teaching template
+
+To share the shape of an automation without sharing its private contents:
+
+1. Open **My automations**, select the automation, and choose **More → Share reusable template…**.
+2. Enter a deliberately public title. Neloa never copies the saved automation’s name into this field.
+3. Inspect the included fields, excluded fields, generic teaching outline, and exact JSON.
+4. Save the `.neloa-template.json` file and send it using a channel you trust.
+
+To use one, choose **Import template…** in **My automations**, inspect its generic outline, then choose **Teach this template**. Neloa opens a guided teaching session. You must perform the task on your own Mac, review the newly captured actions and values, and save a new local automation. Importing a template never opens its original apps, visits an address, types a value, or creates a runnable workflow.
+
+See the [reusable-template privacy contract](docs/TEMPLATES.md) for the exact schema, hostile-file protections, and test guarantees.
 
 ## Local visual intelligence
 

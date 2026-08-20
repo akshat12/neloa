@@ -49,6 +49,9 @@ jobs:
       - name: Exercise watched-folder event flow
         run: make trigger-test
 
+      - name: Exercise reusable-template import flow
+        run: make template-test
+
       - name: Build production executable
         run: swift build -c release --product Neloa
 
@@ -63,6 +66,7 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' dist/Neloa.app/Contents/Info.plist)" = "ai.neloa.desktop"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' dist/Neloa.app/Contents/Info.plist)" = "neloa"
           dist/Neloa.app/Contents/MacOS/Neloa --self-test
+          dist/Neloa.app/Contents/MacOS/Neloa --template-smoke-test
           codesign --verify --deep --strict --verbose=2 dist/Neloa.app
 
       - name: Confirm build did not modify source

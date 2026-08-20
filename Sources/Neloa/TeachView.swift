@@ -37,8 +37,10 @@ struct TeachView: View {
     private var setupView: some View {
         VStack(alignment: .leading, spacing: 26) {
             PageHeader(
-                title: "Let’s get your teaching session ready.",
-                subtitle: "Three quick choices, then show Neloa the task."
+                title: teacher.templateGuide == nil ? "Let’s get your teaching session ready." : "Teach this template on your Mac.",
+                subtitle: teacher.templateGuide == nil
+                    ? "Three quick choices, then show Neloa the task."
+                    : "Use the guide as a checklist, but demonstrate every action yourself."
             )
 
             if agent.modelStatus != .ready {
@@ -160,8 +162,16 @@ struct TeachView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
 
-                WhatNeloaLearnsCard()
-                    .frame(minWidth: 280, idealWidth: 310, maxWidth: 340)
+                if let template = teacher.templateGuide {
+                    AutomationTemplateTeachingGuide(
+                        template: template,
+                        remove: teacher.clearTemplateGuide
+                    )
+                    .frame(minWidth: 300, idealWidth: 330, maxWidth: 370)
+                } else {
+                    WhatNeloaLearnsCard()
+                        .frame(minWidth: 280, idealWidth: 310, maxWidth: 340)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
@@ -324,7 +334,12 @@ struct TeachView: View {
 
     private var reviewView: some View {
         VStack(alignment: .leading, spacing: 18) {
-            PageHeader(title: "Review what Neloa learned", subtitle: "Play back the recording and confirm the actions Neloa should repeat.")
+            PageHeader(
+                title: "Review what Neloa learned",
+                subtitle: teacher.templateGuide == nil
+                    ? "Play back the recording and confirm the actions Neloa should repeat."
+                    : "Confirm the fresh actions from your demonstration. The template did not supply executable steps."
+            )
             if let message = teacher.message {
                 Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
             }
@@ -339,7 +354,7 @@ struct TeachView: View {
                     )
                 )
                 HStack {
-                    Button("Teach again") { teacher.reset() }
+                    Button("Teach again") { teacher.reset(preserveTemplate: true) }
                     Spacer()
                     Button(isSaving ? "Automation saved" : "Save automation") {
                         saveAutomation(draft)

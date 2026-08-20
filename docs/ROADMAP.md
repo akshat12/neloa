@@ -2,7 +2,7 @@
 
 Neloa’s next features are ranked by whether they make a demonstrated automation more trustworthy, repairable, and broadly useful without turning the local model into an unbounded computer-use agent.
 
-## Now: readiness, repair, reviewed triggers, diagnostics, and evaluation
+## Now: readiness, repair, reviewed triggers, diagnostics, evaluation, and safe sharing
 
 Before replay, Neloa performs a deterministic preflight over the exact reviewed plan. It checks:
 
@@ -34,6 +34,10 @@ For early support and issue reports, Settings can generate a local diagnostics r
 
 Model, prompt, quantization, evidence, and planning changes use a comprehensive local Qwen benchmark. Baseline and candidate JSON reports can now be compared case by case, with newly failing assertions, resolved failures, score changes, and runtime changes preserved in JSON and Markdown. Comparisons reject altered test contracts instead of presenting incomparable scores as an improvement.
 
+Reusable templates let one person share an automation’s teaching outline without exporting a runnable workflow. The format contains only a consciously entered public title, generic action kinds and order, flexible-input flags, and approval flags. It excludes recordings, narration, OCR, workflow names, instructions, values, URLs, paths, app identities, accessibility targets, coordinates, keyboard data, schedules, triggers, identifiers, and timestamps.
+
+An imported template is deliberately non-executable. Neloa previews the generic guide, then requires the recipient to demonstrate the task on their own Mac and review the new capture. Strict schema allowlists, file-size and step-count limits, title validation, hostile-field rejection, deterministic secret-equivalence tests, and a real-file import/teaching smoke test keep this boundary enforceable.
+
 ## Defining milestone: bounded live work
 
 Neloa should eventually support a reviewed runtime step such as “summarize the article that is open now” or “extract the total from this month’s report.” This is different from static replay and requires:
@@ -46,9 +50,9 @@ Neloa should eventually support a reviewed runtime step such as “summarize the
 
 The first version should support one bounded read/transform/write step inside an otherwise deterministic workflow, not unrestricted autonomous browsing.
 
-## Later: sharing
+## Later: community discovery
 
-- Importable automation templates that contain no recordings, secrets, or machine-specific coordinates.
+- A curated gallery of privacy-safe templates after the local file format and guided teaching flow have proven stable.
 
 ## Product gates
 

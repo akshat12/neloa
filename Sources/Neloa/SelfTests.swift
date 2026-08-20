@@ -43,6 +43,7 @@ enum SelfTests {
         try automationRunQueueCheck()
         try fileTriggerCheck()
         try diagnosticsPrivacyCheck()
+        try automationTemplateCheck()
         try reviewTimelineSelectionCheck()
         try workflowInstructionCheck()
         try agentResponseSafetyCheck()
@@ -470,6 +471,67 @@ enum SelfTests {
 
         center.remove(workflowID: workflow.id)
         try expect(center.watchingWorkflowIDs.isEmpty && router.currentRequest == nil, "removing a watched folder should stop monitoring and clear its queued run")
+    }
+
+    @MainActor
+    static func automationTemplateSmokeTest() async throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NeloaTemplateSmoke-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let source = Workflow(
+            name: "PRIVATE source workflow",
+            transcript: "PRIVATE narration",
+            recordingPath: "/Users/private/recording.mp4",
+            steps: [
+                WorkflowStep(
+                    kind: .openURL,
+                    title: "Open private portal",
+                    time: 0,
+                    text: "https://private.example/account"
+                ),
+                WorkflowStep(
+                    kind: .typeText,
+                    title: "Enter private amount",
+                    time: 1,
+                    text: "$12,345",
+                    runVariable: true
+                ),
+                WorkflowStep(
+                    kind: .approval,
+                    title: "Confirm private submission",
+                    time: 2,
+                    requiresApproval: true
+                )
+            ]
+        )
+        let exported = try AutomationTemplateCodec.make(
+            workflow: source,
+            publicTitle: "Monthly portal update"
+        )
+        let file = folder.appendingPathComponent("monthly-portal-update.neloa-template.json")
+        try exported.jsonData().write(to: file, options: .atomic)
+        let imported = try AutomationTemplateCodec.read(from: file)
+        try expect(imported == exported, "a saved reusable template should import without changing its safe guide")
+
+        let defaultsName = "NeloaTemplateSmoke.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: defaultsName) else {
+            throw Failure(description: "could not create isolated defaults for the reusable-template smoke test")
+        }
+        defer { defaults.removePersistentDomain(forName: defaultsName) }
+        let teacher = TeachController(arguments: [], defaults: defaults, environment: [:])
+        try expect(teacher.prepare(template: imported), "an idle teaching session should accept an imported guide")
+        try expect(teacher.templateGuide == imported, "the imported guide should appear in teaching setup")
+        try expect(teacher.draft == nil, "importing a guide must not create an executable workflow or replay actions")
+
+        teacher.reset(preserveTemplate: true)
+        try expect(teacher.templateGuide == imported, "Teach again should preserve the imported guide")
+        try expect(teacher.draft == nil, "resetting with a guide must still require a fresh local demonstration")
+
+        teacher.reset()
+        try expect(teacher.templateGuide == nil, "leaving the guided session should discard imported template state")
+        try expect(teacher.draft == nil, "discarding a guide must not leave an executable draft behind")
     }
 
     @MainActor
@@ -2347,6 +2409,211 @@ enum SelfTests {
         try expect(alpha.activity == DiagnosticsActivitySummary(total: 1, completed: 0, stopped: 0, failed: 1), "diagnostics should retain aggregate run outcomes only")
         let decoded = try JSONDecoder.neloa.decode(DiagnosticsReport.self, from: data)
         try expect(decoded == alpha, "the redacted diagnostics report should round-trip as portable JSON")
+    }
+
+    private static func automationTemplateCheck() throws {
+        func fixture(_ secret: String) -> Workflow {
+            let input = WorkflowStep(
+                kind: .typeText,
+                title: "PRIVATE_INPUT_\(secret)",
+                detail: "PRIVATE_DETAIL_\(secret)",
+                time: 4,
+                x: secret == "ALPHA" ? 100 : 900,
+                y: secret == "ALPHA" ? 200 : 800,
+                text: "PRIVATE_TYPED_\(secret)",
+                target: "PRIVATE_TARGET_\(secret)",
+                runVariable: true,
+                application: "PRIVATE_APP_\(secret)",
+                bundleIdentifier: "private.bundle.\(secret)",
+                displayID: secret == "ALPHA" ? 41 : 99,
+                origin: .visual
+            )
+            return Workflow(
+                name: "PRIVATE_WORKFLOW_\(secret)",
+                createdAt: Date(timeIntervalSince1970: secret == "ALPHA" ? 100 : 900),
+                updatedAt: Date(timeIntervalSince1970: secret == "ALPHA" ? 200 : 800),
+                transcript: "PRIVATE_TRANSCRIPT_\(secret)",
+                narrationSegments: [NarrationSegment(text: "PRIVATE_NARRATION_\(secret)", time: 1, duration: 2)],
+                recordingPath: "/Users/private/\(secret)/recording.mp4",
+                narrationPath: "/Users/private/\(secret)/narration.m4a",
+                steps: [
+                    WorkflowStep(
+                        kind: .openApp,
+                        title: "PRIVATE_OPEN_APP_\(secret)",
+                        time: 0,
+                        application: "PRIVATE_APP_\(secret)",
+                        bundleIdentifier: "private.bundle.\(secret)"
+                    ),
+                    WorkflowStep(
+                        kind: .openURL,
+                        title: "PRIVATE_URL_\(secret)",
+                        time: 1,
+                        text: "https://private.example/\(secret)",
+                        application: "PRIVATE_BROWSER_\(secret)",
+                        bundleIdentifier: "private.browser.\(secret)"
+                    ),
+                    WorkflowStep(
+                        kind: .click,
+                        title: "PRIVATE_CLICK_\(secret)",
+                        time: 2,
+                        x: 321,
+                        y: 654,
+                        target: "PRIVATE_CONTROL_\(secret)",
+                        application: "PRIVATE_APP_\(secret)",
+                        bundleIdentifier: "private.bundle.\(secret)",
+                        requiresApproval: true
+                    ),
+                    input,
+                    WorkflowStep(
+                        kind: .keyPress,
+                        title: "PRIVATE_KEY_\(secret)",
+                        time: 5,
+                        keyCode: secret == "ALPHA" ? 8 : 9,
+                        flags: secret == "ALPHA" ? 1_048_576 : 2_097_152,
+                        application: "PRIVATE_APP_\(secret)"
+                    ),
+                    WorkflowStep(
+                        kind: .approval,
+                        title: "PRIVATE_APPROVAL_\(secret)",
+                        detail: "PRIVATE_RULE_\(secret)",
+                        time: 6,
+                        text: "PRIVATE_INSTRUCTION_\(secret)",
+                        requiresApproval: true,
+                        origin: .user,
+                        instructionScope: .fromHere,
+                        linkedStepID: input.id
+                    )
+                ],
+                defaultInstruction: "PRIVATE_DEFAULT_\(secret)",
+                schedule: AutomationSchedule(repeatMode: .weekly, hour: 9, minute: 30, weekday: 3),
+                fileTrigger: AutomationFileTrigger(
+                    folderPath: "/Users/private/\(secret)/Incoming",
+                    kind: .pdf,
+                    inputStepID: input.id
+                ),
+                semanticVersion: 3
+            )
+        }
+
+        let alpha = try AutomationTemplateCodec.make(
+            workflow: fixture("ALPHA"),
+            publicTitle: "Monthly report starter"
+        )
+        let beta = try AutomationTemplateCodec.make(
+            workflow: fixture("BETA"),
+            publicTitle: "  Monthly report starter  "
+        )
+        let alphaData = try alpha.jsonData()
+        let betaData = try beta.jsonData()
+        try expect(alpha == beta && alphaData == betaData, "templates with the same public title and action shape must be independent of private workflow data")
+        try expect(alpha.steps.count == 6, "a reusable template should preserve the action sequence")
+        try expect(alpha.flexibleInputCount == 1, "a reusable template should preserve which input can change each run")
+        try expect(alpha.approvalCount == 2, "a reusable template should preserve explicit and action-level approval gates")
+        try expect(alpha.steps[2].label == "Choose a control after approval", "template outlines should explain approval placement without leaking the control label")
+
+        let text = String(decoding: alphaData, as: UTF8.self)
+        let forbidden = [
+            "PRIVATE_", "private.example", "private.bundle", "/Users/private",
+            "recordingPath", "narrationPath", "transcript", "application", "bundleIdentifier",
+            "target", "keyCode", "flags", "displayID", "instructionScope", "linkedStepID",
+            "createdAt", "updatedAt", "schedule", "fileTrigger"
+        ]
+        for value in forbidden {
+            try expect(!text.contains(value), "a reusable template must not serialize private or executable field: \(value)")
+        }
+        let decoded = try AutomationTemplateCodec.decode(alphaData)
+        try expect(decoded == alpha, "a privacy-safe reusable template should round-trip through its public JSON format")
+
+        let temporaryFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NeloaTemplateCodec-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryFolder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryFolder) }
+        let savedTemplate = temporaryFolder.appendingPathComponent("safe.neloa-template.json")
+        try alphaData.write(to: savedTemplate, options: .atomic)
+        let readTemplate = try AutomationTemplateCodec.read(from: savedTemplate)
+        try expect(
+            readTemplate == alpha,
+            "the file importer should preserve a valid safe template"
+        )
+        try expect(
+            AutomationTemplateCodec.sanitizedSlug("  Monthly Report: Starter!  ") == "monthly-report-starter",
+            "template filenames should use a portable public-title slug"
+        )
+
+        func expectDecodeFailure(
+            _ data: Data,
+            equals expected: AutomationTemplateError,
+            _ message: String
+        ) throws {
+            do {
+                _ = try AutomationTemplateCodec.decode(data)
+                throw Failure(description: message)
+            } catch let error as AutomationTemplateError {
+                try expect(error == expected, "\(message); got \(error)")
+            }
+        }
+
+        var unknownRoot = try JSONSerialization.jsonObject(with: alphaData) as? [String: Any] ?? [:]
+        unknownRoot["recordingPath"] = "/Users/private/recording.mp4"
+        try expectDecodeFailure(
+            JSONSerialization.data(withJSONObject: unknownRoot),
+            equals: .unexpectedFields("the file"),
+            "imports must reject unknown top-level fields instead of silently ignoring possible private data"
+        )
+
+        var unknownStep = try JSONSerialization.jsonObject(with: alphaData) as? [String: Any] ?? [:]
+        var stepObjects = unknownStep["steps"] as? [[String: Any]] ?? []
+        stepObjects[0]["text"] = "PRIVATE_TYPED_VALUE"
+        unknownStep["steps"] = stepObjects
+        try expectDecodeFailure(
+            JSONSerialization.data(withJSONObject: unknownStep),
+            equals: .unexpectedFields("guide step 1"),
+            "imports must reject executable text hidden in a guide step"
+        )
+
+        let oversized = Data(repeating: 0x20, count: AutomationTemplate.maximumFileSize + 1)
+        try expectDecodeFailure(oversized, equals: .tooLarge, "imports must reject oversized template files before parsing")
+        let oversizedFile = temporaryFolder.appendingPathComponent("oversized.neloa-template.json")
+        try oversized.write(to: oversizedFile, options: .atomic)
+        do {
+            _ = try AutomationTemplateCodec.read(from: oversizedFile)
+            throw Failure(description: "the file importer must reject oversized templates before reading their contents")
+        } catch let error as AutomationTemplateError {
+            try expect(error == .tooLarge, "the file importer should report its size boundary")
+        }
+
+        let deceptiveTitle = AutomationTemplate(
+            title: "Quarterly report\u{202E}nosj.exe",
+            steps: [AutomationTemplateStep(kind: .openApp, isFlexibleInput: false, requiresApproval: false)]
+        )
+        do {
+            _ = try deceptiveTitle.jsonData()
+            throw Failure(description: "template titles must reject invisible or bidirectional formatting controls")
+        } catch let error as AutomationTemplateError {
+            try expect(error == .invalidTitle, "unsafe title formatting should use the public-title validation error")
+        }
+
+        let invalidFlexible = AutomationTemplate(
+            title: "Invalid flexible step",
+            steps: [AutomationTemplateStep(kind: .click, isFlexibleInput: true, requiresApproval: false)]
+        )
+        do {
+            _ = try invalidFlexible.jsonData()
+            throw Failure(description: "only typed inputs may be marked flexible")
+        } catch let error as AutomationTemplateError {
+            try expect(error == .invalidStep(1), "invalid flexible-input metadata should identify its guide step")
+        }
+
+        let approvalOnly = AutomationTemplate(
+            title: "Approval only",
+            steps: [AutomationTemplateStep(kind: .approval, isFlexibleInput: false, requiresApproval: true)]
+        )
+        do {
+            _ = try approvalOnly.jsonData()
+            throw Failure(description: "a template without a demonstrable task should be rejected")
+        } catch let error as AutomationTemplateError {
+            try expect(error == .noDemonstrableActions, "a template should not consist only of metadata or approval markers")
+        }
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {

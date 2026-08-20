@@ -136,6 +136,18 @@ enum NeloaMain {
                 }
             }
             dispatchMain()
+        } else if CommandLine.arguments.contains("--template-smoke-test") {
+            Task { @MainActor in
+                do {
+                    try await SelfTests.automationTemplateSmokeTest()
+                    print("Neloa reusable-template smoke test passed")
+                    Foundation.exit(0)
+                } catch {
+                    fputs("Neloa reusable-template smoke test failed: \(error)\n", stderr)
+                    Foundation.exit(1)
+                }
+            }
+            dispatchMain()
         } else if CommandLine.arguments.contains("--compare-model-evals") {
             do {
                 let written = try ModelEvaluationComparison.run()
