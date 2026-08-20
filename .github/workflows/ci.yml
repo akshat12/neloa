@@ -1,0 +1,53 @@
+name: Verify Neloa
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Test and package
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 2
+
+      - name: Check repository formatting
+        run: git diff --check HEAD^ HEAD
+
+      - name: Run deterministic tests
+        run: make test
+
+      - name: Build production executable
+        run: swift build -c release --product Neloa
+
+      - name: Package app bundle
+        env:
+          NELOA_FORCE_ADHOC: "1"
+        run: make basic-app
+
+      - name: Verify packaged app
+        run: |
+          set -euo pipefail
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' dist/Neloa.app/Contents/Info.plist)" = "ai.neloa.desktop"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' dist/Neloa.app/Contents/Info.plist)" = "neloa"
+          dist/Neloa.app/Contents/MacOS/Neloa --self-test
+          codesign --verify --deep --strict --verbose=2 dist/Neloa.app
+
+      - name: Confirm build did not modify source
+        run: git diff --exit-code

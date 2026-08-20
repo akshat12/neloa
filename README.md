@@ -1,5 +1,7 @@
 # Neloa
 
+[![Verify Neloa](https://github.com/akshat12/neloa/actions/workflows/ci.yml/badge.svg)](https://github.com/akshat12/neloa/actions/workflows/ci.yml)
+
 Neloa is a private, voice-first Mac app for automating work that changes a little every time. Show a workflow once, explain the decisions out loud, then run it later by saying only what is different.
 
 <p align="center">
