@@ -43,20 +43,20 @@ is usable by non-programmers, or is safe against indirect prompt injection.
 
 ## Reproduce the paper results
 
-From repository root:
+To validate the committed reports and rebuild the submission files from repository root:
 
 ```sh
-./scripts/run-paper-evaluation.sh
 python3 paper/analyze_results.py \
   --input paper/results/raw/frozen-2026-08-25 \
   --output paper/results
 python3 paper/finalize_submission.py
+python3 paper/build_pdf.py
 ```
 
-The collection script intentionally refuses to overwrite an existing report set. Move
-or remove an existing frozen-results directory only when deliberately starting a new
-study. The finalization script is idempotent and derives every manuscript number from
-`paper/results/summary.json`.
+To collect a genuinely new frozen study, first choose a new result-set identifier in the
+runner and manifest, then run `./scripts/run-paper-evaluation.sh`. The collection script
+intentionally refuses to overwrite an existing report set. The finalization script is
+idempotent and derives every manuscript number from `paper/results/summary.json`.
 
 Key files:
 
@@ -90,4 +90,3 @@ The scientific package is complete for the frozen formative study. The author mu
 their name, affiliation, correspondence details, ORCID, funding statement, and conflict
 statement; confirm the desired venue; and complete a final human review. See the
 submission checklist for the exact fields.
-

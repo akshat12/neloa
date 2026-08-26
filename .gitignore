@@ -5,3 +5,4 @@ dist/
 .swiftpm/
 __pycache__/
 *.pyc
+tmp/

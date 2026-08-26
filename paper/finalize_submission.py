@@ -82,13 +82,12 @@ def build_results(four: dict, eight: dict) -> str:
     total_failures = four["criticalFailureCount"] + eight["criticalFailureCount"]
     table = "\n".join(
         [
-            "| Tier | Passing trials | Weighted score, mean | All cases passing | Model cases passing | Critical failures | Setup, mean | Evaluation, mean | Peak RSS | Model files |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| Tier | Passing trials | Weighted score, mean | Model cases passing | Critical failures | Evaluation, mean | Peak RSS | Model files |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
             *[
                 f"| {tier['precision']} | {tier['reportsPassed']}/{tier['trials']} | "
-                f"{percent(tier['weightedScoreMean'])} | {percent(tier['casePassRate'])} | "
-                f"{percent(tier['modelCasePassRate'])} | {tier['criticalFailureCount']} | "
-                f"{tier['modelSetupSecondsMean']:.1f} s | {tier['evaluationSecondsMean']:.1f} s | "
+                f"{percent(tier['weightedScoreMean'])} | {percent(tier['modelCasePassRate'])} | "
+                f"{tier['criticalFailureCount']} | {tier['evaluationSecondsMean']:.1f} s | "
                 f"{tier['peakResidentMemoryBytesMax'] / 2**30:.2f} GiB | "
                 f"{tier['modelDiskBytes'] / 10**9:.2f} GB |"
                 for tier in (four, eight)

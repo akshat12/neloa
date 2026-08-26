@@ -110,10 +110,10 @@ An assertion has an explicit weight. A case passes when its weighted score is at
 <!-- RESULTS:BEGIN -->
 The 4-bit tier passed 3/3 complete trials and the 8-bit tier passed 3/3. Their mean weighted scores were 100.0% (SD 0.0 percentage points) and 100.0% (SD 0.0 percentage points), respectively. Model-only case pass rates were 100.0% and 100.0%; deterministic case pass rates were 100.0% for both tiers. Across all six reports, there were 0 critical assertion failures.
 
-| Tier | Passing trials | Weighted score, mean | All cases passing | Model cases passing | Critical failures | Setup, mean | Evaluation, mean | Peak RSS | Model files |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 4-bit | 3/3 | 100.0% | 100.0% | 100.0% | 0 | 1.0 s | 214.7 s | 3.41 GiB | 3.11 GB |
-| 8-bit | 3/3 | 100.0% | 100.0% | 100.0% | 0 | 1.1 s | 184.3 s | 5.28 GiB | 5.12 GB |
+| Tier | Passing trials | Weighted score, mean | Model cases passing | Critical failures | Evaluation, mean | Peak RSS | Model files |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 4-bit | 3/3 | 100.0% | 100.0% | 0 | 214.7 s | 3.41 GiB | 3.11 GB |
+| 8-bit | 3/3 | 100.0% | 100.0% | 0 | 184.3 s | 5.28 GiB | 5.12 GB |
 
 The 4-bit tier required 1.0 s (SD 0.0) for cached model setup and 214.7 s (SD 17.7) for the suite. Its maximum observed process high-water mark was 3.41 GiB and its pinned model files occupied 3.11 GB. The 8-bit tier required 1.1 s (SD 0.2) for setup and 184.3 s (SD 20.0) for evaluation, with a 5.28 GiB peak and 5.12 GB of model files. These are whole-process measurements on the stated 48 GB test Mac, not isolated weight memory or evidence of 16 GB compatibility.
 

@@ -49,10 +49,19 @@ the venue requests one.
       frozen result set; the script refuses to overwrite existing reports.
 - [ ] Run `python3 paper/analyze_results.py` and
       `python3 paper/finalize_submission.py` from repository root.
+- [ ] Run `python3 paper/build_pdf.py` and confirm both PDFs appear in `output/pdf/`.
 - [ ] Confirm that no result placeholders remain in the manuscript or proposal.
 - [ ] Confirm all six raw JSON reports, the manifest, summary files, analysis code,
       and exact model revisions are committed.
 - [ ] Build the application and run the self-test.
 - [ ] Rebuild the PDF and inspect every rendered page.
 - [ ] Review every factual claim and citation as the human author before submission.
+
+## Generated files
+
+- `output/pdf/neloa-short-paper.pdf` — anonymized journal-style manuscript
+- `output/pdf/neloa-hcii-2027-proposal.pdf` — anonymized first-stage proposal
+- `iwc-title-page-template.md` — identifying metadata kept separate from review copy
+- `iwc-cover-letter.md` — editable journal cover letter
+- `research-highlights.txt` — three journal highlights, each under 100 characters
 
