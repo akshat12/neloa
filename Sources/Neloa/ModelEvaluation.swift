@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 
 struct ModelEvaluationAssertion: Codable, Sendable {
@@ -48,6 +49,12 @@ struct ModelEvaluationReport: Codable, Sendable {
     var precision: String
     var operatingSystem: String
     var physicalMemoryBytes: UInt64
+    var processorCount: Int?
+    var activeProcessorCount: Int?
+    var trialID: String?
+    var modelSetupSeconds: Double?
+    var peakResidentMemoryBytes: UInt64?
+    var modelDiskBytes: UInt64?
     var minimumScore: Double
     var durationSeconds: Double
     var cases: [ModelEvaluationCase]
@@ -64,6 +71,12 @@ struct ModelEvaluationReport: Codable, Sendable {
         precision: String,
         operatingSystem: String,
         physicalMemoryBytes: UInt64,
+        processorCount: Int? = nil,
+        activeProcessorCount: Int? = nil,
+        trialID: String? = nil,
+        modelSetupSeconds: Double? = nil,
+        peakResidentMemoryBytes: UInt64? = nil,
+        modelDiskBytes: UInt64? = nil,
         minimumScore: Double,
         durationSeconds: Double,
         cases: [ModelEvaluationCase]
@@ -75,6 +88,12 @@ struct ModelEvaluationReport: Codable, Sendable {
         self.precision = precision
         self.operatingSystem = operatingSystem
         self.physicalMemoryBytes = physicalMemoryBytes
+        self.processorCount = processorCount
+        self.activeProcessorCount = activeProcessorCount
+        self.trialID = trialID
+        self.modelSetupSeconds = modelSetupSeconds
+        self.peakResidentMemoryBytes = peakResidentMemoryBytes
+        self.modelDiskBytes = modelDiskBytes
         self.minimumScore = minimumScore
         self.durationSeconds = durationSeconds
         self.cases = cases
@@ -133,7 +152,9 @@ enum ModelEvaluation {
         defer { try? FileManager.default.removeItem(at: fixtureDirectory) }
 
         let agent = LocalAgentService(selectedTier: tier)
+        let modelSetupStartedAt = Date()
         await agent.setupModel()
+        let modelSetupSeconds = Date().timeIntervalSince(modelSetupStartedAt)
         guard agent.modelStatus == .ready else {
             throw SelfTests.Failure(description: "could not prepare \(tier.precisionLabel) Qwen: \(agent.modelStatus)")
         }
@@ -186,6 +207,12 @@ enum ModelEvaluation {
             precision: tier.precisionLabel,
             operatingSystem: ProcessInfo.processInfo.operatingSystemVersionString,
             physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory,
+            processorCount: ProcessInfo.processInfo.processorCount,
+            activeProcessorCount: ProcessInfo.processInfo.activeProcessorCount,
+            trialID: ProcessInfo.processInfo.environment["NELOA_EVAL_TRIAL"],
+            modelSetupSeconds: modelSetupSeconds,
+            peakResidentMemoryBytes: peakResidentMemoryBytes(),
+            modelDiskBytes: modelDiskBytes(for: tier),
             minimumScore: minimumScore,
             durationSeconds: Date().timeIntervalSince(startedAt),
             cases: cases
@@ -771,8 +798,46 @@ enum ModelEvaluation {
         try markdown(report).write(to: markdownURL, atomically: true, encoding: .utf8)
     }
 
+    private static func peakResidentMemoryBytes() -> UInt64? {
+        var usage = rusage()
+        guard getrusage(RUSAGE_SELF, &usage) == 0, usage.ru_maxrss >= 0 else { return nil }
+        // Darwin reports ru_maxrss in bytes.
+        return UInt64(usage.ru_maxrss)
+    }
+
+    private static func modelDiskBytes(for tier: LocalModelTier) -> UInt64? {
+        let root = LocalModelPaths.snapshotDirectory(for: tier)
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+
+        var visitedTargets = Set<String>()
+        var total: UInt64 = 0
+        for case let fileURL as URL in enumerator {
+            let target = fileURL.resolvingSymlinksInPath()
+            guard visitedTargets.insert(target.path).inserted,
+                  let values = try? target.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true,
+                  let size = values.fileSize,
+                  size >= 0
+            else { continue }
+            total += UInt64(size)
+        }
+        return total > 0 ? total : nil
+    }
+
     private static func markdown(_ report: ModelEvaluationReport) -> String {
         let percent = Int((report.score * 100).rounded())
+        let trialLabel = report.trialID.map { "`\($0)`" } ?? "not specified"
+        let setupLabel = report.modelSetupSeconds.map { String(format: "%.1f seconds", $0) } ?? "unavailable"
+        let peakMemoryLabel = report.peakResidentMemoryBytes.map {
+            ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .memory)
+        } ?? "unavailable"
+        let modelDiskLabel = report.modelDiskBytes.map {
+            ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file)
+        } ?? "unavailable"
         var lines = [
             "# Neloa model evaluation",
             "",
@@ -780,7 +845,11 @@ enum ModelEvaluation {
             "- Score: **\(percent)%** (minimum \(Int(report.minimumScore * 100))%)",
             "- Model: `\(report.modelID)` at `\(report.modelRevision)`",
             "- Precision: \(report.precision)",
+            "- Trial: \(trialLabel)",
+            "- Model setup: \(setupLabel)",
             "- Duration: \(String(format: "%.1f", report.durationSeconds)) seconds",
+            "- Peak resident memory: \(peakMemoryLabel)",
+            "- Model files: \(modelDiskLabel)",
             "",
             "| Case | Category | Score | Time | Result |",
             "| --- | --- | ---: | ---: | --- |"
