@@ -1,60 +1,75 @@
-# Conference venue strategy
+# Publication venue strategy
 
-Checked against official conference calls on **August 18, 2026**. Dates are Anywhere on Earth (AoE) unless a conference says otherwise. Recheck the linked call before submitting because schedules and policies can change.
+Checked against official venue guidance on **August 25, 2026**. Recheck policies and fees immediately before submission.
 
-## Recommendation
+## Decision
 
-Use a two-stage publication plan:
+Prepare one evidence-complete, venue-neutral short paper and use this order:
 
-1. **Submit an IUI 2027 demo by November 10, 2026.** Neloa is already a working intelligent interface, and the demo track is explicitly for interactive prototypes. A four-page system paper and a five-minute video are realistic without pretending that the full research evaluation is finished.
-2. **Prepare the archival paper for DIS 2027 or a later IUI/UIST cycle.** The central contribution should be bounded adaptation: a local vision-language model can interpret a demonstration and requested variation, but only deterministic captured actions grant execution authority.
+1. **HCI International 2027, AI-HCI — primary conference.** It is the clearest current conference fit that explicitly offers online participation. Submit the required 800-word proposal by October 9, 2026. If accepted, expand the same evidence into the 10–20-page LNCS camera-ready paper due January 29, 2027.
+2. **Interacting with Computers — primary no-travel fallback and strongest short-paper fit.** It accepts rolling 3,000–5,000-word HCI research papers, uses double-anonymized review, and does not require open-access publication. Submit here if HCII confirms that accepted authors cannot present remotely, or if a journal is preferred.
+3. **Frontiers in Computer Science, Human-Media Interaction — paid journal fallback.** Its Brief Research Report format is capped at 4,000 words and four figures/tables, but the current article-processing charge is CHF 990.
+4. **ACM IUI 2027 demo — fit-first, travel-required alternative.** Its four-page demo format is excellent for Neloa, but the official call requires an in-person demo in Helsinki. Use it only if travel becomes acceptable.
 
-The demo and later paper must make materially different contributions. The demo can establish the system and research questions; the archival paper should add the benchmark, ablations, deployment measurements, and human study. Disclose the earlier demo when submitting the later work.
+The current paper should make a bounded system claim: Neloa separates model interpretation from deterministic execution authority, and a frozen synthetic benchmark measures whether supported adaptations preserve actions and approvals. It must not claim end-user usability or live-desktop task success without a human or live-task study.
 
 ## Shortlist
 
-| Venue | Best submission | Deadline | Fit | Recommendation |
-| --- | --- | --- | --- | --- |
-| [ACM IUI 2027](https://iui.acm.org/2027/call-for-posters-demos/) | Demo, 4 pages + video up to 5 minutes | November 10, 2026 | Excellent: intelligent interfaces, democratization of AI, multimodal assistants, human control in automation, privacy, and agent steering are named topics | **Primary near-term target.** Demonstrate teaching, a changed run, approval preservation, and local inference |
-| [ACM CHI 2027 Posters](https://chi2027.acm.org/authors/posters/) | Anonymous, non-archival poster paper up to 4 pages + A0 poster | January 21, 2027 | Excellent HCI audience and explicitly welcomes prototypes with or without a completed evaluation | **Best feedback target.** Non-archival status leaves the full paper path open; note the author review-responsibility requirement |
-| [ACM CHI 2027 Interactive Demos](https://chi2027.acm.org/authors/interactive-demos/) | 6-page proposal + mandatory walkthrough video up to 5 minutes | January 21, 2027 | Excellent for a polished hands-on experience | Strong alternative if an in-person live demo is preferable to a poster |
-| [ACM DIS 2027](https://dis.acm.org/2027/contributing/) | Archival full paper | Abstract January 11; paper January 18, 2027 (dates currently marked provisional) | Good if the contribution is framed around designing understandable, repairable, privacy-preserving agentic automation for non-programmers | **Earliest credible full-paper target**, but only if the evaluation and ethics-ready study are completed |
-| [ACM CUI 2027](https://cui.acm.org/2027/) | Full/short paper, WIP, or interactive work; details pending | To be announced; conference July 26–28, 2027 | Good for the spoken teaching, clarification, and voice-repair interaction | Secondary target if the paper narrows around conversational interaction rather than the whole automation system |
-| [ACM UIST 2027](https://uist.acm.org/) | Paper or demo; call not yet published | To be announced | Excellent for a technically novel interaction technique and rigorous system evaluation | Watch for the official 2027 call; do not plan around an estimated deadline |
+| Venue | Submission | Timing | Remote/travel status | Cost note | Fit and decision |
+| --- | --- | --- | --- | --- | --- |
+| [HCII 2027 Regular Papers](https://2027.hci.international/papers.html), [AI-HCI area](https://2027.hci.international/ai-hci) | 800-word proposal; accepted papers become 10–20 LNCS pages | Proposal Oct. 9, 2026; final Jan. 29, 2027; conference July 25–30, 2027 | [Conference homepage](https://2027.hci.international/) says on-site with an online-participation option. Confirm that this includes remote presentation before registering | One author registration is required; verify the online rate when posted | **Primary conference.** Strong fit for human-agent collaboration, speech interaction, privacy, control, and safe generative AI |
+| [Interacting with Computers](https://academic.oup.com/iwc/pages/General_Instructions) | Short research paper, recommended 3,000–5,000 words | Rolling | Journal; no travel | Standard publication is available; open access is optional and charged only if selected | **Primary fallback.** Strong HCI, human-centred AI, privacy/trust, and interaction-design scope; double-anonymized review |
+| [Frontiers in Computer Science: Human-Media Interaction](https://www.frontiersin.org/journals/computer-science/sections/human-media-interaction/for-authors/article-types) | Brief Research Report, up to 4,000 words and four figures/tables | Rolling | Journal; no travel | [Current B-type APC](https://www.frontiersin.org/journals/computer-science/sections/human-media-interaction/for-authors/publishing-fees): CHF 990; fee-support program exists | Good format and topical fit, but use only if the fee is acceptable |
+| [ACM IUI 2027 Posters & Demos](https://iui.acm.org/2027/call-for-posters-demos/) | Four pages; demo also requires a captioned video up to five minutes | Nov. 10, 2026 | **In-person presentation required** in Helsinki, Feb. 8–11, 2027 | ACM APC/waiver and registration depend on current author circumstances | Best intellectual fit, but not remote-friendly |
+| [Journal of Open Research Software](https://openresearchsoftware.metajnl.com/about/submissions) | “Issues in Research Software” article, 3,000–4,000 words | Rolling | Journal; no travel | APC applies; waiver requests are possible | Only a secondary fit: the section is about creating and evaluating reusable research software, while Neloa is primarily an HCI system |
 
-## Deadlines not worth rushing
+## Venues not ready for this submission
 
-- [IUI 2027 full papers](https://iui.acm.org/2027/call-for-papers/) require an abstract registered by August 13, 2026; that deadline has passed. The full paper is due August 20. The work is not ready for a defensible full-paper submission on that schedule.
-- [CHI 2027 full papers](https://chi2027.acm.org/authors/papers/) are due September 10, 2026. That is enough time to write, but not enough time to design, approve, run, and analyze a rigorous human study. A rushed submission would weaken the work.
+- **JOSS:** its [current requirements](https://joss.readthedocs.io/en/latest/submitting.html) say the paper must not focus on new research results, require more than six months of public development history, and require demonstrated research impact. Neloa is not eligible yet. Revisit after sustained public use if a separate software paper becomes worthwhile.
+- **IUI 2027 full paper:** the abstract and paper deadlines have passed, and accepted work requires in-person presentation.
+- **A rushed human-study venue:** no usability, workload, trust, or non-programmer effectiveness claims should be added until ethics, consent, recruitment, and analysis are complete.
 
-## Submission packages
+## Primary submission package: HCII 2027
 
-### IUI 2027 demo
+### Proposal requirements
 
-- Four-page single-column paper, with references outside the page limit.
-- Five-minute or shorter captioned video.
-- Live demo script that works without personal accounts or private desktop data.
-- One stable scenario and one failure/recovery scenario.
-- Reproducible local-model and hardware description.
-- In-person presenter for Helsinki, February 8–11, 2027.
+- 800 words, excluding references.
+- PDF or DOCX; no special first-stage format.
+- Objective and significance.
+- Methods/approach.
+- Results/findings.
+- Contributions and implications.
+- Single-blind review, so author details are included.
 
-### CHI 2027 poster
+### Remote-participation check
 
-- Anonymous four-page extended abstract.
-- Anonymous A0 poster.
-- A concise evaluation result rather than a broad product tour.
-- Key questions for discussion with the HCI community.
-- Confirm the author team can satisfy the poster track's review-responsibility policy.
+Before paying or submitting the camera-ready paper, email `program@2027.hci.international` with this exact question:
 
-### Full paper
+> Does the HCII 2027 online-participation option permit the registered author of an accepted regular paper in AI-HCI to deliver the required 20-minute presentation remotely, with the paper included in the LNCS proceedings?
 
-- Completed benchmark with frozen tasks and scoring.
-- Ablations separating event capture, video/OCR, narration, and model effects.
-- Quantization, latency, and memory results on a 16 GB Apple-silicon Mac.
-- Safety evaluation including approval-removal and action-invention attacks.
-- Ethics-reviewed human study, or claims explicitly limited to a system/benchmark evaluation.
-- An anonymized artifact and reproducibility package.
+Do not infer the answer from the general online-participation statement alone.
 
-## Cost and publication notes
+## Journal fallback package: Interacting with Computers
 
-ACM has moved to open-access publishing. Eligibility for institutional coverage, article-processing charges, and waivers depends on the venue, article type, corresponding author, and current ACM policy. CHI 2027 says its poster extended abstracts are not charged an APC; do not assume the same for an archival full paper. At least one author generally must register and present accepted work, so travel and registration should be included in the decision.
+- 3,000–5,000-word anonymized short research paper, excluding abstract and references.
+- Separate title page with authors, affiliations, correspondence, and acknowledgements.
+- Abstract and keywords.
+- Three or four research highlights, each under roughly 100 characters.
+- Data/software availability statement.
+- AI-assistance disclosure in the cover letter and Methods or Acknowledgements.
+- Figure legends and alt text.
+- ORCID for the submitting author.
+- PDF is acceptable at first submission; exact journal styling is not required.
+
+## Evidence boundary for this draft
+
+The frozen evaluation contains 15 synthetic, account-free cases and three trials for each local Qwen3-VL quantization tier. It measures executable invariants, model-dependent reconstruction/adaptation assertions, timing, model size, and peak resident memory. It does **not** measure:
+
+- success on live third-party applications;
+- robustness across arbitrary workflows;
+- usability by non-programmers;
+- human trust, workload, or comprehension;
+- performance on a 16 GB Mac; or
+- privacy against a compromised local machine.
+
+These limitations belong in the abstract-adjacent framing, Results, and Discussion—not only in a final caveat.

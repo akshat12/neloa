@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="760" viewBox="0 0 1400 760" role="img" aria-labelledby="title desc">
+  <title id="title">Neloa bounded-adaptation architecture</title>
+  <desc id="desc">Two-stage architecture. During teaching, synchronized screen, event, application, and narration evidence is interpreted locally by Qwen and converted into a user-reviewed action graph. During each run, a variation request may change only declared variables or a supported structured target. Validation preserves action identifiers and approval gates before supervised replay.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#087f8c"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#12333a" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .heading { font: 700 28px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #15343a; }
+      .label { font: 700 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #15343a; }
+      .body { font: 400 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #36545a; }
+      .small { font: 600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #567078; }
+      .box { fill: #ffffff; stroke: #b8d7d9; stroke-width: 2; rx: 18; filter: url(#shadow); }
+      .model { fill: #e5f5f4; stroke: #087f8c; stroke-width: 2.5; rx: 18; filter: url(#shadow); }
+      .authority { fill: #fff1ed; stroke: #ff625e; stroke-width: 2.5; rx: 18; filter: url(#shadow); }
+      .arrow { stroke: #087f8c; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1400" height="760" rx="28" fill="#f7fbfb"/>
+  <text x="58" y="62" class="heading">Teach once</text>
+  <text x="58" y="96" class="body">Interpret multimodal evidence, then ask the user to review the draft.</text>
+
+  <rect x="58" y="132" width="255" height="190" class="box"/>
+  <text x="86" y="174" class="label">Shared session clock</text>
+  <text x="86" y="213" class="body">Screen + system audio</text>
+  <text x="86" y="244" class="body">Clicks + typing + app</text>
+  <text x="86" y="275" class="body">Timestamped narration</text>
+  <text x="86" y="304" class="small">Evidence stays on the Mac</text>
+
+  <path d="M 313 227 L 377 227" class="arrow"/>
+
+  <rect x="380" y="132" width="255" height="190" class="box"/>
+  <text x="408" y="174" class="label">Evidence selection</text>
+  <text x="408" y="213" class="body">Event-adjacent frames</text>
+  <text x="408" y="244" class="body">Visual-change frames</text>
+  <text x="408" y="275" class="body">OCR + coordinate mapping</text>
+  <text x="408" y="304" class="small">At most 8 model frames</text>
+
+  <path d="M 635 227 L 699 227" class="arrow"/>
+
+  <rect x="702" y="132" width="255" height="190" class="model"/>
+  <text x="730" y="174" class="label">Local Qwen3-VL</text>
+  <text x="730" y="213" class="body">Labels captured actions</text>
+  <text x="730" y="244" class="body">Grounds missing draft steps</text>
+  <text x="730" y="275" class="body">Proposes variable roles</text>
+  <text x="730" y="304" class="small">4-bit or 8-bit, via MLX</text>
+
+  <path d="M 957 227 L 1021 227" class="arrow"/>
+
+  <rect x="1024" y="132" width="318" height="190" class="authority"/>
+  <text x="1052" y="174" class="label">Reviewed action graph</text>
+  <text x="1052" y="213" class="body">Captured IDs are preserved</text>
+  <text x="1052" y="244" class="body">Visual drafts require review</text>
+  <text x="1052" y="275" class="body">Consequences gain approvals</text>
+  <text x="1052" y="304" class="small">Saving establishes authority</text>
+
+  <line x1="58" y1="374" x2="1342" y2="374" stroke="#c7dddd" stroke-width="2" stroke-dasharray="8 8"/>
+  <text x="58" y="430" class="heading">Change the details for one run</text>
+  <text x="58" y="464" class="body">The model can interpret a variation, but validation limits what becomes executable.</text>
+
+  <rect x="58" y="500" width="255" height="170" class="box"/>
+  <text x="86" y="542" class="label">Variation request</text>
+  <text x="86" y="581" class="body">“Use August and $3,000”</text>
+  <text x="86" y="612" class="body">Text or voice</text>
+  <text x="86" y="644" class="small">One run only</text>
+
+  <path d="M 313 585 L 377 585" class="arrow"/>
+
+  <rect x="380" y="500" width="255" height="170" class="model"/>
+  <text x="408" y="542" class="label">Bounded planning</text>
+  <text x="408" y="581" class="body">Map values to declared roles</text>
+  <text x="408" y="612" class="body">Or use a safe transform</text>
+  <text x="408" y="644" class="small">No free-form action output</text>
+
+  <path d="M 635 585 L 699 585" class="arrow"/>
+
+  <rect x="702" y="500" width="255" height="170" class="authority"/>
+  <text x="730" y="542" class="label">Authority validator</text>
+  <text x="730" y="581" class="body">Known step IDs only</text>
+  <text x="730" y="612" class="body">Typed values only</text>
+  <text x="730" y="644" class="small">Approvals cannot be removed</text>
+
+  <path d="M 957 585 L 1021 585" class="arrow"/>
+
+  <rect x="1024" y="500" width="318" height="170" class="box"/>
+  <text x="1052" y="542" class="label">Preview + supervised replay</text>
+  <text x="1052" y="581" class="body">Show exact changes</text>
+  <text x="1052" y="612" class="body">Preflight apps and targets</text>
+  <text x="1052" y="644" class="small">Pause before consequences</text>
+
+  <text x="700" y="724" text-anchor="middle" class="small">Interpretation may be probabilistic; execution authority is explicit and bounded.</text>
+</svg>
