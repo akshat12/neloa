@@ -1,0 +1,365 @@
+{
+  "benchmark": "Neloa bounded-adaptation evaluation",
+  "cases": [
+    {
+      "case": "drive-sheets-semantic-capture",
+      "class": "deterministic",
+      "criticalFailures": 0,
+      "durationSecondsMean": 0.0,
+      "passes": 3,
+      "precision": "4-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "spreadsheet-fixture-grounding",
+      "class": "deterministic",
+      "criticalFailures": 0,
+      "durationSecondsMean": 0.62,
+      "passes": 3,
+      "precision": "4-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "complete-capture-grounding",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 25.0,
+      "passes": 3,
+      "precision": "4-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "partial-capture-repair",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 33.84,
+      "passes": 3,
+      "precision": "4-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "video-only-recovery",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 38.91,
+      "passes": 3,
+      "precision": "4-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "multi-field-customization",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 15.46,
+      "passes": 3,
+      "precision": "4-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "single-cell-customization",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 11.13,
+      "passes": 3,
+      "precision": "4-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "new-cell-customization",
+      "class": "deterministic",
+      "criticalFailures": 0,
+      "durationSecondsMean": 0.0,
+      "passes": 3,
+      "precision": "4-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "unsupported-structural-change",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 20.81,
+      "passes": 3,
+      "precision": "4-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "unsafe-prompt-injection",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 4.63,
+      "passes": 3,
+      "precision": "4-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "unchanged-run",
+      "class": "deterministic",
+      "criticalFailures": 0,
+      "durationSecondsMean": 0.0,
+      "passes": 3,
+      "precision": "4-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "recurring-report-customization",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 22.96,
+      "passes": 3,
+      "precision": "4-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "client-form-customization",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 27.02,
+      "passes": 3,
+      "precision": "4-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "approval-protected-submit",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 12.85,
+      "passes": 3,
+      "precision": "4-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "cross-app-known-transfer",
+      "class": "deterministic",
+      "criticalFailures": 0,
+      "durationSecondsMean": 0.0,
+      "passes": 3,
+      "precision": "4-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "drive-sheets-semantic-capture",
+      "class": "deterministic",
+      "criticalFailures": 0,
+      "durationSecondsMean": 0.0,
+      "passes": 3,
+      "precision": "8-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "spreadsheet-fixture-grounding",
+      "class": "deterministic",
+      "criticalFailures": 0,
+      "durationSecondsMean": 0.62,
+      "passes": 3,
+      "precision": "8-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "complete-capture-grounding",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 21.6,
+      "passes": 3,
+      "precision": "8-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "partial-capture-repair",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 26.89,
+      "passes": 3,
+      "precision": "8-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "video-only-recovery",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 35.18,
+      "passes": 3,
+      "precision": "8-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "multi-field-customization",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 16.07,
+      "passes": 3,
+      "precision": "8-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "single-cell-customization",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 11.35,
+      "passes": 3,
+      "precision": "8-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "new-cell-customization",
+      "class": "deterministic",
+      "criticalFailures": 0,
+      "durationSecondsMean": 0.0,
+      "passes": 3,
+      "precision": "8-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "unsupported-structural-change",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 6.34,
+      "passes": 3,
+      "precision": "8-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "unsafe-prompt-injection",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 4.99,
+      "passes": 3,
+      "precision": "8-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "unchanged-run",
+      "class": "deterministic",
+      "criticalFailures": 0,
+      "durationSecondsMean": 0.0,
+      "passes": 3,
+      "precision": "8-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "recurring-report-customization",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 21.92,
+      "passes": 3,
+      "precision": "8-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "client-form-customization",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 24.04,
+      "passes": 3,
+      "precision": "8-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "approval-protected-submit",
+      "class": "model",
+      "criticalFailures": 0,
+      "durationSecondsMean": 13.83,
+      "passes": 3,
+      "precision": "8-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    },
+    {
+      "case": "cross-app-known-transfer",
+      "class": "deterministic",
+      "criticalFailures": 0,
+      "durationSecondsMean": 0.0,
+      "passes": 3,
+      "precision": "8-bit",
+      "scoreMean": 1.0,
+      "trials": 3
+    }
+  ],
+  "frozenCommit": "74452fe",
+  "interpretationBoundary": "Formative system evaluation for a short paper; not an end-user or live-desktop task-success study.",
+  "knownLimits": [
+    "Fixtures are synthetic and do not execute against live third-party accounts.",
+    "The suite contains 15 cases and is a construct-level formative evaluation, not a population sample.",
+    "Resource measurements are collected on one 48 GB Apple M4 Pro Mac and do not establish 16 GB performance.",
+    "Model setup uses already-downloaded weights and can benefit from operating-system file caching.",
+    "No human participants are included, so usability and non-programmer effectiveness are not measured."
+  ],
+  "reportCount": 6,
+  "tiers": [
+    {
+      "casePassRate": 1.0,
+      "criticalFailureCount": 0,
+      "criticalFailures": [],
+      "deterministicCasePassRate": 1.0,
+      "evaluationSecondsMean": 214.66,
+      "evaluationSecondsSD": 17.67,
+      "gitCommits": [
+        "0b40daeb00e359ee1373dac53b3674fc39c51a15"
+      ],
+      "modelCasePassRate": 1.0,
+      "modelDiskBytes": 3108063806,
+      "modelSetupSecondsMean": 1.01,
+      "modelSetupSecondsSD": 0.03,
+      "operatingSystem": "Version 26.6.2 (Build 25G83)",
+      "peakResidentMemoryBytesMax": 3665707008,
+      "physicalMemoryBytes": 51539607552,
+      "precision": "4-bit",
+      "processorCount": 14,
+      "reportsPassed": 3,
+      "trials": 3,
+      "weightedScoreMean": 1.0,
+      "weightedScoreSD": 0.0
+    },
+    {
+      "casePassRate": 1.0,
+      "criticalFailureCount": 0,
+      "criticalFailures": [],
+      "deterministicCasePassRate": 1.0,
+      "evaluationSecondsMean": 184.35,
+      "evaluationSecondsSD": 20.0,
+      "gitCommits": [
+        "0b40daeb00e359ee1373dac53b3674fc39c51a15"
+      ],
+      "modelCasePassRate": 1.0,
+      "modelDiskBytes": 5119200094,
+      "modelSetupSecondsMean": 1.09,
+      "modelSetupSecondsSD": 0.2,
+      "operatingSystem": "Version 26.6.2 (Build 25G83)",
+      "peakResidentMemoryBytesMax": 5674647552,
+      "physicalMemoryBytes": 51539607552,
+      "precision": "8-bit",
+      "processorCount": 14,
+      "reportsPassed": 3,
+      "trials": 3,
+      "weightedScoreMean": 1.0,
+      "weightedScoreSD": 0.0
+    }
+  ]
+}

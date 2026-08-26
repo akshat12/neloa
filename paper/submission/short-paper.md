@@ -7,7 +7,7 @@ link-citations: true
 
 # Abstract
 
-Programming by demonstration can make automation accessible, but recorded macros are brittle while general computer-use agents may synthesize actions beyond what a person intended. We present Neloa, an open-source macOS system for teaching a workflow once and changing bounded details—such as dates, amounts, files, and form values—on later runs. Neloa aligns screen evidence, application and input events, optical character recognition, and timestamped narration. A quantized Qwen3-VL model runs locally to annotate captured actions, reconstruct narrowly grounded missing inputs, and map later instructions to declared variables. The system separates interpretation from authority: model-generated teaching-time actions are evidence-grounded drafts that require review, while run-time model output can replace only text in known variable steps; action identifiers and approval gates remain fixed. We evaluate two quantization tiers in a frozen 15-case synthetic benchmark containing 61 executable assertions, 59 marked critical, across three trials per tier. **[Final aggregate results will be inserted automatically after all six frozen trials.]** These results provide formative evidence about executable invariants and local feasibility, not live-application reliability or end-user usability. We argue that bounded adaptation is a useful middle ground between exact replay and open-ended computer use, especially when recordings should remain on the user’s device.
+Programming by demonstration can make automation accessible, but recorded macros are brittle while general computer-use agents may synthesize actions beyond what a person intended. We present Neloa, an open-source macOS system for teaching a workflow once and changing bounded details—such as dates, amounts, files, and form values—on later runs. Neloa aligns screen evidence, application and input events, optical character recognition, and timestamped narration. A quantized Qwen3-VL model runs locally to annotate captured actions, reconstruct narrowly grounded missing inputs, and map later instructions to declared variables. The system separates interpretation from authority: model-generated teaching-time actions are evidence-grounded drafts that require review, while run-time model output can replace only text in known variable steps; action identifiers and approval gates remain fixed. We evaluate two quantization tiers in a frozen 15-case synthetic benchmark containing 61 executable assertions, 59 marked critical, across three trials per tier. <!-- ABSTRACT-RESULTS:BEGIN -->Across three fresh-process trials per tier, the 4-bit model passed 3/3 runs with a mean weighted score of 100.0%; the 8-bit model passed 3/3 with 100.0%. The two tiers had 0 critical assertion failures; peak process memory was 3.41 and 5.28 GiB, respectively.<!-- ABSTRACT-RESULTS:END --> These results provide formative evidence about executable invariants and local feasibility, not live-application reliability or end-user usability. We argue that bounded adaptation is a useful middle ground between exact replay and open-ended computer use, especially when recordings should remain on the user’s device.
 
 **Keywords:** programming by demonstration; desktop automation; human-AI interaction; GUI agents; local AI; privacy; mixed initiative
 
@@ -108,7 +108,16 @@ An assertion has an explicit weight. A case passes when its weighted score is at
 # 5. Results
 
 <!-- RESULTS:BEGIN -->
-The frozen trials are still being collected. This block is replaced only from `paper/results/summary.json`; no result is copied manually.
+The 4-bit tier passed 3/3 complete trials and the 8-bit tier passed 3/3. Their mean weighted scores were 100.0% (SD 0.0 percentage points) and 100.0% (SD 0.0 percentage points), respectively. Model-only case pass rates were 100.0% and 100.0%; deterministic case pass rates were 100.0% for both tiers. Across all six reports, there were 0 critical assertion failures.
+
+| Tier | Passing trials | Weighted score, mean | All cases passing | Model cases passing | Critical failures | Setup, mean | Evaluation, mean | Peak RSS | Model files |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 4-bit | 3/3 | 100.0% | 100.0% | 100.0% | 0 | 1.0 s | 214.7 s | 3.41 GiB | 3.11 GB |
+| 8-bit | 3/3 | 100.0% | 100.0% | 100.0% | 0 | 1.1 s | 184.3 s | 5.28 GiB | 5.12 GB |
+
+The 4-bit tier required 1.0 s (SD 0.0) for cached model setup and 214.7 s (SD 17.7) for the suite. Its maximum observed process high-water mark was 3.41 GiB and its pinned model files occupied 3.11 GB. The 8-bit tier required 1.1 s (SD 0.2) for setup and 184.3 s (SD 20.0) for evaluation, with a 5.28 GiB peak and 5.12 GB of model files. These are whole-process measurements on the stated 48 GB test Mac, not isolated weight memory or evidence of 16 GB compatibility.
+
+On this benchmark, the additional precision produced no measured assertion advantage. The result favors 4-bit as the default for these tested constructs because it preserves the observed outcomes with a smaller local footprint. It does not establish general equivalence: all cases reached the benchmark ceiling, the sample is synthetic, and the suite does not stress long or visually ambiguous demonstrations.
 <!-- RESULTS:END -->
 
 # 6. Discussion

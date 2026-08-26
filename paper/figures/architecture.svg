@@ -9,10 +9,10 @@
       <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#12333a" flood-opacity="0.12"/>
     </filter>
     <style>
-      .heading { font: 700 28px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #15343a; }
-      .label { font: 700 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #15343a; }
-      .body { font: 400 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #36545a; }
-      .small { font: 600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #567078; }
+      .heading { font: 700 28px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #15343a; }
+      .label { font: 700 20px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #15343a; }
+      .body { font: 400 17px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #36545a; }
+      .small { font: 600 15px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #567078; }
       .box { fill: #ffffff; stroke: #b8d7d9; stroke-width: 2; rx: 18; filter: url(#shadow); }
       .model { fill: #e5f5f4; stroke: #087f8c; stroke-width: 2.5; rx: 18; filter: url(#shadow); }
       .authority { fill: #fff1ed; stroke: #ff625e; stroke-width: 2.5; rx: 18; filter: url(#shadow); }

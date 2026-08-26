@@ -1,0 +1,5 @@
+Local multimodal inference keeps workflow recordings away from external AI providers.
+
+Reviewed action graphs bound later changes to declared values and approved transforms.
+
+A frozen 15-case benchmark tests model behavior and deterministic authority controls.

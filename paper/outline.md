@@ -1,4 +1,9 @@
-# Working paper outline
+# Future full-study outline
+
+The completed formative manuscript is in `submission/short-paper.md`. This document is
+retained as the plan for a later, broader paper with live-task, ablation, 16 GB, and
+human-subject evidence. Statements below are proposed unless explicitly linked to frozen
+results.
 
 ## Title candidates
 
@@ -8,9 +13,11 @@
 
 The first title makes the research claim rather than the product name the focus.
 
-## Working abstract
+## Superseded working abstract
 
-Desktop automation tools usually require programming or reproduce a rigid sequence, while general computer-use agents can adapt but may act beyond what a user demonstrated. We present Neloa, a macOS programming-by-demonstration system for workflows whose route remains stable while values such as dates, amounts, files, and recipients vary. Neloa aligns screen recording, interface and input events, and timestamped spoken explanation; a local quantized vision-language model converts that evidence into a reviewable workflow. Its bounded-adaptation architecture separates interpretation from authority: model output may label actions and propose changes to reviewed parameters, but only captured actions can be executed, and consequential controls retain approval gates. We propose a reproducible benchmark spanning complete, partial, and video-only evidence; ablations of event, visual, and narration inputs; local deployment measurements; and a controlled study with non-programmers. **Measured results will replace this final sentence before submission.**
+The current manuscript replaces this draft. In particular, its authority claim correctly
+states that reviewed, evidence-grounded visual reconstruction may add a draft action
+during teaching; later adaptation cannot freely expand the saved action graph.
 
 ## Research questions
 

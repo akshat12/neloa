@@ -1,4 +1,10 @@
-# Proposed experiment protocol
+# Proposed next-phase experiment protocol
+
+The short paper’s frozen 15-case formative benchmark and six completed reports are in
+`evaluation-manifest.json` and `results/`. This document describes the larger follow-up
+study needed before making claims about live-task reliability, modality effects, 16 GB
+feasibility, or end-user outcomes. It is not a description of the evidence reported in
+the current short paper.
 
 This protocol is preregistration-shaped: decisions should be fixed before collecting paper results, but values marked **proposed** may change during pilot work.
 
@@ -132,4 +138,8 @@ The submission artifact should include:
 - failure examples, including every critical safety failure;
 - study materials, questionnaires, codebook, and de-identified data when consent and policy allow.
 
-The existing `make model-eval` suite is the seed, not the finished research benchmark. Before paper collection it needs a larger frozen task set, independent ground truth, repeated trials, baseline/ablation selection, and analysis scripts with confidence intervals.
+The existing frozen benchmark is sufficient for the deliberately narrow formative
+paper, but not for a general performance claim. A future full study needs the larger task
+set, independent ground truth, live postcondition graders, baseline and modality
+ablations, a 16 GB test machine, and human-subject evidence described above. Inferential
+statistics should be chosen only after a sampling design supports them.
