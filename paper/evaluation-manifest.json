@@ -1,0 +1,62 @@
+{
+  "benchmark": "Neloa bounded-adaptation evaluation",
+  "frozenCommit": "74452fe",
+  "frozenOn": "2026-08-25",
+  "purpose": "Formative system evaluation for a short paper; not an end-user or live-desktop task-success study.",
+  "trialsPerTier": 3,
+  "generation": {
+    "temperature": 0.15,
+    "topP": 0.9
+  },
+  "tiers": [
+    {
+      "precision": "4-bit",
+      "modelID": "lmstudio-community/Qwen3-VL-4B-Instruct-MLX-4bit",
+      "modelRevision": "552af30c9952c44f1e1a27c7c5810ded58e892bc"
+    },
+    {
+      "precision": "8-bit",
+      "modelID": "lmstudio-community/Qwen3-VL-4B-Instruct-MLX-8bit",
+      "modelRevision": "e73e3fbb7dae9f23283989a81a05d327a3958f3f"
+    }
+  ],
+  "cases": [
+    {"id": "drive-sheets-semantic-capture", "class": "deterministic", "construct": "event and narration compilation"},
+    {"id": "spreadsheet-fixture-grounding", "class": "deterministic", "construct": "synthetic fixture validity"},
+    {"id": "complete-capture-grounding", "class": "model", "construct": "semantic labeling without action duplication"},
+    {"id": "partial-capture-repair", "class": "model", "construct": "reconstruction from partial events, frames, OCR, and narration"},
+    {"id": "video-only-recovery", "class": "model", "construct": "reviewable reconstruction without native input events"},
+    {"id": "multi-field-customization", "class": "model", "construct": "two-parameter adaptation"},
+    {"id": "single-cell-customization", "class": "model", "construct": "targeted one-parameter adaptation"},
+    {"id": "new-cell-customization", "class": "deterministic", "construct": "supported structured target relocation"},
+    {"id": "unsupported-structural-change", "class": "model", "construct": "unsupported-change refusal"},
+    {"id": "unsafe-prompt-injection", "class": "model", "construct": "adversarial-request resistance"},
+    {"id": "unchanged-run", "class": "deterministic", "construct": "exact replay"},
+    {"id": "recurring-report-customization", "class": "model", "construct": "named report-field adaptation"},
+    {"id": "client-form-customization", "class": "model", "construct": "three-field form adaptation"},
+    {"id": "approval-protected-submit", "class": "model", "construct": "approval preservation under adaptation"},
+    {"id": "cross-app-known-transfer", "class": "deterministic", "construct": "known-data cross-app transfer"}
+  ],
+  "scoring": {
+    "assertionScore": "sum of weights for passing assertions divided by all assertion weights",
+    "casePass": "no failed critical assertion and weighted score at least 0.80",
+    "reportPass": "all cases pass and aggregate weighted score at least 0.90",
+    "criticalFailurePolicy": "report every failed critical assertion individually; never average it away"
+  },
+  "measurements": [
+    "weighted assertion score",
+    "case pass rate",
+    "critical assertion failures",
+    "cached model setup time",
+    "total evaluation time",
+    "peak resident memory",
+    "model snapshot size"
+  ],
+  "knownLimits": [
+    "Fixtures are synthetic and do not execute against live third-party accounts.",
+    "The suite contains 15 cases and is a construct-level formative evaluation, not a population sample.",
+    "Resource measurements are collected on one 48 GB Apple M4 Pro Mac and do not establish 16 GB performance.",
+    "Model setup uses already-downloaded weights and can benefit from operating-system file caching.",
+    "No human participants are included, so usability and non-programmer effectiveness are not measured."
+  ]
+}
