@@ -203,6 +203,12 @@ def markdown_to_latex(body: str, *, proposal: bool) -> str:
 
 def preamble(title: str, subtitle: str | None, *, proposal: bool) -> str:
     subtitle_tex = inline_tex(subtitle) if subtitle else ""
+    subtitle_block = (
+        rf"\vspace{{0.45em}}{{\sffamily\large\bfseries\color{{muted}} {subtitle_tex}\par}}"
+        if subtitle
+        else ""
+    )
+    author_block = "" if proposal else r"\vspace{0.7em}{\sffamily Anonymous author\par}"
     header_label = "HCII 2027 proposal" if proposal else "anonymized short paper"
     return rf"""\documentclass[10pt]{{article}}
 \usepackage[letterpaper,margin=0.78in,top=0.72in,bottom=0.72in]{{geometry}}
@@ -240,12 +246,13 @@ def preamble(title: str, subtitle: str | None, *, proposal: bool) -> str:
 \fancyhead[R]{{\sffamily\footnotesize\color{{muted}} Bounded local desktop automation}}
 \fancyfoot[C]{{\sffamily\footnotesize\color{{muted}}\thepage}}
 \renewcommand{{\headrulewidth}}{{0.3pt}}
-\title{{\sffamily\bfseries\color{{ink}}\fontsize{{23}}{{27}}\selectfont {inline_tex(title)}\\[0.45em]\large\color{{muted}} {subtitle_tex}}}
-\author{{\sffamily Anonymous author}}
-\date{{}}
 \begin{{document}}
-\maketitle
-\vspace{{-1.4em}}
+\begin{{center}}
+{{\sffamily\bfseries\color{{ink}}\fontsize{{23}}{{27}}\selectfont {inline_tex(title)}\par}}
+{subtitle_block}
+{author_block}
+\end{{center}}
+\vspace{{0.2em}}
 """
 
 

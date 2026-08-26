@@ -22,13 +22,15 @@ Desktop Automation by Demonstration
 [Name]  
 [Postal address]  
 [Email]  
-[Telephone, only if requested]
+[Telephone]
 
 ## Declarations
 
 **Funding:** [This work received no external funding / name the funder and grant.]
 
 **Competing interests:** [The author declares no competing interests / describe them.]
+
+**Acknowledgements:** [None / add acknowledgements.]
 
 **Data and software:** Source code, the frozen evaluation manifest, synthetic fixtures,
 raw machine-readable reports, and analysis scripts are available at
@@ -42,4 +44,3 @@ not involve human participants.
 scaffolding, literature discovery, drafting, copy-editing, and preparation of figures
 and analysis scripts. The human author directed and reviewed the work and accepts full
 responsibility for its accuracy, originality, citations, licensing, and conclusions.
-

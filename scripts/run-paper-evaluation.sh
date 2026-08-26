@@ -6,9 +6,14 @@ output_dir=${NELOA_PAPER_RESULTS_DIR:-"$repo_root/paper/results/raw/frozen-2026-
 app_path="$repo_root/.build/model-eval/Neloa.app"
 executable_path="$app_path/Contents/MacOS/Neloa"
 
-if [ -n "$(git -C "$repo_root" status --porcelain --untracked-files=no)" ]; then
-    echo "Tracked files must be clean before collecting paper results." >&2
-    exit 1
+if git -C "$repo_root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if [ -n "$(git -C "$repo_root" status --porcelain --untracked-files=no)" ]; then
+        echo "Tracked files must be clean before collecting paper results." >&2
+        exit 1
+    fi
+    commit=$(git -C "$repo_root" rev-parse HEAD)
+else
+    commit=${NELOA_EVAL_COMMIT:-anonymous-artifact}
 fi
 
 mkdir -p "$output_dir"
@@ -29,7 +34,6 @@ NELOA_FORCE_ADHOC=1 \
 NELOA_EXPECT_MLX_RESOURCES=1 \
 sh "$repo_root/scripts/package-app.sh"
 
-commit=$(git -C "$repo_root" rev-parse HEAD)
 run_trial() {
     precision=$1
     trial=$2

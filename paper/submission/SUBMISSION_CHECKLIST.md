@@ -35,8 +35,10 @@ the venue requests one.
 - [ ] Keep the main text within the journal’s 3,000–5,000-word guidance.
 - [ ] Upload the anonymized PDF as the main manuscript.
 - [ ] Upload a separate title page with author metadata.
-- [ ] Confirm that the abstract, keywords, references, figure caption, and figure alt
-      text are present.
+- [ ] Confirm that the abstract is 150–200 words, no more than six keywords are present,
+      and the references, figure caption, and figure alt text are included.
+- [ ] Confirm that the review manuscript contains no public repository URL or other
+      identifying metadata; upload identifying information only as the Title Page.
 - [ ] Upload the three research highlights from `research-highlights.txt` when asked.
 - [ ] Include data/software availability, funding, conflicts, and AI-assistance
       disclosures in the submission metadata or manuscript as required.
@@ -64,4 +66,3 @@ the venue requests one.
 - `iwc-title-page-template.md` — identifying metadata kept separate from review copy
 - `iwc-cover-letter.md` — editable journal cover letter
 - `research-highlights.txt` — three journal highlights, each under 100 characters
-
