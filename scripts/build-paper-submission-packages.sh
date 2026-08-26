@@ -40,3 +40,10 @@ build_bundle "neloa-hcii-2027-proposal-bundle" \
 
 (cd "$repo_root" && shasum -a 256 output/pdf/*.pdf output/submission/*.zip > output/submission/SHA256SUMS)
 python3 "$repo_root/paper/audit_submission.py"
+
+author_metadata="$repo_root/paper/submission/author-metadata.json"
+if [ -f "$author_metadata" ]; then
+    python3 "$repo_root/paper/render_submission_metadata.py" --metadata "$author_metadata"
+else
+    echo "Author metadata not present; built anonymous submission files only."
+fi

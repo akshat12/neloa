@@ -1,6 +1,6 @@
 # Publication venue strategy
 
-Checked against official venue guidance on **August 25, 2026**. Recheck policies and fees immediately before submission.
+Checked against official venue guidance on **August 26, 2026**. Recheck policies and fees immediately before submission.
 
 ## Decision
 
@@ -39,7 +39,8 @@ The current paper should make a bounded system claim: Neloa separates model inte
 - Methods/approach.
 - Results/findings.
 - Contributions and implications.
-- Single-blind review, so author details are included.
+- Single-blind review: author and contact details associated with the proposal in the CMS
+  are given to reviewers; the proposal PDF does not need a visible author line.
 
 ### Remote-participation check
 

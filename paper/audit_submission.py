@@ -136,13 +136,13 @@ def check_outputs() -> list[str]:
 
     bundles = {
         SUBMISSION_OUTPUT / "neloa-iwc-review-bundle.zip": {
-            "neloa-short-paper.pdf",
-            "neloa-anonymous-evaluation-artifact.zip",
-            "iwc-upload-readme.md",
+            "neloa-short-paper.pdf": pdfs[0],
+            "neloa-anonymous-evaluation-artifact.zip": ANONYMOUS_ZIP,
+            "iwc-upload-readme.md": SUBMISSION / "iwc-upload-readme.md",
         },
         SUBMISSION_OUTPUT / "neloa-hcii-2027-proposal-bundle.zip": {
-            "neloa-hcii-2027-proposal.pdf",
-            "hcii-upload-readme.md",
+            "neloa-hcii-2027-proposal.pdf": pdfs[1],
+            "hcii-upload-readme.md": SUBMISSION / "hcii-upload-readme.md",
         },
     }
     for bundle, expected_files in bundles.items():
@@ -152,10 +152,16 @@ def check_outputs() -> list[str]:
             assert not any("__MACOSX" in name or "/._" in name for name in names), (
                 f"macOS metadata in bundle: {bundle.name}"
             )
-            included_files = {Path(name).name for name in names if not name.endswith("/")}
-            assert included_files == expected_files, (
+            included_files = {
+                Path(name).name: name for name in names if not name.endswith("/")
+            }
+            assert set(included_files) == set(expected_files), (
                 f"Unexpected contents in {bundle.name}: {sorted(included_files)}"
             )
+            for filename, source in expected_files.items():
+                assert archive.read(included_files[filename]) == source.read_bytes(), (
+                    f"Stale file in {bundle.name}: {filename}"
+                )
 
     checksum_path = SUBMISSION_OUTPUT / "SHA256SUMS"
     assert checksum_path.exists(), "Submission checksums are missing"
@@ -182,8 +188,91 @@ def check_outputs() -> list[str]:
     ]
 
 
+def check_metadata_renderer() -> list[str]:
+    with tempfile.TemporaryDirectory(prefix="neloa-metadata-render-") as temporary:
+        temporary_path = Path(temporary)
+        output = temporary_path / "identifying"
+        refusal = subprocess.run(
+            [
+                "python3",
+                str(PAPER_DIR / "render_submission_metadata.py"),
+                "--metadata",
+                str(SUBMISSION / "author-metadata.example.json"),
+                "--output",
+                str(output),
+                "--no-pdf",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert refusal.returncode != 0
+        assert "Refusing example metadata" in refusal.stderr
+
+        invalid = json.loads(
+            (SUBMISSION / "author-metadata.example.json").read_text(encoding="utf-8")
+        )
+        invalid["authors"][0]["orcid"] = "0000-0002-1825-0098"
+        invalid_path = temporary_path / "invalid-orcid.json"
+        invalid_path.write_text(json.dumps(invalid), encoding="utf-8")
+        invalid_result = subprocess.run(
+            [
+                "python3",
+                str(PAPER_DIR / "render_submission_metadata.py"),
+                "--metadata",
+                str(invalid_path),
+                "--output",
+                str(output),
+                "--no-pdf",
+                "--allow-example",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert invalid_result.returncode != 0
+        assert "invalid checksum" in invalid_result.stderr
+
+        subprocess.run(
+            [
+                "python3",
+                str(PAPER_DIR / "render_submission_metadata.py"),
+                "--metadata",
+                str(SUBMISSION / "author-metadata.example.json"),
+                "--output",
+                str(output),
+                "--no-pdf",
+                "--allow-example",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        expected = {
+            "iwc-title-page.md",
+            "iwc-cover-letter.txt",
+            "hcii-cms-metadata.md",
+            "hcii-remote-presentation-inquiry.txt",
+            "SHA256SUMS",
+        }
+        assert {path.name for path in output.iterdir()} == expected
+        title_page = (output / "iwc-title-page.md").read_text(encoding="utf-8")
+        assert "3,480" in title_page
+        assert "[" not in title_page and "]" not in title_page
+        recorded = (output / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
+        assert len(recorded) == 4
+        for line in recorded:
+            digest, filename = line.split(maxsplit=1)
+            assert hashlib.sha256((output / filename).read_bytes()).hexdigest() == digest
+
+    return ["identifying-metadata renderer validated"]
+
+
 def main() -> None:
-    checks = [*check_manuscripts(), *check_results(), *check_outputs()]
+    checks = [
+        *check_manuscripts(),
+        *check_results(),
+        *check_outputs(),
+        *check_metadata_renderer(),
+    ]
     print("Neloa submission audit PASSED")
     for check in checks:
         print(f"PASS  {check}")

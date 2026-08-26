@@ -1,0 +1,29 @@
+{
+  "is_example": true,
+  "submission_date": "2026-08-26",
+  "authors": [
+    {
+      "full_name": "Example Researcher",
+      "department": "",
+      "institution": "Independent researcher",
+      "city_country": "Example City, Example Country",
+      "orcid": "0000-0002-1825-0097"
+    }
+  ],
+  "corresponding_author_index": 0,
+  "correspondence": {
+    "postal_address": "1 Example Street, Example City, Example Country",
+    "email": "researcher@example.com",
+    "telephone": "+1 555 0100"
+  },
+  "declarations": {
+    "funding": "This work received no external funding.",
+    "competing_interests": "The author declares no competing interests.",
+    "acknowledgements": "None."
+  },
+  "confirmations": {
+    "original_work": true,
+    "not_under_consideration_elsewhere": true,
+    "human_reviewed_ai_assistance": true
+  }
+}

@@ -5,9 +5,11 @@ upload this wrapper ZIP as the manuscript.
 
 1. Upload `neloa-short-paper.pdf` as the anonymized main manuscript.
 2. Upload `neloa-anonymous-evaluation-artifact.zip` as anonymized supplementary material.
-3. Create the identifying Title Page from `paper/submission/iwc-title-page-template.md`
-   in the repository and upload it through the journal’s **Title Page** option.
-4. Paste and personalize `paper/submission/iwc-cover-letter.md` in the cover-letter field.
+3. Generate the private identifying files with `paper/render_submission_metadata.py` as
+   described in `paper/submission/SUBMISSION_CHECKLIST.md`, then upload
+   `output/submission/identifying/iwc-title-page.pdf` through the journal’s **Title Page**
+   option.
+4. Paste `output/submission/identifying/iwc-cover-letter.txt` in the cover-letter field.
 5. Enter the submitting author’s validated ORCID in the submission account.
 6. Enter funding, competing-interest, acknowledgement, and AI-assistance disclosures.
 

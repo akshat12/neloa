@@ -5,10 +5,23 @@ Complete the author-only fields below before uploading either package.
 
 ## Author details still required
 
+Copy `author-metadata.example.json` to the ignored file `author-metadata.json`, replace
+the example values, set `is_example` to `false`, and run:
+
+```sh
+python3 paper/render_submission_metadata.py \
+  --metadata paper/submission/author-metadata.json
+```
+
+The command validates the ORCID checksum and required declarations, then creates a
+private journal title-page PDF, cover letter, HCII CMS entry, and personalized remote-
+presentation inquiry under `output/submission/identifying/`.
+
 - [ ] Full author name exactly as it should appear in publication
 - [ ] Institutional or independent-researcher affiliation
 - [ ] City and country for the affiliation
 - [ ] Corresponding email address
+- [ ] Corresponding postal address and telephone number
 - [ ] ORCID (required by *Interacting with Computers*)
 - [ ] Funding statement, including “no external funding” when applicable
 - [ ] Conflict-of-interest statement
@@ -34,7 +47,8 @@ the venue requests one.
 
 - [ ] Keep the main text within the journal’s 3,000–5,000-word guidance.
 - [ ] Upload the anonymized PDF as the main manuscript.
-- [ ] Upload a separate title page with author metadata.
+- [ ] Generate and upload `output/submission/identifying/iwc-title-page.pdf` as the
+      separate title page.
 - [ ] Confirm that the abstract is 150–200 words, no more than six keywords are present,
       and the references, figure caption, and figure alt text are included.
 - [ ] Confirm that the review manuscript contains no public repository URL or other
@@ -63,6 +77,11 @@ the venue requests one.
 
 - `output/pdf/neloa-short-paper.pdf` — anonymized journal-style manuscript
 - `output/pdf/neloa-hcii-2027-proposal.pdf` — anonymized first-stage proposal
+- `output/submission/identifying/iwc-title-page.pdf` — private identifying title page
+- `output/submission/identifying/iwc-cover-letter.txt` — personalized cover letter
+- `output/submission/identifying/hcii-cms-metadata.md` — author/CMS handoff
+- `output/submission/identifying/hcii-remote-presentation-inquiry.txt` — personalized
+  remote-presentation inquiry
 - `iwc-title-page-template.md` — identifying metadata kept separate from review copy
 - `iwc-cover-letter.md` — editable journal cover letter
 - `research-highlights.txt` — three journal highlights, each under 100 characters
